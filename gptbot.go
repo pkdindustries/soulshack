@@ -3,53 +3,90 @@ package main
 import (
 	"context"
 	"crypto/tls"
-	"flag"
 	"log"
-	"os"
 	"strings"
 	"time"
+
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	"github.com/lrstanley/girc"
 	openai "github.com/sashabaranov/go-openai"
 )
 
-var (
-	IRCHOST     = flag.String("irchost", "localhost", "IRC server address")
-	IRCPORT     = flag.Int("ircport", 6667, "IRC server port")
-	IRCNICK     = flag.String("ircnick", "chatbot", "Bot's nickname on the IRC server")
-	IRCCHANNELS = flag.String("ircchannels", "", "Space-separated list of channels to join")
-	USESSL      = flag.Bool("ssl", false, "Enable SSL for the IRC connection")
-	PREAMBLE    = flag.String("preamble", "provide a short reply of no more than 3 lines:", "Prepended to prompt")
-	MODEL       = flag.String("model", openai.GPT4, "Model to be used for responses (e.g., gpt-4")
-	MAXTOKENS   = flag.Int("maxtokens", 64, "Maximum number of tokens to generate with the OpenAI model")
-	OPENAIKEY   = os.Getenv("CHATBOT_OPENAI_API_KEY")
-)
-
 var openaiClient *openai.Client
 
 func main() {
-	flag.Parse()
-	if OPENAIKEY == "" {
-		log.Fatal("CHATBOT_OPENAI_API_KEY environment variable not set")
+	if err := rootCmd.Execute(); err != nil {
+		log.Fatal(err)
 	}
-	if *IRCCHANNELS == "" {
-		log.Fatal("ircchannels flag must be provided")
+}
+
+var rootCmd = &cobra.Command{
+	Use:   "chatbot",
+	Short: "A chatbot that connects to IRC and uses OpenAI to generate responses",
+	Run:   run,
+}
+
+func init() {
+	cobra.OnInitialize(initConfig)
+
+	rootCmd.PersistentFlags().String("irchost", "localhost", "IRC server address")
+	rootCmd.PersistentFlags().Int("ircport", 6667, "IRC server port")
+	rootCmd.PersistentFlags().String("ircnick", "chatbot", "Bot's nickname on the IRC server")
+	rootCmd.PersistentFlags().String("ircchannels", "#chatbot", "Space-separated list of channels to join")
+	rootCmd.PersistentFlags().Bool("ssl", false, "Enable SSL for the IRC connection")
+	rootCmd.PersistentFlags().String("preamble", "provide a short reply of no more than 3 lines:", "Prepended to prompt")
+	rootCmd.PersistentFlags().String("model", openai.GPT4, "Model to be used for responses (e.g., gpt-4")
+	rootCmd.PersistentFlags().Int("maxtokens", 64, "Maximum number of tokens to generate with the OpenAI model")
+	rootCmd.PersistentFlags().String("openaikey", "", "OpenAI API key")
+	rootCmd.PersistentFlags().String("configfile", "config.yaml", "config file (default is ./config.yaml)")
+
+	viper.BindPFlag("irchost", rootCmd.PersistentFlags().Lookup("irchost"))
+	viper.BindPFlag("ircport", rootCmd.PersistentFlags().Lookup("ircport"))
+	viper.BindPFlag("ircnick", rootCmd.PersistentFlags().Lookup("ircnick"))
+	viper.BindPFlag("ircchannels", rootCmd.PersistentFlags().Lookup("ircchannels"))
+	viper.BindPFlag("ssl", rootCmd.PersistentFlags().Lookup("ssl"))
+	viper.BindPFlag("preamble", rootCmd.PersistentFlags().Lookup("preamble"))
+	viper.BindPFlag("model", rootCmd.PersistentFlags().Lookup("model"))
+	viper.BindPFlag("maxtokens", rootCmd.PersistentFlags().Lookup("maxtokens"))
+	viper.BindPFlag("openaikey", rootCmd.PersistentFlags().Lookup("openaikey"))
+	viper.BindPFlag("configfile", rootCmd.PersistentFlags().Lookup("configfile"))
+	viper.BindEnv("openaikey", "OPENAI_API_KEY")
+	viper.SetEnvPrefix("CHATBOT")
+	viper.AutomaticEnv()
+}
+
+func initConfig() {
+	viper.SetConfigName(viper.GetString("configfile"))
+	viper.AddConfigPath(".")
+	if err := viper.ReadInConfig(); err != nil {
+		log.Println("config file not found")
+	} else {
+		log.Println("using config file:", viper.ConfigFileUsed())
 	}
 
-	openaiClient = openai.NewClient(OPENAIKEY)
+}
+
+func run(_ *cobra.Command, _ []string) {
+
+	if viper.GetString("openaikey") == "" {
+		log.Fatal("OpenAI API key not set")
+	}
+
+	openaiClient = openai.NewClient(viper.GetString("openaikey"))
 	client := girc.New(girc.Config{
-		Server:    *IRCHOST,
-		Port:      *IRCPORT,
-		Nick:      *IRCNICK,
-		User:      *IRCNICK,
-		Name:      *IRCNICK,
-		Debug:     os.Stdout,
-		SSL:       *USESSL,
+		Server:    viper.GetString("irchost"),
+		Port:      viper.GetInt("ircport"),
+		Nick:      viper.GetString("ircnick"),
+		User:      viper.GetString("ircnick"),
+		Name:      viper.GetString("ircnick"),
+		SSL:       viper.GetBool("ssl"),
 		TLSConfig: &tls.Config{InsecureSkipVerify: true},
 	})
 
 	client.Handlers.Add(girc.CONNECTED, func(c *girc.Client, _ girc.Event) {
-		channels := strings.Fields(*IRCCHANNELS)
+		channels := strings.Fields(viper.GetString("ircchannels"))
 		log.Println("connecting to channels:", channels)
 		for _, channel := range channels {
 			c.Cmd.Join(channel)
@@ -57,7 +94,7 @@ func main() {
 	})
 
 	client.Handlers.AddBg(girc.PRIVMSG, func(c *girc.Client, e girc.Event) {
-		if strings.HasPrefix(e.Last(), *IRCNICK) {
+		if strings.HasPrefix(e.Last(), viper.GetString("ircnick")) {
 			handleMessage(c, e)
 		}
 	})
@@ -94,19 +131,18 @@ func handleSet(c *girc.Client, e girc.Event, tokens []string) {
 	}
 	switch tokens[1] {
 	case "preamble":
-		p := strings.Join(tokens[2:], " ")
-		PREAMBLE = &p
-		c.Cmd.Reply(e, "preamble set to: "+*PREAMBLE)
+		viper.Set("preamble", strings.Join(tokens[2:], " "))
+		c.Cmd.Reply(e, "preamble set to: "+viper.GetString("preamble"))
 	case "model":
-		MODEL = &tokens[2]
-		c.Cmd.Reply(e, "model set to: "+*MODEL)
+		viper.Set("model", tokens[2])
+		c.Cmd.Reply(e, "model set to: "+viper.GetString("model"))
 	default:
 		c.Cmd.Reply(e, "Unknown parameter. Supported parameters: preamble, model")
 	}
 }
 
 func handleDefault(c *girc.Client, e girc.Event, tokens []string) {
-	if reply, err := getChatCompletion(*PREAMBLE, strings.Join(tokens, " "), *MODEL, *MAXTOKENS); err != nil {
+	if reply, err := getChatCompletion(viper.GetString("preamble"), strings.Join(tokens, " "), viper.GetString("model"), viper.GetInt("maxtokens")); err != nil {
 		c.Cmd.Reply(e, err.Error())
 	} else {
 		c.Cmd.Reply(e, *reply)
