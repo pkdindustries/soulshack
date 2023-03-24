@@ -1,10 +1,4 @@
-github.com/lrstanley/girc v0.0.0-20220821023908-8e7df6d970f8 h1:OeTVm9ph5q9eq9E+HDkUbiJtVvu+kNOhuLe5Qs83sEs=
-github.com/lrstanley/girc v0.0.0-20220821023908-8e7df6d970f8/go.mod h1:lgrnhcF8bg/Bd5HA5DOb4Z+uGqUqGnp4skr+J2GwVgI=
-github.com/lrstanley/girc v0.0.0-20221222153823-a92667a5c9b4 h1:eOJJOM8RTmDcK1F0SqCBX/Ic1vgDnAZfdll6oik0Ups=
-github.com/lrstanley/girc v0.0.0-20221222153823-a92667a5c9b4/go.mod h1:lgrnhcF8bg/Bd5HA5DOb4Z+uGqUqGnp4skr+J2GwVgI=
 github.com/lrstanley/girc v0.0.0-20230303230257-fefe1cab7695 h1:ZXnErVEOkeYoA/EyQvwuHAi1nrD+GBIlKS5Q0WS+lC8=
 github.com/lrstanley/girc v0.0.0-20230303230257-fefe1cab7695/go.mod h1:lgrnhcF8bg/Bd5HA5DOb4Z+uGqUqGnp4skr+J2GwVgI=
-github.com/pkdindustries/dumbconf v0.1.5 h1:0LdspX1UPgtQXlb89aj+4HDuTPsK8/F3kyxc+qoMwwQ=
-github.com/pkdindustries/dumbconf v0.1.5/go.mod h1:lbn7SVjxQX7LEChWYfuGTctDBjUKddjlAFQjQ5KQ3K4=
 github.com/sashabaranov/go-openai v1.5.4 h1:I2K7JMIx/EC/mwT2fbypBzJ3OtwKNxaFg4jf3KOvXuc=
 github.com/sashabaranov/go-openai v1.5.4/go.mod h1:lj5b/K+zjTSFxVLijLSTDZuP7adOgerWeFyZLUhAKRg=
