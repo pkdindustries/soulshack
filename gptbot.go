@@ -1,6 +1,6 @@
 package main
 
-// ./chatbot -irchost <IRC_SERVER_ADDRESS> -ircport <IRC_SERVER_PORT> -ircnick <BOT_NICKNAME> -ircchannels <CHANNELS> -openaikey <OPENAI_API_KEY>
+// ./chatbot -irchost <IRC_SERVER_ADDRESS> -ircport <IRC_SERVER_PORT> -ircnick <BOT_NICKNAME> -ircchannels '#<CHANNEL>' -openaikey <OPENAI_API_KEY>
 
 import (
 	"context"
@@ -21,14 +21,18 @@ var (
 	IRCPORT     = flag.Int("ircport", 6667, "IRC server port")
 	IRCNICK     = flag.String("ircnick", "chatbot", "Bot's nickname on the IRC server")
 	IRCCHANNELS = flag.String("ircchannels", "", "Space-separated list of channels to join")
-	OPENAIKEY   = flag.String("openaikey", "", "OpenAI API key")
 	USESSL      = flag.Bool("ssl", false, "Enable SSL for the IRC connection")
 	PREAMBLE    = flag.String("preamble", "provide a short reply of no more than 3 lines:", "Prepended to prompt")
+	MODEL       = flag.String("model", openai.GPT4, "Model to be used for responses (e.g., gpt-4")
+	OPENAIKEY   = os.Getenv("OPENAI_API_KEY")
 )
 
 // parses the command line arguments, looks up the IP of the server, and sets up the girc client configuration.
 func main() {
 	flag.Parse()
+	if OPENAIKEY == "" {
+		log.Fatal("OPENAI_API_KEY environment variable not set")
+	}
 	host, _ := net.LookupIP(*IRCHOST)
 	log.Println(*IRCHOST, host, *IRCPORT)
 	client := girc.New(girc.Config{
@@ -63,12 +67,18 @@ func main() {
 			// If the message contains a /set command, the preamble is updated.
 			case "/set":
 				if len(tokens) != 3 {
-					c.Cmd.Reply(e, "Usage: /set preamble <message>")
+					c.Cmd.Reply(e, "Usage: /set preamble,model <value>")
 					return
 				}
-				if tokens[1] == "preamble" {
+				switch tokens[1] {
+				case "preamble":
 					PREAMBLE = &tokens[2]
 					c.Cmd.Reply(e, "preamble set to: "+*PREAMBLE)
+				case "model":
+					MODEL = &tokens[2]
+					c.Cmd.Reply(e, "model set to: "+*MODEL)
+				default:
+					c.Cmd.Reply(e, "Unknown parameter. Supported parameters: preamble, model")
 				}
 			default:
 				// Otherwise, the getReply function is called to generate a response using OpenAI's GPT model
@@ -93,7 +103,7 @@ func main() {
 
 // takes a preamble and prompt, creates an OpenAI API client, and sends a chat completion request
 func getReply(preamble string, prompt string) (*string, error) {
-	client := openai.NewClient(*OPENAIKEY)
+	client := openai.NewClient(OPENAIKEY)
 	resp, err := client.CreateChatCompletion(
 		context.Background(),
 		openai.ChatCompletionRequest{
