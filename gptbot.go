@@ -24,6 +24,7 @@ var (
 	PREAMBLE    = flag.String("preamble", "provide a short reply of no more than 3 lines:", "Prepended to prompt")
 )
 
+// parses the command line arguments, looks up the IP of the server, and sets up the girc client configuration.
 func main() {
 	flag.Parse()
 
@@ -40,6 +41,7 @@ func main() {
 		TLSConfig: &tls.Config{InsecureSkipVerify: true},
 	})
 
+	// The girc.CONNECTED event is used to join the specified channels when the bot connects to the server.
 	client.Handlers.Add(girc.CONNECTED, func(c *girc.Client, _ girc.Event) {
 		channels := strings.Fields(*IRCCHANNELS)
 		log.Println("connecting to channels:", channels)
@@ -48,13 +50,16 @@ func main() {
 		}
 	})
 
+	// A background event handler is added for girc.PRIVMSG to handle incoming messages.
 	client.Handlers.AddBg(girc.PRIVMSG, func(c *girc.Client, e girc.Event) {
+		// If the message starts with the bot's nickname, the message is parsed and the appropriate action is taken.
 		if strings.HasPrefix(e.Last(), *IRCNICK) {
 			tokens := strings.Fields(e.Last())[1:]
 			if len(tokens) == 0 {
 				return
 			}
 			switch tokens[0] {
+			// If the message contains a /set command, the preamble is updated.
 			case "/set":
 				if len(tokens) != 3 {
 					c.Cmd.Reply(e, "Usage: /set preamble <message>")
@@ -65,6 +70,7 @@ func main() {
 					c.Cmd.Reply(e, "preamble set to: "+*PREAMBLE)
 				}
 			default:
+				// Otherwise, the getReply function is called to generate a response using OpenAI's GPT model
 				if reply, err := getReply(*PREAMBLE, strings.Join(tokens, " ")); err != nil {
 					c.Cmd.Reply(e, err.Error())
 				} else {
@@ -84,13 +90,14 @@ func main() {
 	}
 }
 
+// takes a preamble and prompt, creates an OpenAI API client, and sends a chat completion request
 func getReply(preamble string, prompt string) (*string, error) {
 	client := openai.NewClient(*OPENAIKEY)
 	resp, err := client.CreateChatCompletion(
 		context.Background(),
 		openai.ChatCompletionRequest{
 			MaxTokens: 64,
-			Model:     openai.GPT4, // Replace with the appropriate model, as GPT-4 is hypothetical
+			Model:     openai.GPT4,
 			Messages: []openai.ChatCompletionMessage{
 				{
 					Role:    openai.ChatMessageRoleUser,
