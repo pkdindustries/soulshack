@@ -1,7 +1,6 @@
 package main
 
-// ./chatbot -irchost <IRC_SERVER_ADDRESS> -ircport <IRC_SERVER_PORT> -ircnick <BOT_NICKNAME> -ircchannels '#<CHANNEL>' -openaikey <OPENAI_API_KEY>
-
+// ./chatbot -irchost <IRC_SERVER_ADDRESS> -ircport <IRC_SERVER_PORT> -ircnick <BOT_NICKNAME> -ircchannels '#<CHANNEL>'
 import (
 	"context"
 	"crypto/tls"
@@ -39,8 +38,8 @@ func main() {
 		Server:    *IRCHOST,
 		Port:      *IRCPORT,
 		Nick:      *IRCNICK,
-		User:      "irc chatbot by a-lex",
-		Name:      "irc chatbot by a-lex",
+		User:      *IRCNICK,
+		Name:      *IRCNICK,
 		Debug:     os.Stdout,
 		SSL:       *USESSL,
 		TLSConfig: &tls.Config{InsecureSkipVerify: true},
@@ -66,13 +65,14 @@ func main() {
 			switch tokens[0] {
 			// If the message contains a /set command, the preamble is updated.
 			case "/set":
-				if len(tokens) != 3 {
+				if len(tokens) < 3 {
 					c.Cmd.Reply(e, "Usage: /set preamble,model <value>")
 					return
 				}
 				switch tokens[1] {
 				case "preamble":
-					PREAMBLE = &tokens[2]
+					p := strings.Join(tokens[2:], " ")
+					PREAMBLE = &p
 					c.Cmd.Reply(e, "preamble set to: "+*PREAMBLE)
 				case "model":
 					MODEL = &tokens[2]
@@ -93,6 +93,7 @@ func main() {
 
 	for {
 		if err := client.Connect(); err != nil {
+			log.Println(err)
 			log.Println("reconnecting in 5 seconds...")
 			time.Sleep(5 * time.Second)
 		} else {

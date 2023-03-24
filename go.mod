@@ -1,4 +1,4 @@
-module linksnaps/linkbot
+module pkdindustries/gptbot
 
 go 1.19
 
