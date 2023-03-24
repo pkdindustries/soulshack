@@ -1,5 +1,7 @@
 package main
 
+// ./chatbot -irchost <IRC_SERVER_ADDRESS> -ircport <IRC_SERVER_PORT> -ircnick <BOT_NICKNAME> -ircchannels <CHANNELS> -openaikey <OPENAI_API_KEY>
+
 import (
 	"context"
 	"crypto/tls"
@@ -27,7 +29,6 @@ var (
 // parses the command line arguments, looks up the IP of the server, and sets up the girc client configuration.
 func main() {
 	flag.Parse()
-
 	host, _ := net.LookupIP(*IRCHOST)
 	log.Println(*IRCHOST, host, *IRCPORT)
 	client := girc.New(girc.Config{
