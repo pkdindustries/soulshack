@@ -1,4 +1,4 @@
-# Chatbot IRC
+# GPTBOT for IRC
 
 This is a simple chatbot IRC client that uses OpenAI's GPT model to generate responses to user messages. The chatbot connects to an IRC server and specified channels, listens for messages, and responds using the OpenAI API.
 
@@ -30,6 +30,27 @@ This is a simple chatbot IRC client that uses OpenAI's GPT model to generate res
 ## Environment Variables
 
 - `CHATBOT_OPENAI_API_KEY`: Api key for OpenAI 
+
+## Configuring with flags
+```bash
+export CHATBOT_OPENAI_API_KEY="<KEY>"
+./gptbot --host irc.example.com --port 6667 --nick gptbot --channels "#general #gptbot" --preamble "provide a short reply of no more than 3 lines:" 
+```
+
+## Using a configuration file to define a personality
+
+`obamabot.yaml`
+```
+host: irc.example.com
+nick: obamabot
+channels: "#general #gptbot #yeswecan"
+preamble: "provide a short reply of no more than 3 lines as president obama talking to the group chat. type like you are using a blackberry phone:"
+openaikey: "your_openai_api_key"
+```
+
+```bash
+./gptbot --configfile obama.yaml
+```
 
 ## Commands
 
