@@ -2,10 +2,6 @@
 
 This is a simple chatbot IRC client that uses OpenAI's GPT model to generate responses to user messages. The chatbot connects to an IRC server and specified channels, listens for messages, and responds using the OpenAI API.
 
-## Usage
-
-./chatbot -irchost <IRC_SERVER_ADDRESS> -ircport <IRC_SERVER_PORT> -ircnick <BOT_NICKNAME> -ircchannels '#CHANNEL #CHANNEL2'
-
 ## Requirements
 
 - Go (tested with version 1.21)
@@ -18,19 +14,22 @@ This is a simple chatbot IRC client that uses OpenAI's GPT model to generate res
 2. Run `go build` in the repository folder.
 3. Run the generated executable with the appropriate command line options.
 
-## Command Line Options
+## Configure the bot by setting up a config.yaml file or by using environment variables and command-line flags. 
 
-- `-irchost`: IRC server address (default: "localhost")
-- `-ircport`: IRC server port (default: 6667)
-- `-ircnick`: Bot's nickname on the IRC server (default: "chatbot")
-- `-ircchannels`: Space-separated list of channels to join (e.g., "#channel1 #channel2")
-- `-ssl`: Enable SSL for the IRC connection (default: false)
-- `-preamble`: Text prepended to prompt (default: "provide a short reply of no more than 3 lines:")
-- `-model`: Model to be used for responses (e.g., "gpt-4") (default: openai.GPT4)
+- `--host`: IRC server address (default: "localhost")
+- `--port`: IRC server port (default: 6667)
+- `--nick`: Bot's nickname on the IRC server (default: "chatbot")
+- `--channels`: Space-separated list of channels to join (e.g., "#channel1 #channel2")
+- `--ssl`: Enable SSL for the IRC connection (default: false)
+- `--preamble`: Text prepended to prompt (default: "provide a short reply of no more than 3 lines:")
+- `--model`: Model to be used for responses (e.g., "gpt-4") (default: openai.GPT4)
+- `--maxtokens`:  Maximum number of tokens to generate with the OpenAI model (default: 64)
+- `--openaikey`: Api key for OpenAI 
+- `--configfile`: config filename
 
 ## Environment Variables
 
-- `OPENAI_API_KEY`: API key for OpenAI (required)
+- `CHATBOT_OPENAI_API_KEY`: Api key for OpenAI 
 
 ## Commands
 
