@@ -1,3 +1,4 @@
 .vscode
 *.env
-gptbot
+soulshack
+__debug_bin

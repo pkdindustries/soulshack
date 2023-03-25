@@ -1,4 +1,4 @@
-module pkdindustries/gptbot
+module pkdindustries/soulshack
 
 go 1.19
 
