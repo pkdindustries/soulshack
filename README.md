@@ -34,12 +34,12 @@ This is a simple chatbot IRC client that uses OpenAI's GPT model to generate res
 ## Configuring with flags
 ```bash
 export CHATBOT_OPENAI_API_KEY="<KEY>"
-./gptbot --host irc.example.com --port 6667 --nick gptbot --channels "#general #gptbot" --preamble "provide a short reply of no more than 3 lines:" 
+./gptbot --host irc.example.com --port 6667 --nick gptbot --channels "#general #gptbot"  
 ```
 
 ## Using a configuration file to define a personality
 
-`obamabot.yaml`
+`obamabot.yml`
 ```
 host: irc.example.com
 nick: obamabot
@@ -49,7 +49,7 @@ openaikey: "your_openai_api_key"
 ```
 
 ```bash
-./gptbot --configfile obama.yaml
+./gptbot --config obamabot.yml
 ```
 
 ## Commands
