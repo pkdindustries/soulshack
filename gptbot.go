@@ -41,8 +41,8 @@ func init() {
 	rootCmd.PersistentFlags().String("preamble", "provide a short reply of no more than 3 lines...", "Prepended to prompt, use to customize the bot")
 	rootCmd.PersistentFlags().String("model", openai.GPT4, "Model to be used for responses (e.g., gpt-4")
 	rootCmd.PersistentFlags().Int("maxtokens", 64, "Maximum number of tokens to generate with the OpenAI model")
-	rootCmd.PersistentFlags().String("greeting", "greet the group chat", "Response to the channel on join")
-	rootCmd.PersistentFlags().String("goodbye", "say goodbye to the group chat", "Response to channel on part")
+	rootCmd.PersistentFlags().String("greeting", "greet the group chat and introduce yourself as a GPT-4 based irc chatbot", "Response to the channel on join")
+	rootCmd.PersistentFlags().String("goodbye", "say goodbye to the group chat and sign off as a GPT-4 based irc chatbot", "Response to channel on part")
 
 	rootCmd.PersistentFlags().String("openaikey", "", "OpenAI API key")
 	rootCmd.PersistentFlags().String("config", "", "path to configuration file")
@@ -59,8 +59,9 @@ func init() {
 	viper.BindPFlag("config", rootCmd.PersistentFlags().Lookup("config"))
 	viper.BindPFlag("greeting", rootCmd.PersistentFlags().Lookup("greeting"))
 	viper.BindPFlag("goodbye", rootCmd.PersistentFlags().Lookup("goodbye"))
-	viper.BindEnv("openaikey", "OPENAI_API_KEY")
+
 	viper.SetEnvPrefix("CHATBOT")
+	viper.BindEnv("openaikey", "OPENAI_API_KEY")
 	viper.AutomaticEnv()
 }
 
@@ -95,14 +96,7 @@ func run(_ *cobra.Command, _ []string) {
 		channels := strings.Fields(viper.GetString("channels"))
 		log.Println("joining channels:", channels)
 		c.Cmd.Join(channels...)
-		go func() {
-			time.Sleep(1 * time.Second)
-			if msg, err := getChatCompletion(viper.GetString("greeting")); err != nil {
-				c.Cmd.Message(channels[0], err.Error())
-			} else {
-				c.Cmd.Message(channels[0], *msg)
-			}
-		}()
+		sendGreeting(c, channels)
 	})
 
 	client.Handlers.AddBg(girc.PRIVMSG, func(c *girc.Client, e girc.Event) {
@@ -122,6 +116,28 @@ func run(_ *cobra.Command, _ []string) {
 			return
 		}
 	}
+}
+
+func sendGoodbye(c *girc.Client, channels []string) {
+	go func() {
+		time.Sleep(1 * time.Second)
+		if msg, err := getChatCompletion(viper.GetString("goodbye")); err != nil {
+			c.Cmd.Message(channels[0], err.Error())
+		} else {
+			c.Cmd.Message(channels[0], *msg)
+		}
+	}()
+}
+
+func sendGreeting(c *girc.Client, channels []string) {
+	go func() {
+		time.Sleep(1 * time.Second)
+		if msg, err := getChatCompletion(viper.GetString("greeting")); err != nil {
+			c.Cmd.Message(channels[0], err.Error())
+		} else {
+			c.Cmd.Message(channels[0], *msg)
+		}
+	}()
 }
 
 var configParams = map[string]string{
@@ -228,22 +244,15 @@ func handleLoad(c *girc.Client, e girc.Event, tokens []string) {
 		return
 	}
 
-	newNick := viper.GetString("nick")
-	if newNick != c.Config.Nick {
-		c.Cmd.Nick(newNick)
-	}
-
 	c.Cmd.Reply(e, fmt.Sprintf("loaded %s, %s, name: %s", file, viper.GetString("model"), viper.GetString("nick")))
+
+	c.Cmd.Nick(viper.GetString("nick"))
+	sendGreeting(c, e.Params)
 }
 
 func handleLeave(c *girc.Client, e girc.Event) {
-	if reply, err := getChatCompletion(viper.GetString("goodbye")); err != nil {
-		c.Cmd.Reply(e, err.Error())
-	} else {
-		c.Cmd.Reply(e, *reply)
-	}
+	sendGoodbye(c, e.Params)
 	log.Println("exiting...")
-
 	go func() {
 		time.Sleep(1 * time.Second)
 		os.Exit(0)
