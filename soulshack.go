@@ -1,5 +1,12 @@
 package main
 
+//  ____                    _   ____    _                      _
+// / ___|    ___    _   _  | | / ___|  | |__     __ _    ___  | | __
+// \___ \   / _ \  | | | | | | \___ \  | '_ \   / _` |  / __| | |/ /
+//  ___) | | (_) | | |_| | | |  ___) | | | | | | (_| | | (__  |   <
+// |____/   \___/   \__,_| |_| |____/  |_| |_|  \__,_|  \___| |_|\_\
+//  .  .  .  because  real  people  are  overrated
+
 import (
 	"context"
 	"crypto/tls"
@@ -9,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/common-nighthawk/go-figure"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
@@ -18,6 +26,12 @@ import (
 
 var aiClient *ai.Client
 
+func getBanner() string {
+	return fmt.Sprintf("%s\n%s",
+		figure.NewColorFigure("SoulShack", "", "green", true).ColorString(),
+		figure.NewColorFigure(" . . . because real people are overrated", "term", "green", true).ColorString())
+}
+
 func main() {
 	if err := rootCmd.Execute(); err != nil {
 		log.Fatal(err)
@@ -25,67 +39,85 @@ func main() {
 }
 
 var rootCmd = &cobra.Command{
-	Use:   "soulshack",
-	Short: "Because Conversations with Real People are Overrated",
-	Run:   run,
+	Use:     "soulshack --server irc.freenode.net --port 6697 --channel '#soulshack' --ssl --openaikey <your openai api key> --become <your personality>",
+	Example: "soulshack --server irc.freenode.net --port 6697 --channel '#soulshack' --ssl --openaikey ****************",
+	Short:   getBanner(),
+	Run:     run,
 }
 
 func init() {
+
 	cobra.OnInitialize(initConfig)
-
-	rootCmd.PersistentFlags().String("host", "localhost", "IRC server address")
-	rootCmd.PersistentFlags().Int("port", 6667, "IRC server port")
-	rootCmd.PersistentFlags().String("nick", "chatbot", "Bot's nickname on the IRC server")
-	rootCmd.PersistentFlags().String("channel", "#chatbot", "irc channel to join")
-	rootCmd.PersistentFlags().Bool("ssl", false, "Enable SSL for the IRC connection")
-	rootCmd.PersistentFlags().String("preamble", "provide a short reply of no more than 3 lines...", "Prepended to prompt, use to customize the bot")
+	rootCmd.PersistentFlags().BoolP("ssl", "e", false, "Enable SSL for the IRC connection")
+	rootCmd.PersistentFlags().Int("maxtokens", 512, "Maximum number of tokens to generate with the OpenAI model")
+	rootCmd.PersistentFlags().IntP("port", "p", 6667, "IRC server port")
+	rootCmd.PersistentFlags().String("goodbye", "", "Response to channel on part")
+	rootCmd.PersistentFlags().String("greeting", "", "Response to the channel on join")
 	rootCmd.PersistentFlags().String("model", ai.GPT4, "Model to be used for responses (e.g., gpt-4")
-	rootCmd.PersistentFlags().Int("maxtokens", 128, "Maximum number of tokens to generate with the OpenAI model")
-	rootCmd.PersistentFlags().String("greeting", "greet the group chat as a group or individually", "Response to the channel on join")
-	rootCmd.PersistentFlags().String("goodbye", "say goodbye to the group chat and sign off as a GPT-4 based irc chatbot", "Response to channel on part")
-	// become
-	rootCmd.PersistentFlags().String("become", "", "become the named personality")
 	rootCmd.PersistentFlags().String("openaikey", "", "OpenAI API key")
-	rootCmd.PersistentFlags().String("config", "", "path to configuration file")
+	rootCmd.PersistentFlags().String("prompt", "", "Initial character prompt for the AI")
+	rootCmd.PersistentFlags().StringP("become", "b", "chatbot", "become the named personality")
+	rootCmd.PersistentFlags().StringP("channel", "c", "", "irc channel to join")
+	rootCmd.PersistentFlags().StringP("nick", "n", "", "Bot's nickname on the IRC server")
+	rootCmd.PersistentFlags().StringP("server", "s", "localhost", "IRC server address")
+	rootCmd.PersistentFlags().StringP("answer", "a", "", "prompt for answering a question")
 
-	viper.BindPFlag("host", rootCmd.PersistentFlags().Lookup("host"))
-	viper.BindPFlag("port", rootCmd.PersistentFlags().Lookup("port"))
-	viper.BindPFlag("nick", rootCmd.PersistentFlags().Lookup("nick"))
-	viper.BindPFlag("channel", rootCmd.PersistentFlags().Lookup("channel"))
-	viper.BindPFlag("ssl", rootCmd.PersistentFlags().Lookup("ssl"))
-	viper.BindPFlag("preamble", rootCmd.PersistentFlags().Lookup("preamble"))
-	viper.BindPFlag("model", rootCmd.PersistentFlags().Lookup("model"))
-	viper.BindPFlag("maxtokens", rootCmd.PersistentFlags().Lookup("maxtokens"))
-	viper.BindPFlag("openaikey", rootCmd.PersistentFlags().Lookup("openaikey"))
-	viper.BindPFlag("config", rootCmd.PersistentFlags().Lookup("config"))
-	viper.BindPFlag("greeting", rootCmd.PersistentFlags().Lookup("greeting"))
-	viper.BindPFlag("goodbye", rootCmd.PersistentFlags().Lookup("goodbye"))
 	viper.BindPFlag("become", rootCmd.PersistentFlags().Lookup("become"))
-
-	viper.SetEnvPrefix("CHATBOT")
-	viper.BindEnv("openaikey", "OPENAI_API_KEY")
+	viper.BindPFlag("channel", rootCmd.PersistentFlags().Lookup("channel"))
+	viper.BindPFlag("goodbye", rootCmd.PersistentFlags().Lookup("goodbye"))
+	viper.BindPFlag("greeting", rootCmd.PersistentFlags().Lookup("greeting"))
+	viper.BindPFlag("maxtokens", rootCmd.PersistentFlags().Lookup("maxtokens"))
+	viper.BindPFlag("model", rootCmd.PersistentFlags().Lookup("model"))
+	viper.BindPFlag("nick", rootCmd.PersistentFlags().Lookup("nick"))
+	viper.BindPFlag("openaikey", rootCmd.PersistentFlags().Lookup("openaikey"))
+	viper.BindPFlag("port", rootCmd.PersistentFlags().Lookup("port"))
+	viper.BindPFlag("prompt", rootCmd.PersistentFlags().Lookup("prompt"))
+	viper.BindPFlag("server", rootCmd.PersistentFlags().Lookup("server"))
+	viper.BindPFlag("ssl", rootCmd.PersistentFlags().Lookup("ssl"))
+	viper.BindPFlag("answer", rootCmd.PersistentFlags().Lookup("answer"))
+	viper.SetEnvPrefix("SOULSHACK")
 	viper.AutomaticEnv()
 }
 
 func initConfig() {
-	viper.AddConfigPath("personalities")
-	viper.SetConfigName(viper.GetString("config"))
 
-	if err := viper.ReadInConfig(); err == nil {
-		log.Println("using config file:", viper.ConfigFileUsed())
+	fmt.Println(getBanner())
+	log.Println("initializing personality", viper.GetString("become"))
+
+	viper.AddConfigPath("personalities")
+	viper.SetConfigName(viper.GetString("become"))
+
+	if err := viper.ReadInConfig(); err != nil {
+		log.Fatalln("no personality found:", viper.GetString("become"))
+	}
+	log.Println("using personality file:", viper.ConfigFileUsed())
+
+}
+func verifyConfig() {
+	for _, varName := range viper.AllKeys() {
+		if varName == "answer" {
+			continue
+		}
+		value := viper.GetString(varName)
+		if value == "" {
+			log.Fatalf("%s unset. use --%s flag, personality config, or %s env.", varName, varName, strings.ToUpper(varName))
+		}
+		if varName == "openaikey" {
+			value = strings.Repeat("*", len(value))
+		}
+
+		log.Printf("%s: %s", varName, value)
 	}
 }
 
 func run(_ *cobra.Command, _ []string) {
 
-	log.Println("Starting chatbot...")
-	if viper.GetString("openaikey") == "" {
-		log.Fatal("openai api key unset. use --openaikey flag, config, or CHATBOT_OPENAI_API_KEY env.")
-	}
+	verifyConfig()
 
 	aiClient = ai.NewClient(viper.GetString("openaikey"))
+
 	irc := girc.New(girc.Config{
-		Server:    viper.GetString("host"),
+		Server:    viper.GetString("server"),
 		Port:      viper.GetInt("port"),
 		Nick:      viper.GetString("nick"),
 		User:      "soulshack",
@@ -98,9 +130,8 @@ func run(_ *cobra.Command, _ []string) {
 		channel := viper.GetString("channel")
 		log.Println("joining channel:", channel)
 		c.Cmd.Join(channel)
-		// wait 1 sec
 		time.Sleep(1 * time.Second)
-		sendMessage(c, &e, getChatCompletionString(viper.GetString("greeting")))
+		sendMessage(c, &e, getChatCompletionString(viper.GetString("prompt")+viper.GetString("greeting")))
 	})
 
 	irc.Handlers.Add(girc.PRIVMSG, func(c *girc.Client, e girc.Event) {
@@ -117,8 +148,6 @@ func run(_ *cobra.Command, _ []string) {
 				handleGet(c, e, tokens)
 			case "/save":
 				handleSave(c, e, tokens)
-			case "/load":
-				handleLoad(c, e, tokens)
 			case "/become":
 				handleBecome(c, e, tokens)
 			case "/leave":
@@ -134,7 +163,7 @@ func run(_ *cobra.Command, _ []string) {
 	})
 
 	for {
-		log.Println("connecting to irc server", viper.GetString("host"), "on port", viper.GetInt("port"), "using ssl:", viper.GetBool("ssl"))
+		log.Println("connecting to irc server", viper.GetString("server"), "on port", viper.GetInt("port"), "using ssl:", viper.GetBool("ssl"))
 
 		if err := irc.Connect(); err != nil {
 			log.Println(err)
@@ -174,18 +203,17 @@ func sendMessageChunks(c *girc.Client, target string, message *string) {
 }
 
 var configParams = map[string]string{
-	"preamble": "Usage: /set preamble <value>",
-	"model":    "Usage: /set model <value>",
-	"nick":     "Usage: /set nick <value>",
-	"greeting": "Usage: /set greeting <value>",
-	"goodbye":  "Usage: /set goodbye <value>",
+	"prompt":   "",
+	"model":    "",
+	"nick":     "",
+	"greeting": "",
+	"goodbye":  "",
+	"answer":   "",
 }
 
 func handleSet(c *girc.Client, e girc.Event, tokens []string) {
 	if len(tokens) < 3 {
-		for _, desc := range configParams {
-			c.Cmd.Reply(e, desc)
-		}
+		c.Cmd.Reply(e, fmt.Sprintf("Usage: /set %s <value>", keysAsString(configParams)))
 		return
 	}
 
@@ -206,9 +234,7 @@ func handleSet(c *girc.Client, e girc.Event, tokens []string) {
 
 func handleGet(c *girc.Client, e girc.Event, tokens []string) {
 	if len(tokens) < 2 {
-		for _, desc := range configParams {
-			c.Cmd.Reply(e, desc)
-		}
+		c.Cmd.Reply(e, fmt.Sprintf("Usage: /get %s", keysAsString(configParams)))
 		return
 	}
 
@@ -230,7 +256,21 @@ func handleSave(c *girc.Client, e girc.Event, tokens []string) {
 
 	filename := tokens[1]
 
-	if err := viper.WriteConfigAs(filename); err != nil {
+	v := viper.New()
+	v.SetConfigName(filename)
+	v.SetConfigType("yaml")
+	v.AddConfigPath("personalities")
+
+	// set specific viper variables to save
+	v.Set("nick", viper.GetString("nick"))
+	v.Set("prompt", viper.GetString("prompt"))
+	v.Set("model", viper.GetString("model"))
+	v.Set("maxtokens", viper.GetInt("maxtokens"))
+	v.Set("greeting", viper.GetString("greeting"))
+	v.Set("goodbye", viper.GetString("goodbye"))
+	v.Set("answer", viper.GetString("answer"))
+
+	if err := v.WriteConfig(); err != nil {
 		c.Cmd.Reply(e, fmt.Sprintf("Error saving configuration: %s", err.Error()))
 		return
 	}
@@ -252,7 +292,7 @@ func handleBecome(c *girc.Client, e girc.Event, tokens []string) {
 		nick = nick[:6] + "bot"
 	}
 
-	viper.Set("preamble", fmt.Sprintf("compose a short reply of no more than 3 lines in characteristic %s fashion...", fullName))
+	viper.Set("prompt", fmt.Sprintf("compose a short reply of no more than 3 lines in characteristic %s fashion...", fullName))
 	viper.Set("greeting", "greeting the group chat")
 	viper.Set("goodbye", "leaving the group chat ")
 
@@ -260,10 +300,6 @@ func handleBecome(c *girc.Client, e girc.Event, tokens []string) {
 	viper.Set("nick", nick)
 
 	sendMessage(c, &e, getChatCompletionString(viper.GetString("greeting")))
-}
-
-func handleLoad(c *girc.Client, e girc.Event, tokens []string) {
-	c.Cmd.Reply(e, "unimplemented")
 }
 
 func handleLeave(c *girc.Client) {
@@ -284,7 +320,7 @@ func keysAsString(m map[string]string) string {
 }
 
 func handleDefault(c *girc.Client, e girc.Event, tokens []string) {
-	if reply, err := getChatCompletion(strings.Join(tokens, " ")); err != nil {
+	if reply, err := getChatCompletion(viper.GetString("prompt") + viper.GetString("answer") + strings.Join(tokens, " ")); err != nil {
 		c.Cmd.Reply(e, err.Error())
 	} else {
 		sendMessage(c, &e, *reply)
@@ -300,8 +336,7 @@ func getChatCompletionString(query string) string {
 }
 func getChatCompletion(query string) (*string, error) {
 
-	prompt := viper.GetString("preamble") + query
-	log.Println("prompt: ", prompt)
+	log.Println("getChatCompletion() prompt:", query, "tokens:", viper.GetInt("maxtokens"), "model:", viper.GetString("model"))
 
 	resp, err := aiClient.CreateChatCompletion(
 		context.Background(),
@@ -311,7 +346,7 @@ func getChatCompletion(query string) (*string, error) {
 			Messages: []ai.ChatCompletionMessage{
 				{
 					Role:    ai.ChatMessageRoleUser,
-					Content: prompt,
+					Content: query,
 				},
 			},
 		},
