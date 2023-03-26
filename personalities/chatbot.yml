@@ -1,5 +1,5 @@
+prompt: provide a short reply of no more than 3 lines...
 nick: chatbot
-preamble: provide a short reply of no more than 3 lines...
-goodbye: say goodbye to the group chat and sign off as a GPT-4 based irc chatbot
-greeting: greet the group chat and introduce yourself as a GPT-4 based irc chatbot
 model: gpt-4
+greeting: greet the group chat and introduce yourself as a GPT-4 based irc chatbot
+goodbye: say goodbye to the group chat and sign off as a GPT-4 based irc chatbot
