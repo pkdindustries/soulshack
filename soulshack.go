@@ -258,10 +258,9 @@ func handleSave(c *girc.Client, e girc.Event, tokens []string) {
 
 	v := viper.New()
 	v.SetConfigName(filename)
-	v.SetConfigType("yaml")
+	v.SetConfigType("yml")
 	v.AddConfigPath("personalities")
 
-	// set specific viper variables to save
 	v.Set("nick", viper.GetString("nick"))
 	v.Set("prompt", viper.GetString("prompt"))
 	v.Set("model", viper.GetString("model"))
@@ -270,7 +269,7 @@ func handleSave(c *girc.Client, e girc.Event, tokens []string) {
 	v.Set("goodbye", viper.GetString("goodbye"))
 	v.Set("answer", viper.GetString("answer"))
 
-	if err := v.WriteConfig(); err != nil {
+	if err := v.WriteConfigAs("personalities/" + filename + ".yml"); err != nil {
 		c.Cmd.Reply(e, fmt.Sprintf("Error saving configuration: %s", err.Error()))
 		return
 	}
