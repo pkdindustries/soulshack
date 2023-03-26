@@ -5,74 +5,84 @@
     // |____/   \___/   \__,_| |_| |____/  |_| |_|  \__,_|  \___| |_|\_\
     //  .  .  .  because  real  people  are  overrated
 
+SoulShack is an AI-powered IRC chat bot that utilizes the OpenAI API to generate human-like responses. 
 
-SoulShack lets you load any personality you want
 
-## Requirements
+## Dependencies
 
 - Go (tested with version 1.21)
-- [girc](https://github.com/lrstanley/girc) (IRC library)
-- [go-openai](https://github.com/sashabaranov/go-openai) (OpenAI client library)
+- Cobra: https://github.com/spf13/cobra
+- GIRC: https://github.com/lrstanley/girc
+- Go Figure: https://github.com/common-nighthawk/go-figure
+- OpenAI Go Client: https://github.com/sashabaranov/go-openai
+- Viper: https://github.com/spf13/viper
 
-## Installation
+## Features
 
-1. Clone the repository.
-2. Run `go build` in the repository folder.
-3. Run the generated executable with the appropriate command line options.
+- Connects to an IRC server and joins a specified channel
+- Utilizes the OpenAI GPT-4 model to generate realistic and human-like responses
+- Allows dynamic configuration of bot settings through commands
+- Supports SSL connections for secure communication
+- Can adopt various personalities by changing configuration files
 
-## Configure the bot by setting up a config.yaml file or by using environment variables and command-line flags. 
+## Usage
 
-- `--server`: IRC server address (default: "localhost")
-- `--port`: IRC server port (default: 6667)
-- `--nick`: Bot's nickname on the IRC server (default: "chatbot")
-- `--channel`: Channel to join (e.g., "#channel1 #channel2")
+soulshack --server <server> --port <port> --channel '<#channelname>' --become <your personality> -ssl <bool>
+
+## Configuration
+
+SoulShack can be configured using command line flags, environment variables, or personality configuration files. It uses Viper to manage configuration settings.
+
+### Flags
+
+- `--server`: The IRC server address (default: "localhost")
+- `--port`: The IRC server port (default: 6667)
 - `--ssl`: Enable SSL for the IRC connection (default: false)
-- `--prompt`: Text prepended to prompt (default: "provide a short reply of no more than 3 lines:")
-- `--model`: Model to be used for responses (e.g., "gpt-4") (default: openai.GPT4)
-- `--maxtokens`:  Maximum number of tokens to generate with the OpenAI model (default: 64)
-- `--openaikey`: Api key for OpenAI 
-- `--become`: personality module
-- `--greeting`: greeting prompt
-- `--goodbye`: goodbye prompt
+- `--channel`: The IRC channel to join
+- `--openaikey`: Your OpenAI API key
+- `--become`: The named personality to adopt (default: "chatbot")
+- `--nick`: The bot's nickname on the IRC server
+- `--model`: The AI model to use for generating responses (default: GPT-4)
+- `--maxtokens`: The maximum number of tokens to generate with the OpenAI model (default: 512)
+- `--greeting`: The bot's response to the channel on join
+- `--goodbye`: The bot's response to the channel on part
+- `--prompt`: The initial character prompt for the AI
+- `--answer`: The prompt for answering a question
 
+### Environment Variables
 
-## Environment Variables
+All flags can also be set via environment variables with the prefix `SOULSHACK_`. For example, `SOULSHACK_SERVER` for the `--server` flag.
 
-- `SOULSHACK_OPENAIKEY`: Api key for OpenAI 
+### Personality Configuration Files
 
-## Configuring with flags
+Personality configuration files are stored in the `personalities` directory and use the YAML format. They can be loaded using the `--become` flag. A personality file can contain any of the settings that can be set via flags.
+
+# Adding a Personality
+
+To add a new personality to SoulShack, follow these steps:
+
+1. Create a new YML file in the `personalities` directory with the desired name (e.g., `marvin.yml`).
+2. Add your desired settings to the YML file. For example:
+
+```yml
+nick: marvin
+greeting: "Explain the size of your brain compared to common household objects"
+goodbye: "Goodbye, everyone. Have a great day!"
+prompt: "respond with a text message from marvin the paranoid android:"
+answer: "Despressively highlight all the things that can go wrong with scenerios associated with the text: "
+```
+
 ```bash
-export SOULSHACK_OPENAIKEY="<KEY>"
-./soulshack --server localhost --port 6667 --nick soulshack --channel "#chatbot" --model gpt-4 --prompt 'repond like a angry dog' --greeting 'bark' --goodbye 'whimper'
-```
-
-## Using a configuration file to define a personality
-
-`personalities/obama.yml`
-```
-nick: obamabot
-prompt: provide a short reply of no more than 3 lines as president obama talking to the group chat. type like you are using a blackberry phone...
-greeting: give a rousing politically astute greeting to the group chat
-goodbye: discuss the things you have to do with your wife, or that you have to polish your nobel award, or another type of common obama boast as you sign off from the chat
-```
-
-```bash
-./soulshack --become obamabot --server localhost --port 6667 --channel "#yeswecan"
+soulshack --server localhost --channel '#marvinshouse' --become marvin 
 ```
 
 ## Commands
 
-Users can send the following commands to the bot:
-
-- `/set prompt <value>`: Set the prompt used before each prompt.
-- `/set model <value>`: Set the OpenAI model used for generating responses.
-- `/set nick <value>`: Set the bot's ircnick
-- `/set greeting <value>` Set the greeting prompt
-- `/set goodbye <value>` Set the goodbye prompt
-
-## Contributing
-
-If you would like to contribute, please open an issue or submit a pull request on the project's GitHub repository.
-
+- `/set`: Set a configuration parameter (e.g., `/set nick NewNick`)
+- `/get`: Get the current value of a configuration parameter (e.g., `/get nick`)
+- `/save`: Save the current configuration as a personality (e.g., `/save mypersonality`)
+- `/become`: Adopt a new personality (e.g., `/become mypersonality`)
+- `/leave`: Make the bot leave the channel and exit
+- `/help`: Display help for available commands
 
 ## named as tribute to my old friend dayv, sp0t, who i think of often
