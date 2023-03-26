@@ -298,11 +298,11 @@ func handleBecome(c *girc.Client, e girc.Event, tokens []string) {
 	c.Cmd.Nick(nick)
 	viper.Set("nick", nick)
 
-	sendMessage(c, &e, getChatCompletionString(viper.GetString("greeting")))
+	sendMessage(c, &e, getChatCompletionString(viper.GetString("prompt")+viper.GetString("greeting")))
 }
 
 func handleLeave(c *girc.Client) {
-	sendMessage(c, nil, getChatCompletionString(viper.GetString("goodbye")))
+	sendMessage(c, nil, getChatCompletionString(viper.GetString("prompt")+viper.GetString("goodbye")))
 	log.Println("exiting...")
 	go func() {
 		time.Sleep(1 * time.Second)
