@@ -12,8 +12,10 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -57,8 +59,8 @@ func init() {
 	rootCmd.PersistentFlags().BoolP("ssl", "e", false, "Enable SSL for the IRC connection")
 	rootCmd.PersistentFlags().Int("maxtokens", 512, "Maximum number of tokens to generate with the OpenAI model")
 	rootCmd.PersistentFlags().IntP("port", "p", 6667, "IRC server port")
-	rootCmd.PersistentFlags().String("goodbye", "", "Response to channel on part")
-	rootCmd.PersistentFlags().String("greeting", "", "Response to the channel on join")
+	rootCmd.PersistentFlags().String("goodbye", "goodbye.", "Response to channel on part")
+	rootCmd.PersistentFlags().String("greeting", "hello.", "Response to the channel on join")
 	rootCmd.PersistentFlags().String("model", ai.GPT4, "Model to be used for responses (e.g., gpt-4")
 	rootCmd.PersistentFlags().String("openaikey", "", "OpenAI API key")
 	rootCmd.PersistentFlags().String("prompt", "", "Initial character prompt for the AI")
@@ -130,14 +132,6 @@ func run(_ *cobra.Command, _ []string) {
 		log.Fatal(err)
 	}
 
-	go func() {
-		for range time.Tick(1 * time.Minute) {
-			if time.Since(lastMessageTime) >= viper.GetDuration("session") {
-				resetChatHistory()
-			}
-		}
-	}()
-
 	aiClient = ai.NewClient(viper.GetString("openaikey"))
 
 	irc := girc.New(girc.Config{
@@ -159,6 +153,10 @@ func run(_ *cobra.Command, _ []string) {
 	})
 
 	irc.Handlers.Add(girc.PRIVMSG, func(c *girc.Client, e girc.Event) {
+		if time.Since(lastMessageTime) >= viper.GetDuration("session") {
+			resetChatHistory()
+		}
+
 		if strings.HasPrefix(e.Last(), viper.GetString("nick")) {
 
 			log.Println("<", c.ChannelList(), e.Last())
@@ -173,6 +171,8 @@ func run(_ *cobra.Command, _ []string) {
 				handleGet(c, e, tokens)
 			case "/save":
 				handleSave(c, e, tokens)
+			case "/list":
+				handleList(c, e)
 			case "/become":
 				handleBecome(c, e, tokens)
 			case "/leave":
@@ -180,7 +180,7 @@ func run(_ *cobra.Command, _ []string) {
 			case "/help":
 				fallthrough
 			case "/?":
-				c.Cmd.Reply(e, "Supported commands: /set, /get, /become, /leave, /help, /version")
+				c.Cmd.Reply(e, "Supported commands: /set, /get, /list, /become, /leave, /help, /version")
 			case "/version":
 				//handleVersion(c, e, rootCmd.Version)
 			default:
@@ -241,17 +241,6 @@ func sendMessage(c *girc.Client, e *girc.Event, message string) {
 	sendMessageChunks(c, target, &message)
 }
 
-// func getChannelContext(channel *girc.Channel) string {
-// 	context := "you are in the group chat channel " + channel.Name + " with the following users:"
-// 	for _, u := range channel.UserList {
-// 		if u == viper.GetString("nick") {
-// 			continue
-// 		}
-// 		context += u + ", "
-// 	}
-// 	return context + "..."
-// }
-
 func sendMessageChunks(c *girc.Client, target string, message *string) {
 	chunks := splitResponse(*message, 400)
 	for _, msg := range chunks {
@@ -260,14 +249,7 @@ func sendMessageChunks(c *girc.Client, target string, message *string) {
 	}
 }
 
-var configParams = map[string]string{
-	"prompt":   "",
-	"model":    "",
-	"nick":     "",
-	"greeting": "",
-	"goodbye":  "",
-	"answer":   "",
-}
+var configParams = map[string]string{"prompt": "", "model": "", "nick": "", "greeting": "", "goodbye": "", "answer": ""}
 
 func handleSet(c *girc.Client, e girc.Event, tokens []string) {
 
@@ -397,6 +379,23 @@ func handleBecome(c *girc.Client, e girc.Event, tokens []string) {
 	sendGreeting(c, &e)
 }
 
+func handleList(c *girc.Client, e girc.Event) {
+	files, err := ioutil.ReadDir("personalities")
+	if err != nil {
+		c.Cmd.Reply(e, fmt.Sprintf("Error listing personalities: %s", err.Error()))
+		return
+	}
+
+	var personalities []string
+	for _, file := range files {
+		if filepath.Ext(file.Name()) == ".yml" {
+			personalities = append(personalities, strings.TrimSuffix(file.Name(), filepath.Ext(file.Name())))
+		}
+	}
+
+	c.Cmd.Reply(e, fmt.Sprintf("Available personalities: %s", strings.Join(personalities, ", ")))
+}
+
 func handleLeave(c *girc.Client, e girc.Event) {
 	if !isAdmin(e.Source.Name) {
 		c.Cmd.Reply(e, "You don't have permission to perform this action.")
@@ -431,8 +430,9 @@ func handleDefault(c *girc.Client, e girc.Event, tokens []string) {
 	if reply, err := getChatCompletion(chatHistory); err != nil {
 		c.Cmd.Reply(e, err.Error())
 		// never happened
-		// XXX
-		chatHistory = chatHistory[:len(chatHistory)-1]
+		if len(chatHistory) > 1 {
+			chatHistory = chatHistory[:len(chatHistory)-1]
+		}
 	} else {
 		chatHistory = append(chatHistory, ai.ChatCompletionMessage{
 			Role:    ai.ChatMessageRoleAssistant,
@@ -446,7 +446,12 @@ func getChatCompletionString(messages []ai.ChatCompletionMessage) string {
 	if reply, err := getChatCompletion(messages); err != nil {
 		return err.Error()
 	} else {
-		return *reply
+		if reply != nil {
+			return *reply
+		} else {
+			log.Println("getchatcompletionstring: ", err)
+			return ""
+		}
 	}
 }
 
