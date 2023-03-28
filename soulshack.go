@@ -10,6 +10,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -25,6 +26,10 @@ import (
 )
 
 var aiClient *ai.Client
+
+// user <-> bot transcript in memory
+var chatHistory []ai.ChatCompletionMessage
+var lastMessageTime = time.Now()
 
 func getBanner() string {
 	return fmt.Sprintf("%s\n%s",
@@ -43,6 +48,7 @@ var rootCmd = &cobra.Command{
 	Example: "soulshack --server irc.freenode.net --port 6697 --channel '#soulshack' --ssl --openaikey ****************",
 	Short:   getBanner(),
 	Run:     run,
+	Version: "0.42 . . . because real people are overrated . . . http://github.com/pkdindustries/soulshack",
 }
 
 func init() {
@@ -61,6 +67,8 @@ func init() {
 	rootCmd.PersistentFlags().StringP("nick", "n", "", "Bot's nickname on the IRC server")
 	rootCmd.PersistentFlags().StringP("server", "s", "localhost", "IRC server address")
 	rootCmd.PersistentFlags().StringP("answer", "a", "", "prompt for answering a question")
+	rootCmd.PersistentFlags().StringSliceP("admins", "A", []string{}, "Comma-separated list of allowed users to administrate the bot (e.g., user1,user2,user3)")
+	rootCmd.PersistentFlags().DurationP("session", "S", time.Minute*1, "timeout for the chat session; message context will be cleared after this time")
 
 	viper.BindPFlag("become", rootCmd.PersistentFlags().Lookup("become"))
 	viper.BindPFlag("channel", rootCmd.PersistentFlags().Lookup("channel"))
@@ -75,6 +83,9 @@ func init() {
 	viper.BindPFlag("server", rootCmd.PersistentFlags().Lookup("server"))
 	viper.BindPFlag("ssl", rootCmd.PersistentFlags().Lookup("ssl"))
 	viper.BindPFlag("answer", rootCmd.PersistentFlags().Lookup("answer"))
+	viper.BindPFlag("admins", rootCmd.PersistentFlags().Lookup("admins"))
+	viper.BindPFlag("session", rootCmd.PersistentFlags().Lookup("session"))
+
 	viper.SetEnvPrefix("SOULSHACK")
 	viper.AutomaticEnv()
 }
@@ -88,31 +99,44 @@ func initConfig() {
 	viper.SetConfigName(viper.GetString("become"))
 
 	if err := viper.ReadInConfig(); err != nil {
-		log.Fatalln("no personality found:", viper.GetString("become"))
+		log.Fatalln("! no personality found:", viper.GetString("become"))
 	}
 	log.Println("using personality file:", viper.ConfigFileUsed())
 
 }
-func verifyConfig() {
+func verifyConfig() error {
+	log.Print("verifying configuration...", viper.AllKeys())
 	for _, varName := range viper.AllKeys() {
-		if varName == "answer" {
+		if varName == "answer" || varName == "admins" {
 			continue
 		}
 		value := viper.GetString(varName)
 		if value == "" {
-			log.Fatalf("%s unset. use --%s flag, personality config, or %s env.", varName, varName, strings.ToUpper(varName))
+			return fmt.Errorf("! %s unset. use --%s flag, personality config, or SOULSHACK_%s env", varName, varName, strings.ToUpper(varName))
 		}
 		if varName == "openaikey" {
 			value = strings.Repeat("*", len(value))
 		}
 
-		log.Printf("%s: %s", varName, value)
+		log.Printf("\t%s: '%s'", varName, value)
 	}
+	log.Println("configuration ok")
+	return nil
 }
 
 func run(_ *cobra.Command, _ []string) {
 
-	verifyConfig()
+	if err := verifyConfig(); err != nil {
+		log.Fatal(err)
+	}
+
+	go func() {
+		for range time.Tick(1 * time.Minute) {
+			if time.Since(lastMessageTime) >= viper.GetDuration("session") {
+				resetChatHistory()
+			}
+		}
+	}()
 
 	aiClient = ai.NewClient(viper.GetString("openaikey"))
 
@@ -131,12 +155,13 @@ func run(_ *cobra.Command, _ []string) {
 		log.Println("joining channel:", channel)
 		c.Cmd.Join(channel)
 		time.Sleep(1 * time.Second)
-		sendMessage(c, &e, getChatCompletionString(viper.GetString("prompt")+viper.GetString("greeting")))
+		sendGreeting(c, &e)
 	})
 
 	irc.Handlers.Add(girc.PRIVMSG, func(c *girc.Client, e girc.Event) {
-		log.Printf("%s: %s", viper.GetString("nick"), e.Last())
 		if strings.HasPrefix(e.Last(), viper.GetString("nick")) {
+
+			log.Println("<", c.ChannelList(), e.Last())
 			tokens := strings.Fields(e.Last())[1:]
 			if len(tokens) == 0 {
 				return
@@ -151,11 +176,13 @@ func run(_ *cobra.Command, _ []string) {
 			case "/become":
 				handleBecome(c, e, tokens)
 			case "/leave":
-				handleLeave(c)
+				handleLeave(c, e)
 			case "/help":
 				fallthrough
 			case "/?":
-				c.Cmd.Reply(e, "Supported commands: /set, /get, /save, /load, /leave, /help")
+				c.Cmd.Reply(e, "Supported commands: /set, /get, /become, /leave, /help, /version")
+			case "/version":
+				//handleVersion(c, e, rootCmd.Version)
 			default:
 				handleDefault(c, e, tokens)
 			}
@@ -175,24 +202,55 @@ func run(_ *cobra.Command, _ []string) {
 	}
 }
 
+func resetChatHistory() {
+	if len(chatHistory) > 1 {
+		log.Println("chat history reset...")
+	}
+	chatHistory = []ai.ChatCompletionMessage{}
+	chatHistory = append(chatHistory, ai.ChatCompletionMessage{
+		Role:    ai.ChatMessageRoleAssistant,
+		Content: viper.GetString("prompt"),
+	})
+}
+
+func sendGreeting(c *girc.Client, e *girc.Event) {
+
+	resetChatHistory()
+
+	log.Println("sending greeting...")
+	chatHistory = append(chatHistory, ai.ChatCompletionMessage{
+		Role:    ai.ChatMessageRoleAssistant,
+		Content: viper.GetString("greeting"),
+	})
+
+	reply := getChatCompletionString(chatHistory)
+	sendMessage(c, e, reply)
+
+	chatHistory = append(chatHistory, ai.ChatCompletionMessage{
+		Role:    ai.ChatMessageRoleAssistant,
+		Content: reply,
+	})
+}
+
 func sendMessage(c *girc.Client, e *girc.Event, message string) {
-	log.Println("sendMessage()", c.ChannelList(), e, message)
+	log.Println(">", c.ChannelList(), e, message)
+	lastMessageTime = time.Now()
 
 	target := viper.GetString("channel")
 
 	sendMessageChunks(c, target, &message)
 }
 
-func getChannelContext(channel *girc.Channel) string {
-	context := "you are in the group chat channel " + channel.Name + " with the following users:"
-	for _, u := range channel.UserList {
-		if u == viper.GetString("nick") {
-			continue
-		}
-		context += u + ", "
-	}
-	return context + "..."
-}
+// func getChannelContext(channel *girc.Channel) string {
+// 	context := "you are in the group chat channel " + channel.Name + " with the following users:"
+// 	for _, u := range channel.UserList {
+// 		if u == viper.GetString("nick") {
+// 			continue
+// 		}
+// 		context += u + ", "
+// 	}
+// 	return context + "..."
+// }
 
 func sendMessageChunks(c *girc.Client, target string, message *string) {
 	chunks := splitResponse(*message, 400)
@@ -212,6 +270,12 @@ var configParams = map[string]string{
 }
 
 func handleSet(c *girc.Client, e girc.Event, tokens []string) {
+
+	if !isAdmin(e.Source.Name) {
+		c.Cmd.Reply(e, "You don't have permission to perform this action.")
+		return
+	}
+
 	if len(tokens) < 3 {
 		c.Cmd.Reply(e, fmt.Sprintf("Usage: /set %s <value>", keysAsString(configParams)))
 		return
@@ -230,6 +294,8 @@ func handleSet(c *girc.Client, e girc.Event, tokens []string) {
 	if param == "nick" {
 		c.Cmd.Nick(value)
 	}
+
+	resetChatHistory()
 }
 
 func handleGet(c *girc.Client, e girc.Event, tokens []string) {
@@ -249,6 +315,12 @@ func handleGet(c *girc.Client, e girc.Event, tokens []string) {
 }
 
 func handleSave(c *girc.Client, e girc.Event, tokens []string) {
+
+	if !isAdmin(e.Source.Name) {
+		c.Cmd.Reply(e, "You don't have permission to perform this action.")
+		return
+	}
+
 	if len(tokens) < 2 {
 		c.Cmd.Reply(e, "Usage: /save <name>")
 		return
@@ -257,9 +329,6 @@ func handleSave(c *girc.Client, e girc.Event, tokens []string) {
 	filename := tokens[1]
 
 	v := viper.New()
-	v.SetConfigName(filename)
-	v.SetConfigType("yml")
-	v.AddConfigPath("personalities")
 
 	v.Set("nick", viper.GetString("nick"))
 	v.Set("prompt", viper.GetString("prompt"))
@@ -277,32 +346,72 @@ func handleSave(c *girc.Client, e girc.Event, tokens []string) {
 	c.Cmd.Reply(e, fmt.Sprintf("Configuration saved to: %s", filename))
 }
 
+func loadPersonality(p string) error {
+	log.Println("loading personality", p)
+	personalityViper := viper.New()
+	personalityViper.SetConfigFile("./personalities/" + p + ".yml")
+
+	err := personalityViper.ReadInConfig()
+	if err != nil {
+		log.Println("Error reading personality config:", err)
+		return err
+	}
+
+	originalSettings := viper.AllSettings()
+	viper.MergeConfigMap(personalityViper.AllSettings())
+	viper.Set("become", p)
+
+	if err := verifyConfig(); err != nil {
+		log.Println("Error verifying personality config:", err)
+		viper.MergeConfigMap(originalSettings)
+		return err
+	}
+
+	log.Println("personality loaded:", viper.GetString("become"))
+	return nil
+}
+
 func handleBecome(c *girc.Client, e girc.Event, tokens []string) {
-	if len(tokens) < 2 {
-		c.Cmd.Reply(e, "Usage: /become <any person>")
+
+	if !isAdmin(e.Source.Name) {
+		c.Cmd.Reply(e, "You don't have permission to perform this action.")
 		return
 	}
 
-	fullName := strings.Join(tokens[1:], " ")
-	nick := strings.ToLower(strings.ReplaceAll(fullName, " ", "")) + "bot"
-
-	// nick is at most 9 chars
-	if len(nick) > 9 {
-		nick = nick[:6] + "bot"
+	if len(tokens) < 2 {
+		c.Cmd.Reply(e, "Usage: /become <personality>")
+		return
 	}
 
-	viper.Set("prompt", fmt.Sprintf("compose a short reply of no more than 3 lines in characteristic %s fashion...", fullName))
-	viper.Set("greeting", "greeting the group chat")
-	viper.Set("goodbye", "leaving the group chat ")
+	personality := tokens[1]
+	if err := loadPersonality(personality); err != nil {
+		log.Println("Error loading personality:", err)
+		c.Cmd.Reply(e, fmt.Sprintf("Error loading personality: %s", err.Error()))
+		return
+	}
 
-	c.Cmd.Nick(nick)
-	viper.Set("nick", nick)
+	log.Printf("changing nick to %s as personality %s", viper.GetString("nick"), personality)
 
-	sendMessage(c, &e, getChatCompletionString(viper.GetString("prompt")+viper.GetString("greeting")))
+	c.Cmd.Nick(viper.GetString("nick"))
+	time.Sleep(2 * time.Second)
+	sendGreeting(c, &e)
 }
 
-func handleLeave(c *girc.Client) {
-	sendMessage(c, nil, getChatCompletionString(viper.GetString("prompt")+viper.GetString("goodbye")))
+func handleLeave(c *girc.Client, e girc.Event) {
+	if !isAdmin(e.Source.Name) {
+		c.Cmd.Reply(e, "You don't have permission to perform this action.")
+		return
+	}
+
+	sendMessage(c, nil, getChatCompletionString(
+		[]ai.ChatCompletionMessage{
+			{
+				Role:    ai.ChatMessageRoleAssistant,
+				Content: viper.GetString("prompt") + viper.GetString("goodbye"),
+			},
+		},
+	))
+
 	log.Println("exiting...")
 	go func() {
 		time.Sleep(1 * time.Second)
@@ -310,44 +419,53 @@ func handleLeave(c *girc.Client) {
 	}()
 }
 
-func keysAsString(m map[string]string) string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	return strings.Join(keys, ", ")
-}
-
 func handleDefault(c *girc.Client, e girc.Event, tokens []string) {
-	if reply, err := getChatCompletion(viper.GetString("prompt") + viper.GetString("answer") + strings.Join(tokens, " ")); err != nil {
+	msg := strings.Join(tokens, " ")
+
+	chatHistory = append(chatHistory, ai.ChatCompletionMessage{
+		Role:    ai.ChatMessageRoleUser,
+		Content: msg,
+		Name:    e.Source.Name,
+	})
+
+	if reply, err := getChatCompletion(chatHistory); err != nil {
 		c.Cmd.Reply(e, err.Error())
+		// never happened
+		// XXX
+		chatHistory = chatHistory[:len(chatHistory)-1]
 	} else {
+		chatHistory = append(chatHistory, ai.ChatCompletionMessage{
+			Role:    ai.ChatMessageRoleAssistant,
+			Content: *reply,
+		})
 		sendMessage(c, &e, *reply)
 	}
 }
 
-func getChatCompletionString(query string) string {
-	if reply, err := getChatCompletion(query); err != nil {
+func getChatCompletionString(messages []ai.ChatCompletionMessage) string {
+	if reply, err := getChatCompletion(messages); err != nil {
 		return err.Error()
 	} else {
 		return *reply
 	}
 }
-func getChatCompletion(query string) (*string, error) {
 
-	log.Println("getChatCompletion() prompt:", query, "tokens:", viper.GetInt("maxtokens"), "model:", viper.GetString("model"))
+func getChatCompletion(msgs []ai.ChatCompletionMessage) (*string, error) {
+
+	log.Printf("completing: messages %d, characters %d, maxtokens %d, model %s",
+		len(msgs),
+		sumMessageLengths(msgs),
+		viper.GetInt("maxtokens"),
+		viper.GetString("model"),
+	)
+	now := time.Now()
 
 	resp, err := aiClient.CreateChatCompletion(
 		context.Background(),
 		ai.ChatCompletionRequest{
 			MaxTokens: viper.GetInt("maxtokens"),
 			Model:     viper.GetString("model"),
-			Messages: []ai.ChatCompletionMessage{
-				{
-					Role:    ai.ChatMessageRoleUser,
-					Content: query,
-				},
-			},
+			Messages:  msgs,
 		},
 	)
 
@@ -355,7 +473,11 @@ func getChatCompletion(query string) (*string, error) {
 		return nil, err
 	}
 
-	log.Println("response: ", resp.Choices[0].Message.Content)
+	if len(resp.Choices) == 0 {
+		return nil, errors.New("no response")
+	}
+
+	log.Printf("completed: %s, %d tokens", time.Since(now), resp.Usage.TotalTokens)
 	return &resp.Choices[0].Message.Content, nil
 }
 
@@ -380,4 +502,33 @@ func splitResponse(response string, maxLineLength int) []string {
 	}
 
 	return messages
+}
+
+func isAdmin(nick string) bool {
+	admins := viper.GetStringSlice("admins")
+	if len(admins) == 0 {
+		return true
+	}
+	for _, user := range admins {
+		if user == nick {
+			return true
+		}
+	}
+	return false
+}
+
+func sumMessageLengths(messages []ai.ChatCompletionMessage) int {
+	sum := 0
+	for _, m := range messages {
+		sum += len(m.Content)
+	}
+	return sum
+}
+
+func keysAsString(m map[string]string) string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return strings.Join(keys, ", ")
 }
