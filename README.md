@@ -27,7 +27,7 @@ SoulShack is an AI-powered IRC chat bot that utilizes the OpenAI API to generate
 
 ## Usage
 
-soulshack --server <server> --port <port> --channel '<#channelname>' --become <your personality> -ssl <bool>
+soulshack --server <server> --port <port> --channel '#channelname' --become <personality> -ssl <bool>
 
 ## Configuration
 
@@ -44,10 +44,10 @@ SoulShack can be configured using command line flags, environment variables, or 
 - `--nick`: The bot's nickname on the IRC server
 - `--model`: The AI model to use for generating responses (default: GPT-4)
 - `--maxtokens`: The maximum number of tokens to generate with the OpenAI model (default: 512)
-- `--greeting`: The bot's response to the channel on join
-- `--goodbye`: The bot's response to the channel on part
-- `--prompt`: The initial character prompt for the AI
-- `--answer`: The prompt for answering a question
+- `--greeting`: response prompt to the channel on join (default: "hello.")
+- `--goodbye`:  response prompt to the channel on part (default: "goodbye.")
+- `--prompt`: The initial character prompt for the AI, initilizes the personality
+- `--answer`: appended to prompt for conditioning the answer to a question
 
 ### Environment Variables
 
@@ -66,10 +66,10 @@ To add a new personality to SoulShack, follow these steps:
 
 ```yml
 nick: marvin
-greeting: "Explain the size of your brain compared to common household objects"
-goodbye: "Goodbye, everyone. Have a great day!"
+greeting: "Explain the size of your brain compared to common household objects."
+goodbye: "goodbye."
 prompt: "respond with a text message from marvin the paranoid android:"
-answer: "Despressively highlight all the things that can go wrong with scenerios associated with the text: "
+answer: "catastrophically highlight all the things that can go wrong with scenerios associated with the text: "
 ```
 
 ```bash
@@ -82,6 +82,7 @@ soulshack --server localhost --channel '#marvinshouse' --become marvin
 - `/get`: Get the current value of a configuration parameter (e.g., `/get nick`)
 - `/save`: Save the current configuration as a personality (e.g., `/save mypersonality`)
 - `/become`: Adopt a new personality (e.g., `/become mypersonality`)
+- `/list`: Show available personalities
 - `/leave`: Make the bot leave the channel and exit
 - `/help`: Display help for available commands
 
