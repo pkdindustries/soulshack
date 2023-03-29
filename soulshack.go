@@ -70,7 +70,8 @@ func init() {
 	rootCmd.PersistentFlags().StringP("server", "s", "localhost", "IRC server address")
 	rootCmd.PersistentFlags().StringP("answer", "a", "", "prompt for answering a question")
 	rootCmd.PersistentFlags().StringSliceP("admins", "A", []string{}, "Comma-separated list of allowed users to administrate the bot (e.g., user1,user2,user3)")
-	rootCmd.PersistentFlags().DurationP("session", "S", time.Minute*1, "timeout for the chat session; message context will be cleared after this time")
+	rootCmd.PersistentFlags().DurationP("session", "S", time.Minute*1, "dureation for the chat session; message context will be cleared after this time")
+	rootCmd.PersistentFlags().DurationP("timeout", "t", time.Second*30, "timeout for ach completion request to openai")
 
 	viper.BindPFlag("become", rootCmd.PersistentFlags().Lookup("become"))
 	viper.BindPFlag("channel", rootCmd.PersistentFlags().Lookup("channel"))
@@ -87,6 +88,7 @@ func init() {
 	viper.BindPFlag("answer", rootCmd.PersistentFlags().Lookup("answer"))
 	viper.BindPFlag("admins", rootCmd.PersistentFlags().Lookup("admins"))
 	viper.BindPFlag("session", rootCmd.PersistentFlags().Lookup("session"))
+	viper.BindPFlag("timeout", rootCmd.PersistentFlags().Lookup("timeout"))
 
 	viper.SetEnvPrefix("SOULSHACK")
 	viper.AutomaticEnv()
@@ -450,7 +452,7 @@ func getChatCompletionString(messages []ai.ChatCompletionMessage) string {
 			return *reply
 		} else {
 			log.Println("getchatcompletionstring: ", err)
-			return ""
+			return err.Error()
 		}
 	}
 }
@@ -463,10 +465,13 @@ func getChatCompletion(msgs []ai.ChatCompletionMessage) (*string, error) {
 		viper.GetInt("maxtokens"),
 		viper.GetString("model"),
 	)
+
 	now := time.Now()
+	ctx, cancel := context.WithTimeout(context.Background(), viper.GetDuration("timeout"))
+	defer cancel()
 
 	resp, err := aiClient.CreateChatCompletion(
-		context.Background(),
+		ctx,
 		ai.ChatCompletionRequest{
 			MaxTokens: viper.GetInt("maxtokens"),
 			Model:     viper.GetString("model"),
