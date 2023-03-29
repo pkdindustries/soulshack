@@ -69,7 +69,7 @@ func init() {
 	rootCmd.PersistentFlags().StringP("server", "s", "localhost", "IRC server address")
 	rootCmd.PersistentFlags().StringP("answer", "a", "", "prompt for answering a question")
 	rootCmd.PersistentFlags().StringSliceP("admins", "A", []string{}, "Comma-separated list of allowed users to administrate the bot (e.g., user1,user2,user3)")
-	rootCmd.PersistentFlags().DurationP("session", "S", time.Minute*1, "dureation for the chat session; message context will be cleared after this time")
+	rootCmd.PersistentFlags().DurationP("session", "S", time.Minute*3, "dureation for the chat session; message context will be cleared after this time")
 	rootCmd.PersistentFlags().DurationP("timeout", "t", time.Second*15, "timeout for each completion request to openai")
 	rootCmd.PersistentFlags().BoolP("list", "l", false, "list configured personalities")
 	rootCmd.PersistentFlags().StringP("directory", "d", "./personalities", "personalities configuration directory")
