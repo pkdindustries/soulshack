@@ -27,7 +27,7 @@ SoulShack is an AI-powered IRC chat bot that utilizes the OpenAI API to generate
 
 ## Usage
 
-soulshack --server <server> --port <port> --channel '#channelname' --become <personality> -ssl <bool>
+soulshack --server server --port port --channel '#channelname' --become personality --ssl 
 
 ## Configuration
 
