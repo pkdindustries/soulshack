@@ -12,7 +12,6 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
@@ -71,7 +70,9 @@ func init() {
 	rootCmd.PersistentFlags().StringP("answer", "a", "", "prompt for answering a question")
 	rootCmd.PersistentFlags().StringSliceP("admins", "A", []string{}, "Comma-separated list of allowed users to administrate the bot (e.g., user1,user2,user3)")
 	rootCmd.PersistentFlags().DurationP("session", "S", time.Minute*1, "dureation for the chat session; message context will be cleared after this time")
-	rootCmd.PersistentFlags().DurationP("timeout", "t", time.Second*30, "timeout for ach completion request to openai")
+	rootCmd.PersistentFlags().DurationP("timeout", "t", time.Second*15, "timeout for each completion request to openai")
+	rootCmd.PersistentFlags().BoolP("list", "l", false, "list configured personalities")
+	rootCmd.PersistentFlags().StringP("directory", "d", "./personalities", "personalities configuration directory")
 
 	viper.BindPFlag("become", rootCmd.PersistentFlags().Lookup("become"))
 	viper.BindPFlag("channel", rootCmd.PersistentFlags().Lookup("channel"))
@@ -89,6 +90,8 @@ func init() {
 	viper.BindPFlag("admins", rootCmd.PersistentFlags().Lookup("admins"))
 	viper.BindPFlag("session", rootCmd.PersistentFlags().Lookup("session"))
 	viper.BindPFlag("timeout", rootCmd.PersistentFlags().Lookup("timeout"))
+	viper.BindPFlag("list", rootCmd.PersistentFlags().Lookup("list"))
+	viper.BindPFlag("directory", rootCmd.PersistentFlags().Lookup("directory"))
 
 	viper.SetEnvPrefix("SOULSHACK")
 	viper.AutomaticEnv()
@@ -97,9 +100,17 @@ func init() {
 func initConfig() {
 
 	fmt.Println(getBanner())
+	log.Printf("configuration directory %s", viper.GetString("directory"))
+
+	if viper.GetBool("list") {
+		personalities := listPersonalities()
+		log.Printf("Available personalities: %s", strings.Join(personalities, ", "))
+		os.Exit(0)
+	}
+
 	log.Println("initializing personality", viper.GetString("become"))
 
-	viper.AddConfigPath("personalities")
+	viper.AddConfigPath(viper.GetString("directory"))
 	viper.SetConfigName(viper.GetString("become"))
 
 	if err := viper.ReadInConfig(); err != nil {
@@ -159,10 +170,17 @@ func run(_ *cobra.Command, _ []string) {
 			resetChatHistory()
 		}
 
-		if strings.HasPrefix(e.Last(), viper.GetString("nick")) {
+		privmsg := !strings.HasPrefix(e.Params[0], "#")
+		addressed := strings.HasPrefix(e.Last(), c.GetNick())
+		if privmsg || addressed {
 
-			log.Println("<", c.ChannelList(), e.Last())
-			tokens := strings.Fields(e.Last())[1:]
+			log.Println("<", e)
+
+			tokens := strings.Fields(e.Last())
+			if addressed {
+				tokens = strings.Fields(e.Last())[1:]
+			}
+
 			if len(tokens) == 0 {
 				return
 			}
@@ -226,6 +244,12 @@ func sendGreeting(c *girc.Client, e *girc.Event) {
 	})
 
 	reply := getChatCompletionString(chatHistory)
+
+	if e.Source == nil {
+		e.Source = &girc.Source{
+			Name: viper.GetString("channel"),
+		}
+	}
 	sendMessage(c, e, reply)
 
 	chatHistory = append(chatHistory, ai.ChatCompletionMessage{
@@ -235,23 +259,20 @@ func sendGreeting(c *girc.Client, e *girc.Event) {
 }
 
 func sendMessage(c *girc.Client, e *girc.Event, message string) {
-	log.Println(">", c.ChannelList(), e, message)
+	log.Println(">", e, message)
 	lastMessageTime = time.Now()
-
-	target := viper.GetString("channel")
-
-	sendMessageChunks(c, target, &message)
+	sendMessageChunks(c, e, &message)
 }
 
-func sendMessageChunks(c *girc.Client, target string, message *string) {
+func sendMessageChunks(c *girc.Client, e *girc.Event, message *string) {
 	chunks := splitResponse(*message, 400)
 	for _, msg := range chunks {
 		time.Sleep(500 * time.Millisecond)
-		c.Cmd.Message(target, msg)
+		c.Cmd.ReplyTo(*e, msg)
 	}
 }
 
-var configParams = map[string]string{"prompt": "", "model": "", "nick": "", "greeting": "", "goodbye": "", "answer": ""}
+var configParams = map[string]string{"prompt": "", "model": "", "nick": "", "greeting": "", "goodbye": "", "answer": "", "directory": "", "session": ""}
 
 func handleSet(c *girc.Client, e girc.Event, tokens []string) {
 
@@ -322,7 +343,7 @@ func handleSave(c *girc.Client, e girc.Event, tokens []string) {
 	v.Set("goodbye", viper.GetString("goodbye"))
 	v.Set("answer", viper.GetString("answer"))
 
-	if err := v.WriteConfigAs("personalities/" + filename + ".yml"); err != nil {
+	if err := v.WriteConfigAs(viper.GetString("directory") + "/" + filename + ".yml"); err != nil {
 		c.Cmd.Reply(e, fmt.Sprintf("Error saving configuration: %s", err.Error()))
 		return
 	}
@@ -333,7 +354,7 @@ func handleSave(c *girc.Client, e girc.Event, tokens []string) {
 func loadPersonality(p string) error {
 	log.Println("loading personality", p)
 	personalityViper := viper.New()
-	personalityViper.SetConfigFile("./personalities/" + p + ".yml")
+	personalityViper.SetConfigFile(viper.GetString("directory") + "/" + p + ".yml")
 
 	err := personalityViper.ReadInConfig()
 	if err != nil {
@@ -382,19 +403,7 @@ func handleBecome(c *girc.Client, e girc.Event, tokens []string) {
 }
 
 func handleList(c *girc.Client, e girc.Event) {
-	files, err := ioutil.ReadDir("personalities")
-	if err != nil {
-		c.Cmd.Reply(e, fmt.Sprintf("Error listing personalities: %s", err.Error()))
-		return
-	}
-
-	var personalities []string
-	for _, file := range files {
-		if filepath.Ext(file.Name()) == ".yml" {
-			personalities = append(personalities, strings.TrimSuffix(file.Name(), filepath.Ext(file.Name())))
-		}
-	}
-
+	personalities := listPersonalities()
 	c.Cmd.Reply(e, fmt.Sprintf("Available personalities: %s", strings.Join(personalities, ", ")))
 }
 
@@ -404,7 +413,7 @@ func handleLeave(c *girc.Client, e girc.Event) {
 		return
 	}
 
-	sendMessage(c, nil, getChatCompletionString(
+	sendMessage(c, &e, getChatCompletionString(
 		[]ai.ChatCompletionMessage{
 			{
 				Role:    ai.ChatMessageRoleAssistant,
@@ -541,4 +550,18 @@ func keysAsString(m map[string]string) string {
 		keys = append(keys, k)
 	}
 	return strings.Join(keys, ", ")
+}
+
+func listPersonalities() []string {
+	files, err := os.ReadDir(viper.GetString("directory"))
+	if err != nil {
+		log.Fatal(err)
+	}
+	var personalities []string
+	for _, file := range files {
+		if filepath.Ext(file.Name()) == ".yml" {
+			personalities = append(personalities, strings.TrimSuffix(file.Name(), filepath.Ext(file.Name())))
+		}
+	}
+	return personalities
 }
