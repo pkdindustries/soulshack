@@ -116,22 +116,22 @@ func listPersonalities() []string {
 
 func loadPersonality(p string) error {
 	log.Println("loading personality", p)
-	personalityViper := vip.New()
-	personalityViper.SetConfigFile(vip.GetString("directory") + "/" + p + ".yml")
+	newvip := vip.New()
+	newvip.SetConfigFile(vip.GetString("directory") + "/" + p + ".yml")
 
-	err := personalityViper.ReadInConfig()
+	err := newvip.ReadInConfig()
 	if err != nil {
 		log.Println("Error reading personality config:", err)
 		return err
 	}
 
-	originalSettings := vip.AllSettings()
-	vip.MergeConfigMap(personalityViper.AllSettings())
+	original := vip.AllSettings()
+	vip.MergeConfigMap(newvip.AllSettings())
 	vip.Set("become", p)
 
 	if err := verifyConfig(); err != nil {
 		log.Println("Error verifying personality config:", err)
-		vip.MergeConfigMap(originalSettings)
+		vip.MergeConfigMap(original)
 		return err
 	}
 
