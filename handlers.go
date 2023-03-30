@@ -20,7 +20,7 @@ func sendGreeting(ctx *chatContext) {
 	session.Clear()
 	session.addMessage(ai.ChatMessageRoleAssistant, vip.GetString("greeting"), "")
 
-	reply, err := getChatCompletion(session.History)
+	reply, err := getChatCompletion(ctx, session.History)
 
 	if err != nil {
 		sendMessage(ctx, err.Error())
@@ -187,7 +187,7 @@ func handleDefault(ctx *chatContext) {
 	msg := strings.Join(tokens, " ")
 
 	session.addMessage(ai.ChatMessageRoleUser, msg, e.Source.Name)
-	if reply, err := getChatCompletion(session.History); err != nil {
+	if reply, err := getChatCompletion(ctx, session.History); err != nil {
 		ctx.Reply(err.Error())
 	} else {
 		session.addMessage(ai.ChatMessageRoleUser, *reply, e.Source.Name)
