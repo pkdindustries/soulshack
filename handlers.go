@@ -7,14 +7,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lrstanley/girc"
 	ai "github.com/sashabaranov/go-openai"
 	vip "github.com/spf13/viper"
 )
 
 func sendGreeting(ctx *chatContext) {
 
-	_, c, e, session, _ := getFromContext(ctx)
+	_, _, _, session, _ := getFromContext(ctx)
 
 	log.Println("sending greeting...")
 
@@ -24,26 +23,20 @@ func sendGreeting(ctx *chatContext) {
 	reply, err := getChatCompletion(session.History)
 
 	if err != nil {
-		sendMessage(c, e, err.Error())
+		sendMessage(ctx, err.Error())
 		return
 	}
 
-	sendMessage(ctx.Client, ctx.Event, *reply)
-
+	sendMessage(ctx, *reply)
 	session.addMessage(ai.ChatMessageRoleAssistant, *reply, "")
 
 }
 
-func sendMessage(c *girc.Client, e *girc.Event, message string) {
-	log.Printf("params [%s] name: [%s] msg: %s", e, e.Source.Name, message)
-	sendMessageChunks(c, e, &message)
-}
-
-func sendMessageChunks(c *girc.Client, e *girc.Event, message *string) {
-	chunks := splitResponse(*message, 400)
-	for _, msg := range chunks {
-		time.Sleep(500 * time.Millisecond)
-		c.Cmd.Reply(*e, msg)
+func sendMessage(ctx *chatContext, message string) {
+	log.Printf("params [%s] name: [%s] msg: %s", ctx.Event, ctx.Event.Source.Name, message)
+	for _, msg := range splitResponse(message, 400) {
+		//time.Sleep(500 * time.Millisecond)
+		ctx.Reply(msg)
 	}
 }
 
@@ -53,24 +46,24 @@ func handleSet(ctx *chatContext) {
 
 	_, c, e, session, tokens := getFromContext(ctx)
 	if !isAdmin(e.Source.Name) {
-		c.Cmd.Reply(*e, "You don't have permission to perform this action.")
+		ctx.Reply("You don't have permission to perform this action.")
 		return
 	}
 
 	if len(tokens) < 3 {
-		c.Cmd.Reply(*e, fmt.Sprintf("Usage: /set %s <value>", keysAsString(configParams)))
+		ctx.Reply(fmt.Sprintf("Usage: /set %s <value>", keysAsString(configParams)))
 		return
 	}
 
 	param, v := tokens[1], tokens[2:]
 	value := strings.Join(v, " ")
 	if _, ok := configParams[param]; !ok {
-		c.Cmd.Reply(*e, fmt.Sprintf("Unknown parameter. Supported parameters: %v", keysAsString(configParams)))
+		ctx.Reply(fmt.Sprintf("Unknown parameter. Supported parameters: %v", keysAsString(configParams)))
 		return
 	}
 
 	vip.Set(param, value)
-	c.Cmd.Reply(*e, fmt.Sprintf("%s set to: %s", param, vip.GetString(param)))
+	ctx.Reply(fmt.Sprintf("%s set to: %s", param, vip.GetString(param)))
 
 	if param == "nick" {
 		c.Cmd.Nick(value)
@@ -81,32 +74,32 @@ func handleSet(ctx *chatContext) {
 
 func handleGet(ctx *chatContext) {
 
-	_, c, e, _, tokens := getFromContext(ctx)
+	_, _, _, _, tokens := getFromContext(ctx)
 	if len(tokens) < 2 {
-		c.Cmd.Reply(*e, fmt.Sprintf("Usage: /get %s", keysAsString(configParams)))
+		ctx.Reply(fmt.Sprintf("Usage: /get %s", keysAsString(configParams)))
 		return
 	}
 
 	param := tokens[1]
 	if _, ok := configParams[param]; !ok {
-		c.Cmd.Reply(*e, fmt.Sprintf("Unknown parameter. Supported parameters: %v", keysAsString(configParams)))
+		ctx.Reply(fmt.Sprintf("Unknown parameter. Supported parameters: %v", keysAsString(configParams)))
 		return
 	}
 
 	value := vip.GetString(param)
-	c.Cmd.Reply(*e, fmt.Sprintf("%s: %s", param, value))
+	ctx.Reply(fmt.Sprintf("%s: %s", param, value))
 }
 
 func handleSave(ctx *chatContext) {
 
-	_, c, e, _, tokens := getFromContext(ctx)
+	_, _, e, _, tokens := getFromContext(ctx)
 	if !isAdmin(e.Source.Name) {
-		c.Cmd.Reply(*e, "You don't have permission to perform this action.")
+		ctx.Reply("You don't have permission to perform this action.")
 		return
 	}
 
 	if len(tokens) < 2 {
-		c.Cmd.Reply(*e, "Usage: /save <name>")
+		ctx.Reply("Usage: /save <name>")
 		return
 	}
 
@@ -123,30 +116,30 @@ func handleSave(ctx *chatContext) {
 	v.Set("answer", vip.GetString("answer"))
 
 	if err := v.WriteConfigAs(vip.GetString("directory") + "/" + filename + ".yml"); err != nil {
-		c.Cmd.Reply(*e, fmt.Sprintf("Error saving configuration: %s", err.Error()))
+		ctx.Reply(fmt.Sprintf("Error saving configuration: %s", err.Error()))
 		return
 	}
 
-	c.Cmd.Reply(*e, fmt.Sprintf("Configuration saved to: %s", filename))
+	ctx.Reply(fmt.Sprintf("Configuration saved to: %s", filename))
 }
 
 func handleBecome(ctx *chatContext) {
 
 	_, c, e, _, tokens := getFromContext(ctx)
 	if !isAdmin(e.Source.Name) {
-		c.Cmd.Reply(*e, "You don't have permission to perform this action.")
+		ctx.Reply("You don't have permission to perform this action.")
 		return
 	}
 
 	if len(tokens) < 2 {
-		c.Cmd.Reply(*e, "Usage: /become <personality>")
+		ctx.Reply("Usage: /become <personality>")
 		return
 	}
 
 	personality := tokens[1]
 	if err := loadPersonality(personality); err != nil {
 		log.Println("Error loading personality:", err)
-		c.Cmd.Reply(*e, fmt.Sprintf("Error loading personality: %s", err.Error()))
+		ctx.Reply(fmt.Sprintf("Error loading personality: %s", err.Error()))
 		return
 	}
 
@@ -158,18 +151,16 @@ func handleBecome(ctx *chatContext) {
 }
 
 func handleList(ctx *chatContext) {
-
-	_, c, e, _, _ := getFromContext(ctx)
 	personalities := listPersonalities()
-	c.Cmd.Reply(*e, fmt.Sprintf("Available personalities: %s", strings.Join(personalities, ", ")))
+	ctx.Reply(fmt.Sprintf("Available personalities: %s", strings.Join(personalities, ", ")))
 }
 
 func handleLeave(ctx *chatContext) {
 
-	_, c, e, _, _ := getFromContext(ctx)
+	_, _, e, _, _ := getFromContext(ctx)
 
 	if !isAdmin(e.Source.Name) {
-		c.Cmd.Reply(*e, "You don't have permission to perform this action.")
+		ctx.Reply("You don't have permission to perform this action.")
 		return
 	}
 
@@ -191,17 +182,36 @@ func handleLeave(ctx *chatContext) {
 
 func handleDefault(ctx *chatContext) {
 
-	_, c, e, session, tokens := getFromContext(ctx)
+	_, _, e, session, tokens := getFromContext(ctx)
 
 	msg := strings.Join(tokens, " ")
 
 	session.addMessage(ai.ChatMessageRoleUser, msg, e.Source.Name)
 	if reply, err := getChatCompletion(session.History); err != nil {
-		c.Cmd.Reply(*e, err.Error())
+		ctx.Reply(err.Error())
 	} else {
-
 		session.addMessage(ai.ChatMessageRoleUser, *reply, e.Source.Name)
-
-		sendMessage(c, e, *reply)
+		sendMessage(ctx, *reply)
 	}
+}
+
+func handleSay(ctx *chatContext) {
+
+	_, _, e, _, _ := getFromContext(ctx)
+
+	if !isAdmin(e.Source.Name) {
+		ctx.Reply("You don't have permission to perform this action.")
+		return
+	}
+
+	// shenanigans
+	// get the channel session and play over there
+	ctx.Session = getSession(vip.GetString("channel"))
+	ctx.Event.Params[0] = vip.GetString("channel")
+	e.Source.Name = vip.GetString("nick")
+	handleDefault(ctx)
+	// remove second to last entry from history, which is our /say msg
+	// now it looks like we never said it and the bot just decided to say it
+	ctx.Session.History = ctx.Session.History[:len(ctx.Session.History)-2]
+
 }
