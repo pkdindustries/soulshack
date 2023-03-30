@@ -21,7 +21,7 @@ type chatContext struct {
 	Addressed bool
 	Command   string
 	Session   *chatSession
-	Reply     func(event girc.Event, message string)
+	Reply     func(message string)
 }
 
 func createChatContext(c *girc.Client, e *girc.Event) (*chatContext, context.CancelFunc) {
@@ -46,7 +46,7 @@ func createChatContext(c *girc.Client, e *girc.Event) (*chatContext, context.Can
 		}
 	}
 
-	ctx.IsValid = ctx.Addressed || ctx.Private && len(ctx.Tokens) > 0
+	ctx.IsValid = (ctx.Addressed || ctx.Private) && len(ctx.Tokens) > 0
 	ctx.Command = strings.ToLower(ctx.Tokens[0])
 
 	key := e.Params[0]
@@ -55,8 +55,8 @@ func createChatContext(c *girc.Client, e *girc.Event) (*chatContext, context.Can
 	}
 	ctx.Session = getSession(key)
 
-	ctx.Reply = func(event girc.Event, message string) {
-		c.Cmd.Reply(event, message)
+	ctx.Reply = func(message string) {
+		c.Cmd.Reply(*ctx.Event, message)
 	}
 
 	return ctx, cancel
@@ -77,7 +77,6 @@ var sessions = make(map[string]*chatSession)
 func (s *chatSession) addMessage(role, message, name string) *chatSession {
 	s.History = append(s.History, ai.ChatCompletionMessage{Role: role, Content: message, Name: name})
 	s.Last = time.Now()
-	printSessions()
 	return s
 
 }
@@ -87,6 +86,7 @@ func (s *chatSession) Clear() {
 }
 
 func (s *chatSession) Expire() {
+	printSessions()
 	if time.Since(s.Last) > vip.GetDuration("session") {
 		s.Clear()
 	}
@@ -108,6 +108,6 @@ func getSession(id string) *chatSession {
 // pretty print sessions
 func printSessions() {
 	for id, session := range sessions {
-		log.Printf("session %s: %d", id, len(session.History))
+		log.Printf("session '%s':  messages %d, characters %d, idle: %s", id, len(session.History), sumMessageLengths(session.History), time.Since(session.Last))
 	}
 }
