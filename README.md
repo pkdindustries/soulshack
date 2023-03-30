@@ -25,9 +25,22 @@ SoulShack is an AI-powered IRC chat bot that utilizes the OpenAI API to generate
 - Supports SSL connections for secure communication
 - Can adopt various personalities by changing configuration files
 
+
+## Building
+
+```bash
+go build .
+```
+
+```
+docker build . -t soulshack:dev
+```
+
 ## Usage
 
+```bash
 soulshack --server server --port port --channel '#channelname' --become personality --ssl 
+```
 
 ## Configuration
 
