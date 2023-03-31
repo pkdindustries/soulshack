@@ -46,7 +46,6 @@ soulshack --server server --port port --channel '#channelname' --become personal
 soulshack -f --prompt 'you are the unix program /bin/echo'
 ```
 
-```bash
 ## Configuration
 
 SoulShack can be configured using command line flags, environment variables, or personality configuration files. It uses Viper to manage configuration settings.
