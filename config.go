@@ -1,7 +1,9 @@
 package main
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"log"
 	"os"
 	"path/filepath"
@@ -30,29 +32,15 @@ func init() {
 	root.PersistentFlags().StringP("server", "s", "localhost", "IRC server address")
 	root.PersistentFlags().StringP("answer", "a", "", "prompt for answering a question")
 	root.PersistentFlags().StringSliceP("admins", "A", []string{}, "Comma-separated list of allowed users to administrate the bot (e.g., user1,user2,user3)")
-	root.PersistentFlags().DurationP("session", "S", time.Minute*3, "dureation for the chat session; message context will be cleared after this time")
-	root.PersistentFlags().DurationP("timeout", "t", time.Second*15, "timeout for each completion request to openai")
+	root.PersistentFlags().DurationP("session", "S", time.Minute*3, "duration for the chat session; message context will be cleared after this time")
+	root.PersistentFlags().IntP("history", "H", 15, "maximum number of lines of context to keep per session")
+	root.PersistentFlags().DurationP("timeout", "t", time.Second*30, "timeout for each completion request to openai")
 	root.PersistentFlags().BoolP("list", "l", false, "list configured personalities")
 	root.PersistentFlags().StringP("directory", "d", "./personalities", "personalities configuration directory")
+	root.PersistentFlags().BoolP("verbose", "v", false, "enable verbose logging of sessions and configuration")
+	root.PersistentFlags().BoolP("filter", "f", false, "enable filter mode with this filter")
 
-	vip.BindPFlag("become", root.PersistentFlags().Lookup("become"))
-	vip.BindPFlag("channel", root.PersistentFlags().Lookup("channel"))
-	vip.BindPFlag("goodbye", root.PersistentFlags().Lookup("goodbye"))
-	vip.BindPFlag("greeting", root.PersistentFlags().Lookup("greeting"))
-	vip.BindPFlag("maxtokens", root.PersistentFlags().Lookup("maxtokens"))
-	vip.BindPFlag("model", root.PersistentFlags().Lookup("model"))
-	vip.BindPFlag("nick", root.PersistentFlags().Lookup("nick"))
-	vip.BindPFlag("openaikey", root.PersistentFlags().Lookup("openaikey"))
-	vip.BindPFlag("port", root.PersistentFlags().Lookup("port"))
-	vip.BindPFlag("prompt", root.PersistentFlags().Lookup("prompt"))
-	vip.BindPFlag("server", root.PersistentFlags().Lookup("server"))
-	vip.BindPFlag("ssl", root.PersistentFlags().Lookup("ssl"))
-	vip.BindPFlag("answer", root.PersistentFlags().Lookup("answer"))
-	vip.BindPFlag("admins", root.PersistentFlags().Lookup("admins"))
-	vip.BindPFlag("session", root.PersistentFlags().Lookup("session"))
-	vip.BindPFlag("timeout", root.PersistentFlags().Lookup("timeout"))
-	vip.BindPFlag("list", root.PersistentFlags().Lookup("list"))
-	vip.BindPFlag("directory", root.PersistentFlags().Lookup("directory"))
+	vip.BindPFlags(root.PersistentFlags())
 
 	vip.SetEnvPrefix("SOULSHACK")
 	vip.AutomaticEnv()
@@ -60,8 +48,13 @@ func init() {
 
 func initConfig() {
 
-	fmt.Println(getBanner())
-	log.Printf("configuration directory %s", vip.GetString("directory"))
+	if !vip.GetBool("filter") {
+		fmt.Println(getBanner())
+	}
+
+	if _, err := os.Stat(vip.GetString("directory")); errors.Is(err, fs.ErrNotExist) {
+		log.Printf("! configuration directory %s does not exist", vip.GetString("directory"))
+	}
 
 	if vip.GetBool("list") {
 		personalities := listPersonalities()
@@ -75,13 +68,19 @@ func initConfig() {
 	vip.SetConfigName(vip.GetString("become"))
 
 	if err := vip.ReadInConfig(); err != nil {
+		log.Println(err)
 		log.Fatalln("! no personality found:", vip.GetString("become"))
 	}
 	log.Println("using personality file:", vip.ConfigFileUsed())
 
+	if vip.GetBool("filter") {
+		filter := "repeat the following input: "
+		vip.Set("prompt", filter)
+		log.Printf("filter mode enabled with prompt: '%s'", filter)
+		return
+	}
 }
 func verifyConfig() error {
-	log.Print("verifying configuration...", vip.AllKeys())
 	for _, varName := range vip.AllKeys() {
 		if varName == "answer" || varName == "admins" {
 			continue
@@ -90,13 +89,14 @@ func verifyConfig() error {
 		if value == "" {
 			return fmt.Errorf("! %s unset. use --%s flag, personality config, or SOULSHACK_%s env", varName, varName, strings.ToUpper(varName))
 		}
-		if varName == "openaikey" {
-			value = strings.Repeat("*", len(value))
-		}
 
-		log.Printf("\t%s: '%s'", varName, value)
+		if vip.GetBool("verbose") {
+			if varName == "openaikey" {
+				value = strings.Repeat("*", len(value))
+			}
+			log.Printf("\t%s: '%s'", varName, value)
+		}
 	}
-	log.Println("configuration ok")
 	return nil
 }
 
@@ -115,7 +115,7 @@ func listPersonalities() []string {
 }
 
 func loadPersonality(p string) error {
-	log.Println("loading personality", p)
+	log.Println("loading personality:", p)
 	newvip := vip.New()
 	newvip.SetConfigFile(vip.GetString("directory") + "/" + p + ".yml")
 
@@ -135,6 +135,5 @@ func loadPersonality(p string) error {
 		return err
 	}
 
-	log.Println("personality loaded:", vip.GetString("become"))
 	return nil
 }
