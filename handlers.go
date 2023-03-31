@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bufio"
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -13,14 +15,11 @@ import (
 
 func sendGreeting(ctx *chatContext) {
 
-	_, _, _, session, _ := getFromContext(ctx)
-
 	log.Println("sending greeting...")
 
-	session.Clear()
-	session.addMessage(ai.ChatMessageRoleAssistant, vip.GetString("greeting"), "")
+	ctx.Session.addMessage(ai.ChatMessageRoleUser, vip.GetString("greeting"))
 
-	reply, err := getChatCompletion(ctx, session.History)
+	reply, err := getChatCompletion(ctx, ctx.Session.History)
 
 	if err != nil {
 		sendMessage(ctx, err.Error())
@@ -28,12 +27,12 @@ func sendGreeting(ctx *chatContext) {
 	}
 
 	sendMessage(ctx, *reply)
-	session.addMessage(ai.ChatMessageRoleAssistant, *reply, "")
+	ctx.Session.addMessage(ai.ChatMessageRoleAssistant, *reply)
 
 }
 
 func sendMessage(ctx *chatContext, message string) {
-	log.Printf("params [%s] name: [%s] msg: %s", ctx.Event, ctx.Event.Source.Name, message)
+	log.Println("<<", vip.GetString("become"), message)
 	for _, msg := range splitResponse(message, 400) {
 		//time.Sleep(500 * time.Millisecond)
 		ctx.Reply(msg)
@@ -44,8 +43,8 @@ var configParams = map[string]string{"prompt": "", "model": "", "nick": "", "gre
 
 func handleSet(ctx *chatContext) {
 
-	_, c, e, session, tokens := getFromContext(ctx)
-	if !isAdmin(e.Source.Name) {
+	tokens := ctx.Args
+	if !isAdmin(ctx.Event.Source.Name) {
 		ctx.Reply("You don't have permission to perform this action.")
 		return
 	}
@@ -66,15 +65,15 @@ func handleSet(ctx *chatContext) {
 	ctx.Reply(fmt.Sprintf("%s set to: %s", param, vip.GetString(param)))
 
 	if param == "nick" {
-		c.Cmd.Nick(value)
+		ctx.Client.Cmd.Nick(value)
 	}
 
-	session.Clear()
+	ctx.Session.Reset()
 }
 
 func handleGet(ctx *chatContext) {
 
-	_, _, _, _, tokens := getFromContext(ctx)
+	tokens := ctx.Args
 	if len(tokens) < 2 {
 		ctx.Reply(fmt.Sprintf("Usage: /get %s", keysAsString(configParams)))
 		return
@@ -92,8 +91,8 @@ func handleGet(ctx *chatContext) {
 
 func handleSave(ctx *chatContext) {
 
-	_, _, e, _, tokens := getFromContext(ctx)
-	if !isAdmin(e.Source.Name) {
+	tokens := ctx.Args
+	if !isAdmin(ctx.Event.Source.Name) {
 		ctx.Reply("You don't have permission to perform this action.")
 		return
 	}
@@ -125,12 +124,12 @@ func handleSave(ctx *chatContext) {
 
 func handleBecome(ctx *chatContext) {
 
-	_, c, e, _, tokens := getFromContext(ctx)
-	if !isAdmin(e.Source.Name) {
+	if !isAdmin(ctx.Event.Source.Name) {
 		ctx.Reply("You don't have permission to perform this action.")
 		return
 	}
 
+	tokens := ctx.Args
 	if len(tokens) < 2 {
 		ctx.Reply("Usage: /become <personality>")
 		return
@@ -142,10 +141,10 @@ func handleBecome(ctx *chatContext) {
 		ctx.Reply(fmt.Sprintf("Error loading personality: %s", err.Error()))
 		return
 	}
-
+	ctx.Session.Reset()
 	log.Printf("changing nick to %s as personality %s", vip.GetString("nick"), personality)
 
-	c.Cmd.Nick(vip.GetString("nick"))
+	ctx.Client.Cmd.Nick(vip.GetString("nick"))
 	time.Sleep(2 * time.Second)
 	sendGreeting(ctx)
 }
@@ -157,9 +156,7 @@ func handleList(ctx *chatContext) {
 
 func handleLeave(ctx *chatContext) {
 
-	_, _, e, _, _ := getFromContext(ctx)
-
-	if !isAdmin(e.Source.Name) {
+	if !isAdmin(ctx.Event.Source.Name) {
 		ctx.Reply("You don't have permission to perform this action.")
 		return
 	}
@@ -182,36 +179,95 @@ func handleLeave(ctx *chatContext) {
 
 func handleDefault(ctx *chatContext) {
 
-	_, _, e, session, tokens := getFromContext(ctx)
-
+	tokens := ctx.Args
 	msg := strings.Join(tokens, " ")
 
-	session.addMessage(ai.ChatMessageRoleUser, msg, e.Source.Name)
-	if reply, err := getChatCompletion(ctx, session.History); err != nil {
+	ctx.Session.addMessage(ai.ChatMessageRoleUser, msg)
+	if reply, err := getChatCompletion(ctx, ctx.Session.History); err != nil {
 		ctx.Reply(err.Error())
 	} else {
-		session.addMessage(ai.ChatMessageRoleUser, *reply, e.Source.Name)
+		ctx.Session.addMessage(ai.ChatMessageRoleAssistant, *reply)
 		sendMessage(ctx, *reply)
 	}
 }
 
 func handleSay(ctx *chatContext) {
 
-	_, _, e, _, _ := getFromContext(ctx)
-
-	if !isAdmin(e.Source.Name) {
+	if !isAdmin(ctx.Event.Source.Name) {
 		ctx.Reply("You don't have permission to perform this action.")
 		return
 	}
 
-	// shenanigans
-	// get the channel session and play over there
-	ctx.Session = getSession(vip.GetString("channel"))
-	ctx.Event.Params[0] = vip.GetString("channel")
-	e.Source.Name = vip.GetString("nick")
-	handleDefault(ctx)
-	// remove second to last entry from history, which is our /say msg
-	// now it looks like we never said it and the bot just decided to say it
-	ctx.Session.History = ctx.Session.History[:len(ctx.Session.History)-2]
+	if len(ctx.Args) < 2 {
+		ctx.Reply("Usage: /say [/as <personality>] <message>")
+		ctx.Reply("Example: /msg chatbot /say /as marvin talk about life")
+		return
+	}
 
+	// if second token is '/as' then third token is a personality
+	// and we should play as that personality
+	as := vip.GetString("become")
+	og := as
+	if len(ctx.Args) > 2 && ctx.Args[1] == "/as" {
+		as = ctx.Args[2]
+		ctx.Args = ctx.Args[2:]
+	}
+
+	if as != og {
+		if err := loadPersonality(as); err != nil {
+			log.Println("Error loading personality:", err)
+			ctx.Reply(fmt.Sprintf("Error loading personality: %s", err.Error()))
+			return
+		}
+	}
+
+	// shenanigans
+	ctx.Session = sessions.Get("puppet")
+	ctx.Session.Reset()
+	ctx.Event.Params[0] = vip.GetString("channel")
+	ctx.Event.Source.Name = vip.GetString("nick")
+	ctx.Args = ctx.Args[1:]
+
+	handleDefault(ctx)
+	if as != og {
+		if err := loadPersonality(og); err != nil {
+			log.Println("Error loading personality:", err)
+			ctx.Reply(fmt.Sprintf("Error loading personality: %s", err.Error()))
+			return
+		}
+	}
+
+	// add last message from this session to channel session
+	// this is the bot's reply to our /say
+	if len(ctx.Session.History) == 0 {
+		return
+	}
+	chsession := sessions.Get(vip.GetString("channel"))
+	chsession.History = append(chsession.History, ctx.Session.History[len(ctx.Session.History)-1])
+	ctx.Session.Reset()
+}
+
+func handleFilter() {
+	scanner := bufio.NewScanner(os.Stdin)
+
+	for scanner.Scan() {
+		input := scanner.Text()
+		msgs := []ai.ChatCompletionMessage{}
+		msgs = append(msgs, ai.ChatCompletionMessage{
+			Role:    ai.ChatMessageRoleSystem,
+			Content: vip.GetString("prompt"),
+		})
+		msgs = append(msgs, ai.ChatCompletionMessage{
+			Role:    ai.ChatMessageRoleUser,
+			Content: input,
+		})
+		response, err := getChatCompletion(context.Background(), msgs)
+		if err != nil {
+			log.Fatalf("Error generating response: %v", err)
+		}
+		fmt.Println(*response)
+	}
+	if err := scanner.Err(); err != nil {
+		log.Fatalf("Error reading from stdin: %v", err)
+	}
 }

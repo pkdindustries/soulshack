@@ -11,6 +11,8 @@ import (
 	"crypto/tls"
 	"fmt"
 	"log"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/common-nighthawk/go-figure"
@@ -43,11 +45,16 @@ var root = &cobra.Command{
 
 func run(r *cobra.Command, _ []string) {
 
+	aiClient = ai.NewClient(vip.GetString("openaikey"))
+
+	if vip.GetBool("filter") {
+		handleFilter()
+		os.Exit(0)
+	}
+
 	if err := verifyConfig(); err != nil {
 		log.Fatal(err)
 	}
-
-	aiClient = ai.NewClient(vip.GetString("openaikey"))
 
 	irc := girc.New(girc.Config{
 		Server:    vip.GetString("server"),
@@ -76,9 +83,9 @@ func run(r *cobra.Command, _ []string) {
 		ctx, cancel := createChatContext(c, &e)
 		defer cancel()
 
-		if ctx.IsValid {
-			log.Println("<", e)
-			switch ctx.Command {
+		if ctx.isValid() {
+			log.Println(">>", strings.Join(e.Params[1:], " "))
+			switch ctx.getCommand() {
 			case "/say":
 				handleSay(ctx)
 			case "/set":
@@ -96,7 +103,7 @@ func run(r *cobra.Command, _ []string) {
 			case "/help":
 				fallthrough
 			case "/?":
-				ctx.Reply("Supported commands: /set, /get, /list, /become, /leave, /help, /version")
+				ctx.Reply("Supported commands: /set, /say, /get, /list, /become, /leave, /help, /version")
 			case "/version":
 				ctx.Reply(r.Version)
 			default:
@@ -106,7 +113,7 @@ func run(r *cobra.Command, _ []string) {
 	})
 
 	for {
-		log.Println("connecting to irc server", vip.GetString("server"), "on port", vip.GetInt("port"), "using ssl:", vip.GetBool("ssl"))
+		log.Println("connecting to server:", vip.GetString("server"), "port:", vip.GetInt("port"), "ssl:", vip.GetBool("ssl"))
 		if err := irc.Connect(); err != nil {
 			log.Println(err)
 			log.Println("reconnecting in 5 seconds...")

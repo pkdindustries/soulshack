@@ -1,7 +1,10 @@
 package main
 
 import (
+	"fmt"
+	"log"
 	"strings"
+	"time"
 
 	ai "github.com/sashabaranov/go-openai"
 	vip "github.com/spf13/viper"
@@ -58,4 +61,25 @@ func keysAsString(m map[string]string) string {
 		keys = append(keys, k)
 	}
 	return strings.Join(keys, ", ")
+}
+
+// show string of all msg contents
+func sessionDump(msgs []ai.ChatCompletionMessage) {
+	for _, msg := range msgs {
+		s := ""
+		if msg.Role == ai.ChatMessageRoleAssistant {
+			s += "< "
+		} else {
+			s += "> "
+		}
+		s += fmt.Sprint(msg.Role) + ": " + msg.Content
+		log.Println(s)
+	}
+}
+
+// pretty print sessions
+func sessionStats() {
+	for id, session := range sessions.sessionMap {
+		log.Printf("session '%s':  messages %d, characters %d, idle: %s", id, len(session.History), sumMessageLengths(session.History), time.Since(session.Last))
+	}
 }

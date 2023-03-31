@@ -42,6 +42,11 @@ docker build . -t soulshack:dev
 soulshack --server server --port port --channel '#channelname' --become personality --ssl 
 ```
 
+```bash
+soulshack -f --prompt 'you are the unix program /bin/echo'
+```
+
+```bash
 ## Configuration
 
 SoulShack can be configured using command line flags, environment variables, or personality configuration files. It uses Viper to manage configuration settings.
@@ -61,6 +66,7 @@ SoulShack can be configured using command line flags, environment variables, or 
 - `--goodbye`:  response prompt to the channel on part (default: "goodbye.")
 - `--prompt`: The initial character prompt for the AI, initilizes the personality
 - `--answer`: appended to prompt for conditioning the answer to a question
+- `--filter`: filter mode, read from stdin and write responses to stdout
 
 ### Environment Variables
 
@@ -98,5 +104,7 @@ soulshack --server localhost --channel '#marvinshouse' --become marvin
 - `/list`: Show available personalities
 - `/leave`: Make the bot leave the channel and exit
 - `/help`: Display help for available commands
+- `/say [/as <personality>]`: privately message the bot and have it reply in public
+
 
 ## named as tribute to my old friend dayv, sp0t, who i think of often
