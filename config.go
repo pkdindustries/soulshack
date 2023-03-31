@@ -74,9 +74,11 @@ func initConfig() {
 	log.Println("using personality file:", vip.ConfigFileUsed())
 
 	if vip.GetBool("filter") {
-		filter := "repeat the following input: "
-		vip.Set("prompt", filter)
-		log.Printf("filter mode enabled with prompt: '%s'", filter)
+		if vip.GetString("prompt") == "" {
+			filter := "repeat the following input: "
+			vip.Set("prompt", filter)
+		}
+		log.Printf("filtering with prompt: '%s'", vip.GetString("prompt"))
 		return
 	}
 }
