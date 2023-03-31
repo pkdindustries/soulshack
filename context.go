@@ -13,31 +13,27 @@ import (
 
 type chatContext struct {
 	context.Context
-	Client    *girc.Client
-	Event     *girc.Event
-	Tokens    []string
-	IsValid   bool
-	Private   bool
-	Addressed bool
-	Command   string
-	Session   *chatSession
-	Reply     func(message string)
+	Client  *girc.Client
+	Event   *girc.Event
+	Args    []string
+	Session *chatSession
 }
 
+func (s *chatContext) isAddressed() bool {
+	return strings.HasPrefix(s.Event.Last(), s.Client.GetNick())
+}
 func createChatContext(c *girc.Client, e *girc.Event) (*chatContext, context.CancelFunc) {
 	timedctx, cancel := context.WithTimeout(context.Background(), vip.GetDuration("timeout"))
 
 	ctx := &chatContext{
-		Context:   timedctx,
-		Client:    c,
-		Event:     e,
-		Addressed: strings.HasPrefix(e.Last(), c.GetNick()),
-		Private:   !strings.HasPrefix(e.Params[0], "#"),
-		Tokens:    strings.Fields(e.Last()),
+		Context: timedctx,
+		Client:  c,
+		Event:   e,
+		Args:    strings.Fields(e.Last()),
 	}
 
-	if ctx.Addressed {
-		ctx.Tokens = ctx.Tokens[1:]
+	if ctx.isAddressed() {
+		ctx.Args = ctx.Args[1:]
 	}
 
 	if e.Source == nil {
@@ -46,24 +42,37 @@ func createChatContext(c *girc.Client, e *girc.Event) (*chatContext, context.Can
 		}
 	}
 
-	ctx.IsValid = (ctx.Addressed || ctx.Private) && len(ctx.Tokens) > 0
-	ctx.Command = strings.ToLower(ctx.Tokens[0])
-
 	key := e.Params[0]
 	if !girc.IsValidChannel(key) {
 		key = e.Source.Name
 	}
-	ctx.Session = getSession(key)
-
-	ctx.Reply = func(message string) {
-		c.Cmd.Reply(*ctx.Event, message)
-	}
+	ctx.Session = sessions.Get(key)
 
 	return ctx, cancel
 }
 
-func getFromContext(ctx *chatContext) (bool, *girc.Client, *girc.Event, *chatSession, []string) {
-	return ctx.IsValid, ctx.Client, ctx.Event, ctx.Session, ctx.Tokens
+func (c *chatContext) Reply(message string) *chatContext {
+	c.Client.Cmd.Reply(*c.Event, message)
+	return c
+}
+func (c *chatContext) isValid() bool {
+	return (c.isAddressed() || c.isPrivate()) && len(c.Args) > 0
+}
+
+func (c *chatContext) isPrivate() bool {
+	return !strings.HasPrefix(c.Event.Params[0], "#")
+}
+
+func (c *chatContext) getCommand() string {
+	return strings.ToLower(c.Args[0])
+}
+
+var sessions = Chats{
+	sessionMap: make(map[string]*chatSession),
+}
+
+type Chats struct {
+	sessionMap map[string]*chatSession
 }
 
 type chatSession struct {
@@ -72,42 +81,50 @@ type chatSession struct {
 	Last    time.Time
 }
 
-var sessions = make(map[string]*chatSession)
-
-func (s *chatSession) addMessage(role, message, name string) *chatSession {
-	s.History = append(s.History, ai.ChatCompletionMessage{Role: role, Content: message, Name: name})
+func (s *chatSession) addMessage(role, message string) *chatSession {
+	sessionStats()
+	s.History = append(s.History, ai.ChatCompletionMessage{Role: role, Content: message})
 	s.Last = time.Now()
 	return s
 
 }
 
-func (s *chatSession) Clear() {
-	delete(sessions, s.Name)
+func (s *chatSession) Reset() {
+	s.History = []ai.ChatCompletionMessage{
+		{Role: ai.ChatMessageRoleSystem, Content: vip.GetString("prompt")},
+		{Role: ai.ChatMessageRoleSystem, Content: vip.GetString("answer")},
+	}
+	s.Last = time.Now()
 }
 
-func (s *chatSession) Expire() {
-	printSessions()
-	if time.Since(s.Last) > vip.GetDuration("session") {
-		s.Clear()
+func (chats *Chats) Reap() {
+	now := time.Now()
+	for id, s := range chats.sessionMap {
+		if now.Sub(s.Last) > vip.GetDuration("session") {
+			log.Printf("expired session: %s", id)
+			delete(chats.sessionMap, id)
+		} else if len(s.History) > vip.GetInt("history") {
+			log.Printf("trimmed session: %s", id)
+			s.History = append(s.History[:1], s.History[len(s.History)-vip.GetInt("history"):]...)
+		}
 	}
 }
 
-func getSession(id string) *chatSession {
-	if session, ok := sessions[id]; ok {
-		session.Expire()
+func (chats *Chats) Get(id string) *chatSession {
+	chats.Reap()
+	if session, ok := chats.sessionMap[id]; ok {
 		return session
 	}
 
 	log.Println("creating new session for", id)
-	newSession := &chatSession{}
-	newSession.addMessage(ai.ChatMessageRoleAssistant, vip.GetString("prompt"), "")
-	sessions[id] = newSession
-	return newSession
-}
-
-// pretty print sessions
-func printSessions() {
-	for id, session := range sessions {
-		log.Printf("session '%s':  messages %d, characters %d, idle: %s", id, len(session.History), sumMessageLengths(session.History), time.Since(session.Last))
+	session := &chatSession{
+		Name: id,
+		History: []ai.ChatCompletionMessage{
+			{Role: ai.ChatMessageRoleSystem, Content: vip.GetString("prompt")},
+			{Role: ai.ChatMessageRoleSystem, Content: vip.GetString("answer")},
+		},
+		Last: time.Now(),
 	}
+	chats.sessionMap[id] = session
+	return session
 }
