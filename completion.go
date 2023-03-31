@@ -12,7 +12,7 @@ import (
 
 var aiClient *ai.Client
 
-func getChatCompletion(chatctx *chatContext, msgs []ai.ChatCompletionMessage) (*string, error) {
+func getChatCompletion(chatctx context.Context, msgs []ai.ChatCompletionMessage) (*string, error) {
 
 	log.Printf("completing: messages %d, characters %d, maxtokens %d, model %s",
 		len(msgs),
@@ -20,6 +20,10 @@ func getChatCompletion(chatctx *chatContext, msgs []ai.ChatCompletionMessage) (*
 		vip.GetInt("maxtokens"),
 		vip.GetString("model"),
 	)
+
+	if vip.GetBool("verbose") {
+		sessionDump(msgs)
+	}
 
 	now := time.Now()
 	ctx, cancel := context.WithTimeout(chatctx, vip.GetDuration("timeout"))
