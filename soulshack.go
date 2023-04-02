@@ -103,7 +103,7 @@ func run(r *cobra.Command, _ []string) {
 			case "/help":
 				fallthrough
 			case "/?":
-				ctx.Reply("Supported commands: /set, /say, /get, /list, /become, /leave, /help, /version")
+				ctx.Reply("Supported commands: /set, /say [/as], /get, /list, /become, /leave, /help, /version")
 			case "/version":
 				ctx.Reply(r.Version)
 			default:

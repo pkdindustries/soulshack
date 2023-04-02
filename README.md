@@ -43,7 +43,9 @@ soulshack --server server --port port --channel '#channelname' --become personal
 ```
 
 ```bash
-soulshack -f --prompt 'you are the unix program /bin/echo'
+> echo "echo"|soulshack -f --prompt 'you are the unix program /bin/echo'
+echo
+>
 ```
 
 ## Configuration
@@ -105,5 +107,6 @@ soulshack --server localhost --channel '#marvinshouse' --become marvin
 - `/help`: Display help for available commands
 - `/say [/as <personality>]`: privately message the bot and have it reply in public
 
+[jacob, high five me](https://i.redd.it/8y2blwiyvira1.png)
 
 ## named as tribute to my old friend dayv, sp0t, who i think of often
