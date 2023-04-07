@@ -12,13 +12,12 @@ import (
 
 var aiClient *ai.Client
 
-func getChatCompletion(chatctx context.Context, msgs []ai.ChatCompletionMessage) (*string, error) {
-
+func getChatCompletion(cc *ChatContext, msgs []ai.ChatCompletionMessage) (*string, error) {
 	log.Printf("completing: messages %d, characters %d, maxtokens %d, model %s",
 		len(msgs),
 		sumMessageLengths(msgs),
-		vip.GetInt("maxtokens"),
-		vip.GetString("model"),
+		cc.Cfg.GetInt("maxtokens"),
+		cc.Cfg.GetString("model"),
 	)
 
 	if vip.GetBool("verbose") {
@@ -26,14 +25,14 @@ func getChatCompletion(chatctx context.Context, msgs []ai.ChatCompletionMessage)
 	}
 
 	now := time.Now()
-	ctx, cancel := context.WithTimeout(chatctx, vip.GetDuration("timeout"))
+	ctx, cancel := context.WithTimeout(cc, cc.Cfg.GetDuration("timeout"))
 	defer cancel()
 
 	resp, err := aiClient.CreateChatCompletion(
 		ctx,
 		ai.ChatCompletionRequest{
-			MaxTokens: vip.GetInt("maxtokens"),
-			Model:     vip.GetString("model"),
+			MaxTokens: cc.Cfg.GetInt("maxtokens"),
+			Model:     cc.Cfg.GetString("model"),
 			Messages:  msgs,
 		},
 	)

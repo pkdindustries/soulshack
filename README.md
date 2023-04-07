@@ -67,7 +67,6 @@ SoulShack can be configured using command line flags, environment variables, or 
 - `--goodbye`:  response prompt to the channel on part (default: "goodbye.")
 - `--prompt`: The initial character prompt for the AI, initilizes the personality
 - `--answer`: appended to prompt for conditioning the answer to a question
-- `--filter`: filter mode, read from stdin and write responses to stdout
 
 ### Environment Variables
 

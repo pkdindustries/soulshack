@@ -11,7 +11,6 @@ import (
 	"crypto/tls"
 	"fmt"
 	"log"
-	"os"
 	"strings"
 	"time"
 
@@ -47,12 +46,7 @@ func run(r *cobra.Command, _ []string) {
 
 	aiClient = ai.NewClient(vip.GetString("openaikey"))
 
-	if vip.GetBool("filter") {
-		handleFilter()
-		os.Exit(0)
-	}
-
-	if err := verifyConfig(); err != nil {
+	if err := verifyConfig(vip.GetViper()); err != nil {
 		log.Fatal(err)
 	}
 
@@ -67,10 +61,10 @@ func run(r *cobra.Command, _ []string) {
 	})
 
 	irc.Handlers.Add(girc.CONNECTED, func(c *girc.Client, e girc.Event) {
-		ctx, cancel := createChatContext(c, &e)
+		ctx, cancel := createChatContext(vip.GetViper(), c, &e)
 		defer cancel()
 
-		channel := vip.GetString("channel")
+		channel := ctx.Cfg.GetString("channel")
 		log.Println("joining channel:", channel)
 		c.Cmd.Join(channel)
 
@@ -80,7 +74,7 @@ func run(r *cobra.Command, _ []string) {
 
 	irc.Handlers.Add(girc.PRIVMSG, func(c *girc.Client, e girc.Event) {
 
-		ctx, cancel := createChatContext(c, &e)
+		ctx, cancel := createChatContext(vip.GetViper(), c, &e)
 		defer cancel()
 
 		if ctx.isValid() {

@@ -8,25 +8,24 @@ import (
 	vip "github.com/spf13/viper"
 )
 
-type chatContext struct {
+type ChatContext struct {
 	context.Context
+	Cfg     *vip.Viper
 	Client  *girc.Client
 	Event   *girc.Event
 	Args    []string
-	Session *chatSession
+	Session *ChatSession
 }
 
-func (s *chatContext) isAddressed() bool {
-	return strings.HasPrefix(s.Event.Last(), s.Client.GetNick())
-}
-func createChatContext(c *girc.Client, e *girc.Event) (*chatContext, context.CancelFunc) {
-	timedctx, cancel := context.WithTimeout(context.Background(), vip.GetDuration("timeout"))
+func createChatContext(v *vip.Viper, c *girc.Client, e *girc.Event) (*ChatContext, context.CancelFunc) {
+	timedctx, cancel := context.WithTimeout(context.Background(), v.GetDuration("timeout"))
 
-	ctx := &chatContext{
+	ctx := &ChatContext{
 		Context: timedctx,
 		Client:  c,
 		Event:   e,
 		Args:    strings.Fields(e.Last()),
+		Cfg:     v,
 	}
 
 	if ctx.isAddressed() {
@@ -35,7 +34,7 @@ func createChatContext(c *girc.Client, e *girc.Event) (*chatContext, context.Can
 
 	if e.Source == nil {
 		e.Source = &girc.Source{
-			Name: vip.GetString("channel"),
+			Name: ctx.Cfg.GetString("channel"),
 		}
 	}
 
@@ -44,22 +43,30 @@ func createChatContext(c *girc.Client, e *girc.Event) (*chatContext, context.Can
 		key = e.Source.Name
 	}
 	ctx.Session = sessions.Get(key)
-
 	return ctx, cancel
 }
 
-func (c *chatContext) Reply(message string) *chatContext {
+// merge in the viper config
+func (c *ChatContext) MergeConfig(v *vip.Viper) {
+	c.Cfg.MergeConfigMap(v.AllSettings())
+}
+
+func (c *ChatContext) GetConfig() *vip.Viper {
+	return c.Cfg
+}
+func (s *ChatContext) isAddressed() bool {
+	return strings.HasPrefix(s.Event.Last(), s.Client.GetNick())
+}
+func (c *ChatContext) Reply(message string) *ChatContext {
 	c.Client.Cmd.Reply(*c.Event, message)
 	return c
 }
-func (c *chatContext) isValid() bool {
+func (c *ChatContext) isValid() bool {
 	return (c.isAddressed() || c.isPrivate()) && len(c.Args) > 0
 }
-
-func (c *chatContext) isPrivate() bool {
+func (c *ChatContext) isPrivate() bool {
 	return !strings.HasPrefix(c.Event.Params[0], "#")
 }
-
-func (c *chatContext) getCommand() string {
+func (c *ChatContext) getCommand() string {
 	return strings.ToLower(c.Args[0])
 }

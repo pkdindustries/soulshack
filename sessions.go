@@ -9,30 +9,34 @@ import (
 )
 
 var sessions = Chats{
-	sessionMap: make(map[string]*chatSession),
+	sessionMap: make(map[string]*ChatSession),
 }
 
 type Chats struct {
-	sessionMap map[string]*chatSession
+	sessionMap map[string]*ChatSession
 }
 
-type chatSession struct {
+type ChatSession struct {
 	Name    string
 	History []ai.ChatCompletionMessage
 	Last    time.Time
 }
 
-func (s *chatSession) addMessage(role, message string) *chatSession {
+func (s *ChatSession) Message(ctx *ChatContext, role string, message string) *ChatSession {
 	sessionStats()
+	if len(s.History) == 0 {
+		s.History = append(s.History, ai.ChatCompletionMessage{Role: ai.ChatMessageRoleSystem, Content: ctx.Cfg.GetString("prompt")})
+		s.History = append(s.History, ai.ChatCompletionMessage{Role: ai.ChatMessageRoleSystem, Content: ctx.Cfg.GetString("greeting")})
+	}
+
 	s.History = append(s.History, ai.ChatCompletionMessage{Role: role, Content: message})
 	s.Last = time.Now()
 	return s
-
 }
 
-func (s *chatSession) Reset() {
-	s.History = []ai.ChatCompletionMessage{
-		{Role: ai.ChatMessageRoleSystem, Content: vip.GetString("prompt")}}
+func (s *ChatSession) Reset() {
+	log.Printf("resetting session %s", s.Name)
+	s.History = []ai.ChatCompletionMessage{}
 	s.Last = time.Now()
 }
 
@@ -49,17 +53,15 @@ func (chats *Chats) Reap() {
 	}
 }
 
-func (chats *Chats) Get(id string) *chatSession {
+func (chats *Chats) Get(id string) *ChatSession {
 	chats.Reap()
 	if session, ok := chats.sessionMap[id]; ok {
 		return session
 	}
 
 	log.Println("creating new session for", id)
-	session := &chatSession{
+	session := &ChatSession{
 		Name: id,
-		History: []ai.ChatCompletionMessage{
-			{Role: ai.ChatMessageRoleSystem, Content: vip.GetString("prompt")}},
 		Last: time.Now(),
 	}
 	chats.sessionMap[id] = session
