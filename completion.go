@@ -55,12 +55,12 @@ func getChatCompletionStream(cc *ChatContext, channel chan *string) {
 	for {
 		response, err := stream.Recv()
 		if errors.Is(err, io.EOF) {
-			log.Println("completionstream finished")
+			log.Println("completionstream: finished")
 			break
 		}
 
 		if err != nil {
-			log.Printf("completionstream error: %v\n", err)
+			log.Printf("completionstream: %v\n", err)
 			a := accumulated + "\n"
 			channel <- &a
 			e := err.Error()
@@ -80,7 +80,7 @@ func getChatCompletionStream(cc *ChatContext, channel chan *string) {
 					chunk = accumulated[:chunkSize]
 				}
 
-				//log.Println("stream chunk: ", chunk)
+				log.Printf("completionstream: session: %s chunk: %d bytes", cc.Session.Name, len(chunk))
 				channel <- &chunk
 				accumulated = accumulated[len(chunk):]
 			}
@@ -89,7 +89,7 @@ func getChatCompletionStream(cc *ChatContext, channel chan *string) {
 
 	// Send the remaining content if any
 	if len(accumulated) > 0 {
-		//log.Println("stream remaining content: ", accumulated)
+		log.Printf("completionstream: session: %s final chunk: %d bytes", cc.Session.Name, len(accumulated))
 		channel <- &accumulated
 	}
 }
