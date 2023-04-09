@@ -38,7 +38,6 @@ func init() {
 	root.PersistentFlags().BoolP("list", "l", false, "list configured personalities")
 	root.PersistentFlags().StringP("directory", "d", "./personalities", "personalities configuration directory")
 	root.PersistentFlags().BoolP("verbose", "v", false, "enable verbose logging of sessions and configuration")
-	//root.PersistentFlags().BoolP("filter", "f", false, "enable filter cli mode")
 
 	vip.BindPFlags(root.PersistentFlags())
 

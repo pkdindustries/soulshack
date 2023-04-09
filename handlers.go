@@ -7,58 +7,55 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	ai "github.com/sashabaranov/go-openai"
 	vip "github.com/spf13/viper"
 )
 
 func sendGreeting(ctx *ChatContext) {
-
 	log.Println("sending greeting...")
+	ctx.Session.Message(ctx, ai.ChatMessageRoleUser, ctx.Personality.Greeting)
+	rch := ChatCompletionTask(ctx)
+	reply := sendMessageFromChannel(ctx, rch)
+	ctx.Session.Message(ctx, ai.ChatMessageRoleAssistant, reply)
+}
 
-	ctx.Session.Message(ctx, ai.ChatMessageRoleUser, ctx.GetConfig().GetString("greeting"))
-
-	reply, err := getChatCompletion(ctx, ctx.Session.History)
-
-	if err != nil {
-		sendMessage(ctx, err.Error())
-		return
+func sendMessageFromChannel(ctx *ChatContext, msgch <-chan *string) string {
+	all := ""
+	for reply := range msgch {
+		all += *reply
+		sendMessage(ctx, *reply)
 	}
-
-	sendMessage(ctx, *reply)
-	ctx.Session.Message(ctx, ai.ChatMessageRoleAssistant, *reply)
-
+	return all
 }
 
 func sendMessage(ctx *ChatContext, message string) {
-	log.Println("<<", ctx.GetConfig().GetString("become"), message)
-	for _, msg := range splitResponse(message, 400) {
-		//time.Sleep(250 * time.Millisecond)
-		ctx.Reply(msg)
-	}
+	log.Println("<<", ctx.Personality.Nick, message)
+	ctx.Reply(message)
 }
 
 var configParams = map[string]string{"prompt": "", "model": "", "nick": "", "greeting": "", "goodbye": "", "answer": "", "directory": "", "session": ""}
 
 func handleSet(ctx *ChatContext) {
 
-	tokens := ctx.Args
-	if !isAdmin(ctx.Event.Source.Name) {
+	if !ctx.IsAdmin() {
 		ctx.Reply("You don't have permission to perform this action.")
 		return
 	}
 
-	if len(tokens) < 3 {
+	if len(ctx.Args) < 3 {
 		ctx.Reply(fmt.Sprintf("Usage: /set %s <value>", keysAsString(configParams)))
 		return
 	}
 
-	param, v := tokens[1], tokens[2:]
+	param, v := ctx.Args[1], ctx.Args[2:]
 	value := strings.Join(v, " ")
 	if _, ok := configParams[param]; !ok {
 		ctx.Reply(fmt.Sprintf("Unknown parameter. Supported parameters: %v", keysAsString(configParams)))
 		return
 	}
 
+	// set on global config
 	vip.Set(param, value)
 	ctx.Reply(fmt.Sprintf("%s set to: %s", param, vip.GetString(param)))
 
@@ -83,14 +80,14 @@ func handleGet(ctx *ChatContext) {
 		return
 	}
 
-	value := ctx.Cfg.GetString(param)
+	value := vip.GetString(param)
 	ctx.Reply(fmt.Sprintf("%s: %s", param, value))
 }
 
 func handleSave(ctx *ChatContext) {
 
 	tokens := ctx.Args
-	if !isAdmin(ctx.Event.Source.Name) {
+	if !ctx.IsAdmin() {
 		ctx.Reply("You don't have permission to perform this action.")
 		return
 	}
@@ -104,13 +101,12 @@ func handleSave(ctx *ChatContext) {
 
 	v := vip.New()
 
-	v.Set("nick", ctx.Cfg.GetString("nick"))
-	v.Set("prompt", ctx.Cfg.GetString("prompt"))
-	v.Set("model", ctx.Cfg.GetString("model"))
-	v.Set("maxtokens", ctx.Cfg.GetInt("maxtokens"))
-	v.Set("greeting", ctx.Cfg.GetString("greeting"))
-	v.Set("goodbye", ctx.Cfg.GetString("goodbye"))
-	v.Set("answer", ctx.Cfg.GetString("answer"))
+	v.Set("nick", ctx.Personality.Nick)
+	v.Set("prompt", ctx.Personality.Prompt)
+	v.Set("model", ctx.Personality.Model)
+	v.Set("greeting", ctx.Personality.Greeting)
+	v.Set("goodbye", ctx.Personality.Goodbye)
+	v.Set("answer", ctx.Personality.Answer)
 
 	if err := v.WriteConfigAs(vip.GetString("directory") + "/" + filename + ".yml"); err != nil {
 		ctx.Reply(fmt.Sprintf("Error saving configuration: %s", err.Error()))
@@ -122,7 +118,7 @@ func handleSave(ctx *ChatContext) {
 
 func handleBecome(ctx *ChatContext) {
 
-	if !isAdmin(ctx.Event.Source.Name) {
+	if !ctx.IsAdmin() {
 		ctx.Reply("You don't have permission to perform this action.")
 		return
 	}
@@ -138,12 +134,13 @@ func handleBecome(ctx *ChatContext) {
 		ctx.Reply(fmt.Sprintf("Error loading personality: %s", err.Error()))
 		return
 	} else {
-		ctx.MergeConfig(cfg)
+		vip.MergeConfigMap(cfg.AllSettings())
+		ctx.SetConfig(cfg)
 	}
 	ctx.Session.Reset()
-	log.Printf("changing nick to %s", personality)
+	log.Printf("changing nick to %s", ctx.Personality.Nick)
 
-	ctx.Client.Cmd.Nick(ctx.GetConfig().GetString("nick"))
+	ctx.Client.Cmd.Nick(ctx.Personality.Nick)
 	time.Sleep(2 * time.Second)
 	sendGreeting(ctx)
 }
@@ -155,7 +152,7 @@ func handleList(ctx *ChatContext) {
 
 func handleLeave(ctx *ChatContext) {
 
-	if !isAdmin(ctx.Event.Source.Name) {
+	if !ctx.IsAdmin() {
 		ctx.Reply("You don't have permission to perform this action.")
 		return
 	}
@@ -177,22 +174,17 @@ func handleLeave(ctx *ChatContext) {
 }
 
 func handleDefault(ctx *ChatContext) {
-
 	args := ctx.Args
 	msg := strings.Join(args, " ")
-
 	ctx.Session.Message(ctx, ai.ChatMessageRoleUser, msg)
-	if reply, err := getChatCompletion(ctx, ctx.Session.History); err != nil {
-		ctx.Reply(err.Error())
-	} else {
-		ctx.Session.Message(ctx, ai.ChatMessageRoleAssistant, *reply)
-		sendMessage(ctx, *reply)
-	}
+	rch := ChatCompletionTask(ctx)
+	reply := sendMessageFromChannel(ctx, rch)
+	ctx.Session.Message(ctx, ai.ChatMessageRoleAssistant, reply)
 }
 
 func handleSay(ctx *ChatContext) {
 
-	if !isAdmin(ctx.Event.Source.Name) {
+	if !ctx.IsAdmin() {
 		ctx.Reply("You don't have permission to perform this action.")
 		return
 	}
@@ -205,7 +197,7 @@ func handleSay(ctx *ChatContext) {
 
 	// if second token is '/as' then third token is a personality
 	// and we should play as that personality
-	as := ctx.Cfg.GetString("become")
+	as := vip.GetString("become")
 	if len(ctx.Args) > 2 && ctx.Args[1] == "/as" {
 		as = ctx.Args[2]
 		ctx.Args = ctx.Args[2:]
@@ -215,15 +207,22 @@ func handleSay(ctx *ChatContext) {
 		ctx.Reply(fmt.Sprintf("Error loading personality: %s", err.Error()))
 		return
 	} else {
-		ctx.MergeConfig(cfg)
+		ctx.SetConfig(cfg)
 	}
 
-	// shenanigans
-	ctx.Session = sessions.Get("puppet")
+	ctx.Session = sessions.Get(uuid.New().String())
 	ctx.Session.Reset()
-	ctx.Event.Params[0] = ctx.Cfg.GetString("channel")
-	ctx.Event.Source.Name = ctx.Cfg.GetString("nick")
+	ctx.Event.Params[0] = vip.GetString("channel")
+	ctx.Event.Source.Name = ctx.Personality.Nick
 	ctx.Args = ctx.Args[1:]
 
 	handleDefault(ctx)
+}
+
+func keysAsString(m map[string]string) string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return strings.Join(keys, ", ")
 }

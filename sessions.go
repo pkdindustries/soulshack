@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"time"
 
@@ -22,11 +23,39 @@ type ChatSession struct {
 	Last    time.Time
 }
 
+// show string of all msg contents
+func (s *ChatSession) Debug() {
+	for _, msg := range s.History {
+		ds := ""
+		if msg.Role == ai.ChatMessageRoleAssistant {
+			ds += "< "
+		} else {
+			ds += "> "
+		}
+		ds += fmt.Sprint(msg.Role) + ": " + msg.Content
+		log.Println(ds)
+	}
+}
+
+// pretty print sessions
+func (s *ChatSession) Stats() {
+	for id, session := range sessions.sessionMap {
+		log.Printf("session '%s':  messages %d, characters %d, idle: %s", id, len(session.History), session.SumMessageLengths(), time.Since(session.Last))
+	}
+}
+func (s *ChatSession) SumMessageLengths() int {
+	sum := 0
+	for _, m := range s.History {
+		sum += len(m.Content)
+	}
+	return sum
+}
+
 func (s *ChatSession) Message(ctx *ChatContext, role string, message string) *ChatSession {
-	sessionStats()
+	s.Stats()
 	if len(s.History) == 0 {
-		s.History = append(s.History, ai.ChatCompletionMessage{Role: ai.ChatMessageRoleSystem, Content: ctx.Cfg.GetString("prompt")})
-		s.History = append(s.History, ai.ChatCompletionMessage{Role: ai.ChatMessageRoleSystem, Content: ctx.Cfg.GetString("greeting")})
+		s.History = append(s.History, ai.ChatCompletionMessage{Role: ai.ChatMessageRoleSystem, Content: ctx.Personality.Prompt})
+		s.History = append(s.History, ai.ChatCompletionMessage{Role: ai.ChatMessageRoleSystem, Content: ctx.Personality.Greeting})
 	}
 
 	s.History = append(s.History, ai.ChatCompletionMessage{Role: role, Content: message})

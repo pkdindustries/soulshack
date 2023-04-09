@@ -8,6 +8,7 @@ package main
 //  .  .  .  because  real  people  are  overrated
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"log"
@@ -61,12 +62,11 @@ func run(r *cobra.Command, _ []string) {
 	})
 
 	irc.Handlers.Add(girc.CONNECTED, func(c *girc.Client, e girc.Event) {
-		ctx, cancel := createChatContext(vip.GetViper(), c, &e)
+		ctx, cancel := createChatContext(context.Background(), vip.GetViper(), c, &e)
 		defer cancel()
 
-		channel := ctx.Cfg.GetString("channel")
-		log.Println("joining channel:", channel)
-		c.Cmd.Join(channel)
+		log.Println("joining channel:", vip.GetString("channel"))
+		c.Cmd.Join(vip.GetString("channel"))
 
 		time.Sleep(1 * time.Second)
 		sendGreeting(ctx)
@@ -74,12 +74,12 @@ func run(r *cobra.Command, _ []string) {
 
 	irc.Handlers.Add(girc.PRIVMSG, func(c *girc.Client, e girc.Event) {
 
-		ctx, cancel := createChatContext(vip.GetViper(), c, &e)
+		ctx, cancel := createChatContext(context.Background(), vip.GetViper(), c, &e)
 		defer cancel()
 
-		if ctx.isValid() {
+		if ctx.Valid() {
 			log.Println(">>", strings.Join(e.Params[1:], " "))
-			switch ctx.getCommand() {
+			switch ctx.GetCommand() {
 			case "/say":
 				handleSay(ctx)
 			case "/set":

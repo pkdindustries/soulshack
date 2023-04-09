@@ -3,8 +3,9 @@ package main
 import (
 	"context"
 	"errors"
+	"io"
 	"log"
-	"time"
+	"strings"
 
 	ai "github.com/sashabaranov/go-openai"
 	vip "github.com/spf13/viper"
@@ -12,39 +13,83 @@ import (
 
 var aiClient *ai.Client
 
-func getChatCompletion(cc *ChatContext, msgs []ai.ChatCompletionMessage) (*string, error) {
-	log.Printf("completing: messages %d, characters %d, maxtokens %d, model %s",
-		len(msgs),
-		sumMessageLengths(msgs),
-		cc.Cfg.GetInt("maxtokens"),
-		cc.Cfg.GetString("model"),
+func ChatCompletionTask(ctx *ChatContext) <-chan *string {
+	ch := make(chan *string)
+	go getChatCompletionStream(ctx, ch)
+	return ch
+}
+
+func getChatCompletionStream(cc *ChatContext, channel chan *string) {
+	defer close(channel)
+	log.Printf("completing: messages %d, maxtokens %d, model %s",
+		len(cc.Session.History),
+		vip.GetInt("maxtokens"),
+		vip.GetString("model"),
 	)
 
 	if vip.GetBool("verbose") {
-		sessionDump(msgs)
+		cc.Session.Debug()
 	}
 
-	now := time.Now()
-	ctx, cancel := context.WithTimeout(cc, cc.Cfg.GetDuration("timeout"))
+	ctx, cancel := context.WithTimeout(cc, vip.GetDuration("timeout"))
 	defer cancel()
 
-	resp, err := aiClient.CreateChatCompletion(
-		ctx,
-		ai.ChatCompletionRequest{
-			MaxTokens: cc.Cfg.GetInt("maxtokens"),
-			Model:     cc.Cfg.GetString("model"),
-			Messages:  msgs,
-		},
-	)
+	stream, err := aiClient.CreateChatCompletionStream(ctx, ai.ChatCompletionRequest{
+		MaxTokens: vip.GetInt("maxtokens"),
+		Model:     vip.GetString("model"),
+		Messages:  cc.Session.History,
+		Stream:    true,
+	})
 
 	if err != nil {
-		return nil, err
+		e := err.Error()
+		channel <- &e
+		return
 	}
 
-	if len(resp.Choices) == 0 {
-		return nil, errors.New("no response")
+	defer stream.Close()
+
+	accumulated := ""
+	chunkSize := 350
+
+	for {
+		response, err := stream.Recv()
+		if errors.Is(err, io.EOF) {
+			log.Println("completionstream finished")
+			break
+		}
+
+		if err != nil {
+			log.Printf("completionstream error: %v\n", err)
+			a := accumulated + "\n"
+			channel <- &a
+			e := err.Error()
+			channel <- &e
+			return
+		}
+
+		if len(response.Choices) != 0 {
+			accumulated += response.Choices[0].Delta.Content
+
+			for len(accumulated) >= chunkSize || strings.Contains(accumulated, "\n") {
+				chunk := ""
+				newlineIndex := strings.Index(accumulated, "\n")
+				if newlineIndex != -1 && newlineIndex < chunkSize {
+					chunk = accumulated[:newlineIndex+1]
+				} else {
+					chunk = accumulated[:chunkSize]
+				}
+
+				//log.Println("stream chunk: ", chunk)
+				channel <- &chunk
+				accumulated = accumulated[len(chunk):]
+			}
+		}
 	}
 
-	log.Printf("completed: %s, %d tokens", time.Since(now), resp.Usage.TotalTokens)
-	return &resp.Choices[0].Message.Content, nil
+	// Send the remaining content if any
+	if len(accumulated) > 0 {
+		//log.Println("stream remaining content: ", accumulated)
+		channel <- &accumulated
+	}
 }
