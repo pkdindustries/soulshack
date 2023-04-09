@@ -76,3 +76,54 @@ jobs:
       with:
         name: ${{ env.PROJECT_NAME }}-darwin-arm64
         path: ${{ env.PROJECT_NAME }}-darwin-arm64
+
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1.0.0
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ env.GITHUB_REF#refs/tags/ }}
+        release_name: ${{ env.GITHUB_REF#refs/tags/ }}
+        draft: false
+        prerelease: false
+
+    - name: Upload Artifacts
+      uses: actions/upload-artifact@v2
+      with:
+        name: binaries
+        path: |
+          ${{ env.PROJECT_NAME }}-linux-amd64
+          ${{ env.PROJECT_NAME }}-linux-arm64
+          ${{ env.PROJECT_NAME }}-darwin-arm64
+
+    - name: Attach Artifacts to Release
+      uses: actions/upload-release-asset@v1.0.1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ${{ env.PROJECT_NAME }}-linux-amd64
+        asset_name: ${{ env.PROJECT_NAME }}-linux-amd64
+        asset_content_type: application/octet-stream
+
+    - name: Attach Artifacts to Release
+      uses: actions/upload-release-asset@v1.0.1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ${{ env.PROJECT_NAME }}-linux-arm64
+        asset_name: ${{ env.PROJECT_NAME }}-linux-arm64
+        asset_content_type: application/octet-stream
+        
+
+    - name: Attach Artifacts to Release
+      uses: actions/upload-release-asset@v1.0.1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ${{ env.PROJECT_NAME }}-darwin-arm64
+        asset_name: ${{ env.PROJECT_NAME }}-darwin-arm64
+        asset_content_type: application/octet-stream
