@@ -42,12 +42,6 @@ docker build . -t soulshack:dev
 soulshack --server server --port port --channel '#channelname' --become personality --ssl 
 ```
 
-```bash
-> echo "echo"|soulshack -f --prompt 'you are the unix program /bin/echo'
-echo
->
-```
-
 ## Configuration
 
 SoulShack can be configured using command line flags, environment variables, or personality configuration files. It uses Viper to manage configuration settings.
