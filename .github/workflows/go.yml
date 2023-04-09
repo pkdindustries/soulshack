@@ -42,19 +42,19 @@ jobs:
       env:
         GOOS: linux
         GOARCH: amd64
-      run: go build -o $PROJECT_NAME-linux-amd64 ./...
+      run: go build -o ${{ github.event.repository.name }}-linux-amd64 ./...
 
     - name: Build release - Linux arm64
       env:
         GOOS: linux
         GOARCH: arm64
-      run: go build -o $PROJECT_NAME-linux-arm64 ./...
+      run: go build -o ${{ github.event.repository.name }}-linux-arm64 ./...
 
     - name: Build release - macOS arm64
       env:
         GOOS: darwin
         GOARCH: arm64
-      run: go build -o $PROJECT_NAME-darwin-arm64 ./...
+      run: go build -o ${{ github.event.repository.name }}-darwin-arm64 ./...
 
     - name: Upload linux amd64 binary
       uses: actions/upload-artifact@v3.1.2
@@ -113,7 +113,6 @@ jobs:
         asset_path: ${{ github.event.repository.name }}-linux-arm64
         asset_name: ${{ github.event.repository.name }}-linux-arm64
         asset_content_type: application/octet-stream
-
 
     - name: Attach Artifacts to Release
       uses: actions/upload-release-asset@v1.0.2
