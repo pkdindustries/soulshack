@@ -14,10 +14,10 @@ import (
 
 func sendGreeting(ctx *ChatContext) {
 	log.Println("sending greeting...")
-	ctx.Session.Message(ctx, ai.ChatMessageRoleUser, ctx.Personality.Greeting)
+	ctx.Session.Message(ctx, ai.ChatMessageRoleAssistant, ctx.Personality.Greeting)
 	rch := ChatCompletionTask(ctx)
-	reply := sendMessageFromChannel(ctx, rch)
-	ctx.Session.Message(ctx, ai.ChatMessageRoleAssistant, reply)
+	_ = sendMessageFromChannel(ctx, rch)
+	ctx.Session.Reset()
 }
 
 func sendMessageFromChannel(ctx *ChatContext, msgch <-chan *string) string {

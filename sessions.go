@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"sync"
 	"time"
 
 	ai "github.com/sashabaranov/go-openai"
@@ -11,20 +12,25 @@ import (
 
 var sessions = Chats{
 	sessionMap: make(map[string]*ChatSession),
+	mu:         sync.Mutex{},
 }
 
 type Chats struct {
 	sessionMap map[string]*ChatSession
+	mu         sync.Mutex
 }
 
 type ChatSession struct {
 	Name    string
 	History []ai.ChatCompletionMessage
+	mu      sync.Mutex
 	Last    time.Time
 }
 
 // show string of all msg contents
 func (s *ChatSession) Debug() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	for _, msg := range s.History {
 		ds := ""
 		if msg.Role == ai.ChatMessageRoleAssistant {
@@ -39,11 +45,12 @@ func (s *ChatSession) Debug() {
 
 // pretty print sessions
 func (s *ChatSession) Stats() {
-	for id, session := range sessions.sessionMap {
-		log.Printf("session '%s':  messages %d, characters %d, idle: %s", id, len(session.History), session.SumMessageLengths(), time.Since(session.Last))
-	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	log.Printf("session '%s':  messages %d, characters %d, idle: %s", s.Name, len(s.History), s.sumMessageLengths(), time.Since(s.Last))
 }
-func (s *ChatSession) SumMessageLengths() int {
+
+func (s *ChatSession) sumMessageLengths() int {
 	sum := 0
 	for _, m := range s.History {
 		sum += len(m.Content)
@@ -53,9 +60,11 @@ func (s *ChatSession) SumMessageLengths() int {
 
 func (s *ChatSession) Message(ctx *ChatContext, role string, message string) *ChatSession {
 	s.Stats()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	if len(s.History) == 0 {
 		s.History = append(s.History, ai.ChatCompletionMessage{Role: ai.ChatMessageRoleSystem, Content: ctx.Personality.Prompt})
-		s.History = append(s.History, ai.ChatCompletionMessage{Role: ai.ChatMessageRoleSystem, Content: ctx.Personality.Greeting})
 	}
 
 	s.History = append(s.History, ai.ChatCompletionMessage{Role: role, Content: message})
@@ -65,11 +74,16 @@ func (s *ChatSession) Message(ctx *ChatContext, role string, message string) *Ch
 
 func (s *ChatSession) Reset() {
 	log.Printf("resetting session %s", s.Name)
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.History = []ai.ChatCompletionMessage{}
 	s.Last = time.Now()
 }
 
-func (chats *Chats) Reap() {
+func (chats *Chats) reap() {
+	chats.mu.Lock()
+	defer chats.mu.Unlock()
+
 	now := time.Now()
 	for id, s := range chats.sessionMap {
 		if now.Sub(s.Last) > vip.GetDuration("session") {
@@ -77,15 +91,20 @@ func (chats *Chats) Reap() {
 			delete(chats.sessionMap, id)
 		} else if len(s.History) > vip.GetInt("history") {
 			log.Printf("trimmed session: %s", id)
+			s.mu.Lock()
 			s.History = append(s.History[:1], s.History[len(s.History)-vip.GetInt("history"):]...)
+			s.mu.Unlock()
 		}
 	}
 }
 
 func (chats *Chats) Get(id string) *ChatSession {
-	chats.Reap()
-	if session, ok := chats.sessionMap[id]; ok {
-		return session
+	chats.reap()
+	chats.mu.Lock()
+	defer chats.mu.Unlock()
+
+	if v, ok := chats.sessionMap[id]; ok {
+		return v
 	}
 
 	log.Println("creating new session for", id)

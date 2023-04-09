@@ -61,7 +61,7 @@ func run(r *cobra.Command, _ []string) {
 		TLSConfig: &tls.Config{InsecureSkipVerify: true},
 	})
 
-	irc.Handlers.Add(girc.CONNECTED, func(c *girc.Client, e girc.Event) {
+	irc.Handlers.AddBg(girc.CONNECTED, func(c *girc.Client, e girc.Event) {
 		ctx, cancel := createChatContext(context.Background(), vip.GetViper(), c, &e)
 		defer cancel()
 
@@ -72,7 +72,7 @@ func run(r *cobra.Command, _ []string) {
 		sendGreeting(ctx)
 	})
 
-	irc.Handlers.Add(girc.PRIVMSG, func(c *girc.Client, e girc.Event) {
+	irc.Handlers.AddBg(girc.PRIVMSG, func(c *girc.Client, e girc.Event) {
 
 		ctx, cancel := createChatContext(context.Background(), vip.GetViper(), c, &e)
 		defer cancel()
