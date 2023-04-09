@@ -95,10 +95,8 @@ func (s *ChatSession) trim() {
 	}
 }
 func (s *ChatSession) reap() {
-
 	id := s.Name
 	now := time.Now()
-
 	sessions.mu.Lock()
 	defer sessions.mu.Unlock()
 	if now.Sub(s.Last) > vip.GetDuration("session") {
