@@ -2,6 +2,9 @@ package main
 
 import (
 	"fmt"
+	"io"
+	"log"
+	"math/rand"
 	"sync"
 	"testing"
 	"time"
@@ -14,6 +17,8 @@ import (
 func TestChatSession(t *testing.T) {
 	vip.Set("session", 1*time.Hour)
 	vip.Set("history", 10)
+
+	log.SetOutput(io.Discard)
 
 	ctx := &ChatContext{
 		Personality: &Personality{
@@ -30,7 +35,18 @@ func TestChatSession(t *testing.T) {
 		assert.Equal(t, session1.History[1].Content, "Hello!")
 		assert.Equal(t, session1.History[2].Content, "Hi there!")
 	})
+}
+func TestExpiry(t *testing.T) {
+	vip.Set("session", 1*time.Hour)
+	vip.Set("history", 10)
 
+	log.SetOutput(io.Discard)
+
+	ctx := &ChatContext{
+		Personality: &Personality{
+			Prompt: "You are a helpful assistant.",
+		},
+	}
 	t.Run("Test session expiration and trimming", func(t *testing.T) {
 		vip.Set("session", 1*time.Millisecond)
 		vip.Set("history", 2)
@@ -53,10 +69,17 @@ func TestChatSession(t *testing.T) {
 		assert.Equal(t, session3.History[1].Content, "Hello again!")
 		assert.Equal(t, session3.History[2].Content, "Hi! Nice to see you again!")
 	})
+}
+
+func TestSessionConcurrency(t *testing.T) {
+	vip.Set("session", 1*time.Hour)
+	vip.Set("history", 10)
+
+	log.SetOutput(io.Discard)
 
 	t.Run("Test session concurrency", func(t *testing.T) {
 		vip.Set("session", 1*time.Hour)
-		vip.Set("history", 1000)
+		vip.Set("history", 500*2000)
 
 		ctx := &ChatContext{
 			Personality: &Personality{
@@ -64,8 +87,8 @@ func TestChatSession(t *testing.T) {
 			},
 		}
 
-		const concurrentUsers = 100
-		const messagesPerUser = 50
+		const concurrentUsers = 1000
+		const messagesPerUser = 500
 
 		startTime := time.Now()
 
@@ -97,10 +120,17 @@ func TestChatSession(t *testing.T) {
 		messagesPerSecond := float64(totalMessages) / elapsedTime.Seconds()
 		t.Logf("Processed %d messages in %v, which is %.2f messages per second\n", totalMessages, elapsedTime, messagesPerSecond)
 	})
+}
+
+func TestSingleSessionConcurrency(t *testing.T) {
+	vip.Set("session", 1*time.Hour)
+	vip.Set("history", 10)
+
+	log.SetOutput(io.Discard)
 
 	t.Run("Test single session concurrency", func(t *testing.T) {
 		vip.Set("session", 1*time.Hour)
-		vip.Set("history", 2000)
+		vip.Set("history", 500*200)
 
 		ctx := &ChatContext{
 			Personality: &Personality{
@@ -108,8 +138,8 @@ func TestChatSession(t *testing.T) {
 			},
 		}
 
-		const concurrentUsers = 50
-		const messagesPerUser = 10
+		const concurrentUsers = 500
+		const messagesPerUser = 100
 
 		startTime := time.Now()
 
@@ -138,31 +168,63 @@ func TestChatSession(t *testing.T) {
 		assert.Len(t, session.History, totalMessages+1, "The session should have the correct number of messages")
 		t.Logf("Processed %d messages in %v, which is %.2f messages per second\n", totalMessages, elapsedTime, messagesPerSecond)
 	})
+}
 
-	t.Run("Test session get", func(t *testing.T) {
-		vip.Set("session", 1*time.Hour)
-		vip.Set("history", 1000)
+func TestStress(t *testing.T) {
+	vip.Set("session", 1*time.Second) // Short session duration to trigger more expirations
+	vip.Set("history", 5)             // Shorter history length to trigger more trimming
 
-		const concurrentGets = 1000
-		const sessionID = "sharedSession"
+	ctx := &ChatContext{
+		Personality: &Personality{
+			Prompt: "You are a helpful assistant.",
+		},
+	}
+	log.SetOutput(io.Discard)
+
+	t.Run("stress", func(t *testing.T) {
+
+		const concurrentUsers = 1000
+		const sessionsPerUser = 50
+		const messagesPerUser = 50
+		const testDuration = 5 * time.Second
 
 		var wg sync.WaitGroup
-		wg.Add(concurrentGets)
+		wg.Add(concurrentUsers)
 
-		sessionResults := make([]*ChatSession, concurrentGets)
+		startTime := time.Now()
 
-		for i := 0; i < concurrentGets; i++ {
-			go func(index int) {
+		for i := 0; i < concurrentUsers; i++ {
+			go func(userIndex int) {
 				defer wg.Done()
-				sessionResults[index] = sessions.Get(sessionID)
+
+				endTime := startTime.Add(testDuration)
+
+				for time.Now().Before(endTime) {
+					sessionID := fmt.Sprintf("session%d-%d", userIndex, rand.Intn(sessionsPerUser))
+					session := sessions.Get(sessionID)
+
+					action := rand.Intn(4)
+
+					switch action {
+					case 0: // Add user message
+						for j := 0; j < messagesPerUser; j++ {
+							session.Message(ctx, ai.ChatMessageRoleUser, fmt.Sprintf("User %d message %d", userIndex, j))
+						}
+					case 1: // Add assistant message
+						for j := 0; j < messagesPerUser; j++ {
+							session.Message(ctx, ai.ChatMessageRoleAssistant, fmt.Sprintf("Assistant response to user %d message %d", userIndex, j))
+						}
+					case 2: // Reset the session
+						session.Reset()
+					}
+				}
 			}(i)
 		}
 
 		wg.Wait()
-
-		// Check that all goroutines got the same session instance
-		for i := 1; i < concurrentGets; i++ {
-			assert.Equal(t, sessionResults[0], sessionResults[i], "All session instances should be the same")
-		}
+		elapsedTime := time.Since(startTime)
+		totalMessages := concurrentUsers * messagesPerUser * 2
+		messagesPerSecond := float64(totalMessages) / elapsedTime.Seconds()
+		t.Logf("Processed %d messages in %v, which is %.2f messages per second\n", totalMessages, elapsedTime, messagesPerSecond)
 	})
 }

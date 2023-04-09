@@ -25,6 +25,7 @@ type ChatSession struct {
 	History []ai.ChatCompletionMessage
 	mu      sync.Mutex
 	Last    time.Time
+	Timer   *time.Timer
 }
 
 // show string of all msg contents
@@ -44,9 +45,7 @@ func (s *ChatSession) Debug() {
 }
 
 // pretty print sessions
-func (s *ChatSession) Stats() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+func (s *ChatSession) stats() {
 	log.Printf("session '%s':  messages %d, characters %d, idle: %s", s.Name, len(s.History), s.sumMessageLengths(), time.Since(s.Last))
 }
 
@@ -59,15 +58,24 @@ func (s *ChatSession) sumMessageLengths() int {
 }
 
 func (s *ChatSession) Message(ctx *ChatContext, role string, message string) *ChatSession {
-	s.Stats()
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.stats()
 
 	if len(s.History) == 0 {
 		s.History = append(s.History, ai.ChatCompletionMessage{Role: ai.ChatMessageRoleSystem, Content: ctx.Personality.Prompt})
 	}
-
 	s.History = append(s.History, ai.ChatCompletionMessage{Role: role, Content: message})
+
+	s.trim()
+
+	if s.Timer != nil {
+		s.Timer.Stop()
+	}
+	s.Timer = time.AfterFunc(vip.GetDuration("session"), func() {
+		s.reap()
+	})
+
 	s.Last = time.Now()
 	return s
 }
@@ -80,26 +88,26 @@ func (s *ChatSession) Reset() {
 	s.Last = time.Now()
 }
 
-func (chats *Chats) reap() {
-	chats.mu.Lock()
-	defer chats.mu.Unlock()
+func (s *ChatSession) trim() {
+	if len(s.History) > vip.GetInt("history") {
+		log.Printf("trimming session %s", s.Name)
+		s.History = append(s.History[:1], s.History[len(s.History)-vip.GetInt("history"):]...)
+	}
+}
+func (s *ChatSession) reap() {
 
+	id := s.Name
 	now := time.Now()
-	for id, s := range chats.sessionMap {
-		if now.Sub(s.Last) > vip.GetDuration("session") {
-			log.Printf("expired session: %s", id)
-			delete(chats.sessionMap, id)
-		} else if len(s.History) > vip.GetInt("history") {
-			log.Printf("trimmed session: %s", id)
-			s.mu.Lock()
-			s.History = append(s.History[:1], s.History[len(s.History)-vip.GetInt("history"):]...)
-			s.mu.Unlock()
-		}
+
+	sessions.mu.Lock()
+	defer sessions.mu.Unlock()
+	if now.Sub(s.Last) > vip.GetDuration("session") {
+		log.Printf("expired session: %s", id)
+		delete(sessions.sessionMap, id)
 	}
 }
 
 func (chats *Chats) Get(id string) *ChatSession {
-	chats.reap()
 	chats.mu.Lock()
 	defer chats.mu.Unlock()
 
