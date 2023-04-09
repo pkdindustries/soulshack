@@ -3,14 +3,13 @@ name: Go
 on:
   push:
     branches: [ "main" ]
+    tags:
+        - '*'
   pull_request:
     branches: [ "main" ]
-  # Only run release job on tags
-  release:
-    types: [created]
-    
-jobs:
+  workflow_dispatch:
 
+jobs:
   build:
     runs-on: ubuntu-latest
     steps:
@@ -26,7 +25,6 @@ jobs:
 
     - name: Test
       run: go test -v ./...
-
   release:
     needs: build
     # Only run release job on tags
