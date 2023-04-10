@@ -46,9 +46,7 @@ func init() {
 
 func initConfig() {
 
-	if !vip.GetBool("filter") {
-		fmt.Println(getBanner())
-	}
+	fmt.Println(getBanner())
 
 	if _, err := os.Stat(vip.GetString("directory")); errors.Is(err, fs.ErrNotExist) {
 		log.Printf("! configuration directory %s does not exist", vip.GetString("directory"))

@@ -211,7 +211,7 @@ func handleSay(ctx *ChatContext) {
 
 	ctx.Session = sessions.Get(uuid.New().String())
 	ctx.Session.Reset()
-	ctx.Event.Params[0] = vip.GetString("channel")
+	ctx.Event.Params[0] = ctx.Config.Channel
 	ctx.Event.Source.Name = ctx.Personality.Nick
 	ctx.Args = ctx.Args[1:]
 

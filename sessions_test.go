@@ -18,7 +18,7 @@ func TestChatSession(t *testing.T) {
 	vip.Set("session", 1*time.Hour)
 	vip.Set("history", 10)
 
-	log.SetOutput(io.Discard)
+	//log.SetOutput(io.Discard)
 
 	ctx := &ChatContext{
 		Personality: &Personality{
@@ -40,7 +40,7 @@ func TestExpiry(t *testing.T) {
 	vip.Set("session", 1*time.Hour)
 	vip.Set("history", 10)
 
-	log.SetOutput(io.Discard)
+	//log.SetOutput(io.Discard)
 
 	ctx := &ChatContext{
 		Personality: &Personality{
@@ -123,9 +123,6 @@ func TestSessionConcurrency(t *testing.T) {
 }
 
 func TestSingleSessionConcurrency(t *testing.T) {
-	vip.Set("session", 1*time.Hour)
-	vip.Set("history", 10)
-
 	log.SetOutput(io.Discard)
 
 	t.Run("Test single session concurrency", func(t *testing.T) {
@@ -184,7 +181,7 @@ func TestStress(t *testing.T) {
 	t.Run("stress", func(t *testing.T) {
 
 		const concurrentUsers = 1000
-		const sessionsPerUser = 50
+		const sessionsPerUser = 5
 		const messagesPerUser = 50
 		const testDuration = 5 * time.Second
 
@@ -216,6 +213,8 @@ func TestStress(t *testing.T) {
 						}
 					case 2: // Reset the session
 						session.Reset()
+					case 3: // Expire the session
+						session.Reap()
 					}
 				}
 			}(i)

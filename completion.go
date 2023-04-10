@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	ai "github.com/sashabaranov/go-openai"
-	vip "github.com/spf13/viper"
 )
 
 var aiClient *ai.Client
@@ -22,22 +21,21 @@ func ChatCompletionTask(ctx *ChatContext) <-chan *string {
 func getChatCompletionStream(cc *ChatContext, channel chan<- *string) {
 	defer close(channel)
 	log.Printf("completing: messages %d, maxtokens %d, model %s",
-		len(cc.Session.History),
-		vip.GetInt("maxtokens"),
-		vip.GetString("model"),
-	)
+		len(cc.Session.GetHistory()),
+		cc.Session.Config.MaxTokens,
+		cc.Personality.Model)
 
-	if vip.GetBool("verbose") {
+	if cc.Config.Verbose {
 		cc.Session.Debug()
 	}
 
-	ctx, cancel := context.WithTimeout(cc, vip.GetDuration("timeout"))
+	ctx, cancel := context.WithTimeout(cc, cc.Session.Config.ClientTimeout)
 	defer cancel()
 
 	stream, err := aiClient.CreateChatCompletionStream(ctx, ai.ChatCompletionRequest{
-		MaxTokens: vip.GetInt("maxtokens"),
-		Model:     vip.GetString("model"),
-		Messages:  cc.Session.History,
+		MaxTokens: cc.Session.Config.MaxTokens,
+		Model:     cc.Personality.Model,
+		Messages:  cc.Session.GetHistory(),
 		Stream:    true,
 	})
 
@@ -80,7 +78,7 @@ func getChatCompletionStream(cc *ChatContext, channel chan<- *string) {
 					chunk = accumulated[:chunkSize]
 				}
 
-				log.Printf("completionstream: session: %s chunk: %d bytes", cc.Session.Name, len(chunk))
+				log.Printf("completion stream: session: %s, chunk: %d bytes", cc.Session.Name, len(chunk))
 				channel <- &chunk
 				accumulated = accumulated[len(chunk):]
 			}
@@ -89,7 +87,7 @@ func getChatCompletionStream(cc *ChatContext, channel chan<- *string) {
 
 	// Send the remaining content if any
 	if len(accumulated) > 0 {
-		log.Printf("completionstream: session: %s final chunk: %d bytes", cc.Session.Name, len(accumulated))
+		log.Printf("completion stream: session: %s, final chunk: %d bytes", cc.Session.Name, len(accumulated))
 		channel <- &accumulated
 	}
 }

@@ -16,16 +16,28 @@ type Personality struct {
 	Goodbye  string
 }
 
+type Config struct {
+	Channel   string
+	Nick      string
+	Admins    []string
+	Directory string
+	Verbose   bool
+	Server    string
+	Port      int
+	SSL       bool
+}
+
 type ChatContext struct {
 	context.Context
 	Personality *Personality
+	Config      *Config
 	Client      *girc.Client
 	Event       *girc.Event
 	Args        []string
 	Session     *ChatSession
 }
 
-func NewFromViper(v *vip.Viper) *Personality {
+func PersonalityFromViper(v *vip.Viper) *Personality {
 	return &Personality{
 		Prompt:   v.GetString("prompt"),
 		Greeting: v.GetString("greeting"),
@@ -35,12 +47,25 @@ func NewFromViper(v *vip.Viper) *Personality {
 	}
 }
 
-// merge in the viper config
-func (c *ChatContext) SetConfig(v *vip.Viper) {
-	c.Personality = NewFromViper(v)
+func IrcFromViper(v *vip.Viper) *Config {
+	return &Config{
+		Channel:   v.GetString("channel"),
+		Nick:      v.GetString("nick"),
+		Admins:    v.GetStringSlice("admins"),
+		Directory: v.GetString("directory"),
+		Verbose:   v.GetBool("verbose"),
+		Server:    v.GetString("server"),
+		Port:      v.GetInt("port"),
+		SSL:       v.GetBool("ssl"),
+	}
 }
 
-func (s *ChatContext) isAddressed() bool {
+// merge in the viper config
+func (c *ChatContext) SetConfig(v *vip.Viper) {
+	c.Personality = PersonalityFromViper(v)
+}
+
+func (s *ChatContext) IsAddressed() bool {
 	return strings.HasPrefix(s.Event.Last(), s.Client.GetNick())
 }
 
@@ -62,12 +87,15 @@ func (c *ChatContext) Reply(message string) *ChatContext {
 	c.Client.Cmd.Reply(*c.Event, message)
 	return c
 }
+
 func (c *ChatContext) Valid() bool {
-	return (c.isAddressed() || c.isPrivate()) && len(c.Args) > 0
+	return (c.IsAddressed() || c.IsPrivate()) && len(c.Args) > 0
 }
-func (c *ChatContext) isPrivate() bool {
+
+func (c *ChatContext) IsPrivate() bool {
 	return !strings.HasPrefix(c.Event.Params[0], "#")
 }
+
 func (c *ChatContext) GetCommand() string {
 	return strings.ToLower(c.Args[0])
 }
@@ -80,10 +108,11 @@ func createChatContext(parent context.Context, v *vip.Viper, c *girc.Client, e *
 		Client:      c,
 		Event:       e,
 		Args:        strings.Fields(e.Last()),
-		Personality: NewFromViper(v),
+		Personality: PersonalityFromViper(v),
+		Config:      IrcFromViper(v),
 	}
 
-	if ctx.isAddressed() {
+	if ctx.IsAddressed() {
 		ctx.Args = ctx.Args[1:]
 	}
 

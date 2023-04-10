@@ -12,25 +12,44 @@ import (
 
 var sessions = Chats{
 	sessionMap: make(map[string]*ChatSession),
-	mu:         sync.Mutex{},
+	mu:         sync.RWMutex{},
 }
 
 type Chats struct {
 	sessionMap map[string]*ChatSession
-	mu         sync.Mutex
+	mu         sync.RWMutex
+}
+
+type SessionConfig struct {
+	MaxTokens      int
+	SessionTimeout time.Duration
+	MaxHistory     int
+	ClientTimeout  time.Duration
 }
 
 type ChatSession struct {
-	Name    string
-	History []ai.ChatCompletionMessage
-	mu      sync.Mutex
-	Last    time.Time
-	Timer   *time.Timer
+	Config     SessionConfig
+	Name       string
+	History    []ai.ChatCompletionMessage
+	mu         sync.RWMutex
+	Last       time.Time
+	Timer      *time.Timer
+	Totalchars int
+}
+
+func (s *ChatSession) GetHistory() []ai.ChatCompletionMessage {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	historyCopy := make([]ai.ChatCompletionMessage, len(s.History))
+	copy(historyCopy, s.History)
+
+	return historyCopy
 }
 
 // show string of all msg contents
 func (s *ChatSession) Debug() {
-	s.mu.Lock()
+	s.mu.RLock()
 	defer s.mu.Unlock()
 	for _, msg := range s.History {
 		ds := ""
@@ -39,41 +58,35 @@ func (s *ChatSession) Debug() {
 		} else {
 			ds += "> "
 		}
-		ds += fmt.Sprint(msg.Role) + ": " + msg.Content
+		ds += fmt.Sprintf("%s:%s", msg.Role, msg.Content)
 		log.Println(ds)
 	}
 }
 
 // pretty print sessions
 func (s *ChatSession) stats() {
-	log.Printf("session '%s':  messages %d, characters %d, idle: %s", s.Name, len(s.History), s.sumMessageLengths(), time.Since(s.Last))
-}
-
-func (s *ChatSession) sumMessageLengths() int {
-	sum := 0
-	for _, m := range s.History {
-		sum += len(m.Content)
-	}
-	return sum
+	log.Printf("session '%s':  messages %d, characters %d, idle: %s", s.Name, len(s.History), s.Totalchars, time.Since(s.Last))
 }
 
 func (s *ChatSession) Message(ctx *ChatContext, role string, message string) *ChatSession {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.stats()
 
 	if len(s.History) == 0 {
 		s.History = append(s.History, ai.ChatCompletionMessage{Role: ai.ChatMessageRoleSystem, Content: ctx.Personality.Prompt})
+		s.Totalchars += len(ctx.Personality.Prompt)
 	}
+
 	s.History = append(s.History, ai.ChatCompletionMessage{Role: role, Content: message})
+	s.Totalchars += len(message)
 
 	s.trim()
 
 	if s.Timer != nil {
 		s.Timer.Stop()
 	}
-	s.Timer = time.AfterFunc(vip.GetDuration("session"), func() {
-		s.reap()
+	s.Timer = time.AfterFunc(s.Config.SessionTimeout, func() {
+		s.Reap()
 	})
 
 	s.Last = time.Now()
@@ -89,22 +102,19 @@ func (s *ChatSession) Reset() {
 }
 
 func (s *ChatSession) trim() {
-	if len(s.History) > vip.GetInt("history") {
+	if len(s.History) > s.Config.MaxHistory {
 		log.Printf("trimming session %s", s.Name)
-		s.History = append(s.History[:1], s.History[len(s.History)-vip.GetInt("history"):]...)
+		s.History = append(s.History[:1], s.History[len(s.History)-s.Config.MaxHistory:]...)
 	}
 }
 
-func (s *ChatSession) reap() {
-	id := s.Name
+func (s *ChatSession) Reap() {
 	now := time.Now()
-	duration := vip.GetDuration("session")
 	sessions.mu.Lock()
-
 	defer sessions.mu.Unlock()
-	if now.Sub(s.Last) > duration {
-		log.Printf("expired session: %s", id)
-		delete(sessions.sessionMap, id)
+	if now.Sub(s.Last) > s.Config.SessionTimeout {
+		log.Printf("expired session: %s", s.Name)
+		delete(sessions.sessionMap, s.Name)
 	}
 }
 
@@ -119,7 +129,14 @@ func (chats *Chats) Get(id string) *ChatSession {
 	session := &ChatSession{
 		Name: id,
 		Last: time.Now(),
+		Config: SessionConfig{
+			MaxTokens:      vip.GetInt("maxtokens"),
+			SessionTimeout: vip.GetDuration("session"),
+			MaxHistory:     vip.GetInt("history"),
+			ClientTimeout:  vip.GetDuration("timeout"),
+		},
 	}
+
 	chats.sessionMap[id] = session
 	return session
 }

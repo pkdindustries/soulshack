@@ -65,8 +65,8 @@ func run(r *cobra.Command, _ []string) {
 		ctx, cancel := createChatContext(context.Background(), vip.GetViper(), c, &e)
 		defer cancel()
 
-		log.Println("joining channel:", vip.GetString("channel"))
-		c.Cmd.Join(vip.GetString("channel"))
+		log.Println("joining channel:", ctx.Config.Channel)
+		c.Cmd.Join(ctx.Config.Channel)
 
 		time.Sleep(1 * time.Second)
 		sendGreeting(ctx)
