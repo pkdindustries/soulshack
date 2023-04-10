@@ -25,6 +25,7 @@ type Config struct {
 	Server    string
 	Port      int
 	SSL       bool
+	Addressed bool
 }
 
 type ChatContext struct {
@@ -33,8 +34,8 @@ type ChatContext struct {
 	Config      *Config
 	Client      *girc.Client
 	Event       *girc.Event
-	Args        []string
 	Session     *ChatSession
+	Args        []string
 }
 
 func PersonalityFromViper(v *vip.Viper) *Personality {
@@ -57,6 +58,7 @@ func IrcFromViper(v *vip.Viper) *Config {
 		Server:    v.GetString("server"),
 		Port:      v.GetInt("port"),
 		SSL:       v.GetBool("ssl"),
+		Addressed: v.GetBool("addressed"),
 	}
 }
 
@@ -89,7 +91,15 @@ func (c *ChatContext) Reply(message string) *ChatContext {
 }
 
 func (c *ChatContext) Valid() bool {
-	return (c.IsAddressed() || c.IsPrivate()) && len(c.Args) > 0
+	// check if the message is addressed to the bot or if being addressed is not required
+	addressed := c.IsAddressed() || !c.Config.Addressed
+	hasArguments := len(c.Args) > 0
+
+	// valid if:
+	// - the message is either addressed to the bot or being addressed is not required
+	// - or the message is private
+	// - and at least one argument
+	return (addressed || c.IsPrivate()) && hasArguments
 }
 
 func (c *ChatContext) IsPrivate() bool {
