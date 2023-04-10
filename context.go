@@ -14,7 +14,6 @@ type Personality struct {
 	Nick     string
 	Model    string
 	Goodbye  string
-	Answer   string
 }
 
 type ChatContext struct {
@@ -33,7 +32,6 @@ func NewFromViper(v *vip.Viper) *Personality {
 		Nick:     v.GetString("nick"),
 		Model:    v.GetString("model"),
 		Goodbye:  v.GetString("goodbye"),
-		Answer:   v.GetString("answer"),
 	}
 }
 

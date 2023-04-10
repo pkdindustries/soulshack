@@ -60,7 +60,6 @@ SoulShack can be configured using command line flags, environment variables, or 
 - `--greeting`: response prompt to the channel on join (default: "hello.")
 - `--goodbye`:  response prompt to the channel on part (default: "goodbye.")
 - `--prompt`: The initial character prompt for the AI, initilizes the personality
-- `--answer`: appended to prompt for conditioning the answer to a question
 
 ### Environment Variables
 
@@ -81,8 +80,7 @@ To add a new personality to SoulShack, follow these steps:
 nick: marvin
 greeting: "Explain the size of your brain compared to common household objects."
 goodbye: "goodbye."
-prompt: "respond with a text message from marvin the paranoid android:"
-answer: "catastrophically highlight all the things that can go wrong with scenerios associated with the text: "
+prompt: "you are marvin the paranoid android. respond with a short text message: "
 ```
 
 ```bash

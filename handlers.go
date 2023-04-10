@@ -34,7 +34,7 @@ func sendMessage(ctx *ChatContext, message string) {
 	ctx.Reply(message)
 }
 
-var configParams = map[string]string{"prompt": "", "model": "", "nick": "", "greeting": "", "goodbye": "", "answer": "", "directory": "", "session": ""}
+var configParams = map[string]string{"prompt": "", "model": "", "nick": "", "greeting": "", "goodbye": "", "directory": "", "session": ""}
 
 func handleSet(ctx *ChatContext) {
 
@@ -106,7 +106,6 @@ func handleSave(ctx *ChatContext) {
 	v.Set("model", ctx.Personality.Model)
 	v.Set("greeting", ctx.Personality.Greeting)
 	v.Set("goodbye", ctx.Personality.Goodbye)
-	v.Set("answer", ctx.Personality.Answer)
 
 	if err := v.WriteConfigAs(vip.GetString("directory") + "/" + filename + ".yml"); err != nil {
 		ctx.Reply(fmt.Sprintf("Error saving configuration: %s", err.Error()))

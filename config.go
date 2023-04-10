@@ -30,7 +30,6 @@ func init() {
 	root.PersistentFlags().StringP("channel", "c", "", "irc channel to join")
 	root.PersistentFlags().StringP("nick", "n", "", "bot's nickname on the irc server")
 	root.PersistentFlags().StringP("server", "s", "localhost", "irc server address")
-	root.PersistentFlags().StringP("answer", "a", "", "prompt for answering a question")
 	root.PersistentFlags().StringSliceP("admins", "A", []string{}, "comma-separated list of allowed users to administrate the bot (e.g., user1,user2,user3)")
 	root.PersistentFlags().DurationP("session", "S", time.Minute*3, "duration for the chat session; message context will be cleared after this time")
 	root.PersistentFlags().IntP("history", "H", 15, "maximum number of lines of context to keep per session")
@@ -73,7 +72,7 @@ func initConfig() {
 
 func verifyConfig(v *vip.Viper) error {
 	for _, varName := range v.AllKeys() {
-		if varName == "answer" || varName == "admins" {
+		if varName == "admins" {
 			continue
 		}
 		value := v.GetString(varName)
