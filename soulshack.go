@@ -37,7 +37,7 @@ func main() {
 
 var root = &cobra.Command{
 	Use:     "soulshack",
-	Example: "soulshack --server irc.freenode.net --port 6697 --channel '#soulshack' --ssl --openaikey ****************",
+	Example: "soulshack --nick chatbot --server irc.freenode.net --port 6697 --channel '#soulshack' --ssl --openaikey ****************",
 	Short:   getBanner(),
 	Run:     run,
 	Version: "0.42 - http://github.com/pkdindustries/soulshack",

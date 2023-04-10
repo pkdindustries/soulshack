@@ -94,12 +94,15 @@ func (s *ChatSession) trim() {
 		s.History = append(s.History[:1], s.History[len(s.History)-vip.GetInt("history"):]...)
 	}
 }
+
 func (s *ChatSession) reap() {
 	id := s.Name
 	now := time.Now()
+	duration := vip.GetDuration("session")
 	sessions.mu.Lock()
+
 	defer sessions.mu.Unlock()
-	if now.Sub(s.Last) > vip.GetDuration("session") {
+	if now.Sub(s.Last) > duration {
 		log.Printf("expired session: %s", id)
 		delete(sessions.sessionMap, id)
 	}
@@ -113,7 +116,6 @@ func (chats *Chats) Get(id string) *ChatSession {
 		return v
 	}
 
-	log.Println("creating new session for", id)
 	session := &ChatSession{
 		Name: id,
 		Last: time.Now(),

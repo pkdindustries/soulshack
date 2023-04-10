@@ -19,7 +19,7 @@ func ChatCompletionTask(ctx *ChatContext) <-chan *string {
 	return ch
 }
 
-func getChatCompletionStream(cc *ChatContext, channel chan *string) {
+func getChatCompletionStream(cc *ChatContext, channel chan<- *string) {
 	defer close(channel)
 	log.Printf("completing: messages %d, maxtokens %d, model %s",
 		len(cc.Session.History),

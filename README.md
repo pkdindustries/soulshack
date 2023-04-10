@@ -39,7 +39,7 @@ docker build . -t soulshack:dev
 ## Usage
 
 ```bash
-soulshack --server server --port port --channel '#channelname' --become personality --ssl 
+soulshack --nick chatbot --server irc.freenode.net --port 6697 --channel '#soulshack' --ssl --openaikey ****************
 ```
 
 ## Configuration
@@ -47,19 +47,36 @@ soulshack --server server --port port --channel '#channelname' --become personal
 SoulShack can be configured using command line flags, environment variables, or personality configuration files. It uses Viper to manage configuration settings.
 
 ### Flags
+```
+Usage:
+  soulshack [flags]
 
-- `--server`: The IRC server address (default: "localhost")
-- `--port`: The IRC server port (default: 6667)
-- `--ssl`: Enable SSL for the IRC connection (default: false)
-- `--channel`: The IRC channel to join
-- `--openaikey`: Your OpenAI API key
-- `--become`: The named personality to adopt (default: "chatbot")
-- `--nick`: The bot's nickname on the IRC server
-- `--model`: The AI model to use for generating responses (default: GPT-4)
-- `--maxtokens`: The maximum number of tokens to generate with the OpenAI model (default: 512)
-- `--greeting`: response prompt to the channel on join (default: "hello.")
-- `--goodbye`:  response prompt to the channel on part (default: "goodbye.")
-- `--prompt`: The initial character prompt for the AI, initilizes the personality
+Examples:
+soulshack --nick chatbot --server irc.freenode.net --port 6697 --channel '#soulshack' --ssl --openaikey ****************
+
+Flags:
+  -A, --admins strings     comma-separated list of allowed users to administrate the bot (e.g., user1,user2,user3)
+  -b, --become string      become the named personality (default "chatbot")
+  -c, --channel string     irc channel to join
+  -d, --directory string   personalities configuration directory (default "./personalities")
+      --goodbye string     prompt to be used when the bot leaves the channel (default "goodbye.")
+      --greeting string    prompt to be used when the bot joins the channel (default "hello.")
+  -h, --help               help for soulshack
+  -H, --history int        maximum number of lines of context to keep per session (default 15)
+  -l, --list               list configured personalities
+      --maxtokens int      maximum number of tokens to generate (default 512)
+      --model string       model to be used for responses (e.g., gpt-4 (default "gpt-4")
+  -n, --nick string        bot's nickname on the irc server
+      --openaikey string   openai api key
+  -p, --port int           irc server port (default 6667)
+      --prompt string      initial system prompt for the ai
+  -s, --server string      irc server address (default "localhost")
+  -S, --session duration   duration for the chat session; message context will be cleared after this time (default 3m0s)
+  -e, --ssl                enable SSL for the IRC connection
+  -t, --timeout duration   timeout for each completion request to openai (default 30s)
+  -v, --verbose            enable verbose logging of sessions and configuration
+      --version            version for soulshack
+```
 
 ### Environment Variables
 
