@@ -41,19 +41,15 @@ func chatCompletionStream(cc *ChatContext, channel chan<- *string) {
 	defer stream.Close()
 
 	buffer := bytes.Buffer{}
-	size := 350
+	const size = 350
 
 	for {
 		response, err := stream.Recv()
 
-		if errors.Is(err, io.EOF) {
-			log.Println("completion: finished")
-			send(buffer.String(), channel)
-			break
-		}
-
 		if err != nil {
-			senderror(err, channel)
+			if !errors.Is(err, io.EOF) {
+				senderror(err, channel)
+			}
 			send(buffer.String(), channel)
 			return
 		}
@@ -69,22 +65,21 @@ func chatCompletionStream(cc *ChatContext, channel chan<- *string) {
 				break
 			}
 		}
-
 	}
 }
 
-func chunkable(buffer *bytes.Buffer, chunksize int) (bool, string) {
-	index := bytes.IndexByte(buffer.Bytes(), '\n')
+func chunkable(b *bytes.Buffer, chunksize int) (bool, string) {
+	index := bytes.IndexByte(b.Bytes(), '\n')
 	if index != -1 && index < chunksize {
-		chunk := buffer.Next(index + 1)
+		chunk := b.Next(index + 1)
 		return true, string(chunk)
 	}
 
-	if buffer.Len() < chunksize {
+	if b.Len() < chunksize {
 		return false, ""
 	}
 
-	chunk := buffer.Next(chunksize)
+	chunk := b.Next(chunksize)
 	return true, string(chunk)
 }
 

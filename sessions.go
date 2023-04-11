@@ -63,11 +63,6 @@ func (s *ChatSession) Debug() {
 	}
 }
 
-// pretty print sessions
-func (s *ChatSession) stats() {
-	log.Printf("session '%s':  messages %d, characters %d, idle: %s", s.Name, len(s.History), s.Totalchars, time.Since(s.Last))
-}
-
 func (s *ChatSession) Message(ctx *ChatContext, role string, message string) *ChatSession {
 	s.mu.Lock()
 	defer s.mu.Unlock()
