@@ -50,7 +50,7 @@ func (s *ChatSession) GetHistory() []ai.ChatCompletionMessage {
 // show string of all msg contents
 func (s *ChatSession) Debug() {
 	s.mu.RLock()
-	defer s.mu.Unlock()
+	defer s.mu.RUnlock()
 	for _, msg := range s.History {
 		ds := ""
 		if msg.Role == ai.ChatMessageRoleAssistant {
