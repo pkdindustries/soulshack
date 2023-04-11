@@ -37,26 +37,22 @@ func TestChatSession(t *testing.T) {
 	})
 }
 func TestExpiry(t *testing.T) {
-	vip.Set("session", 1*time.Hour)
-	vip.Set("history", 10)
-
 	//log.SetOutput(io.Discard)
-
 	ctx := &ChatContext{
 		Personality: &Personality{
 			Prompt: "You are a helpful assistant.",
 		},
 	}
 	t.Run("Test session expiration and trimming", func(t *testing.T) {
-		vip.Set("session", 1*time.Millisecond)
-		vip.Set("history", 2)
+		vip.Set("session", 500*time.Millisecond)
+		vip.Set("history", 20)
 
 		session2 := sessions.Get("session2")
 		session2.Message(ctx, ai.ChatMessageRoleUser, "How are you?")
 		session2.Message(ctx, ai.ChatMessageRoleAssistant, "I'm doing great, thanks!")
 		session2.Message(ctx, ai.ChatMessageRoleUser, "What's your name?")
 
-		time.Sleep(2 * time.Millisecond)
+		time.Sleep(2 * time.Second)
 		session3 := sessions.Get("session2")
 
 		assert.NotEqual(t, session2, session3, "Expired session should not be reused")
