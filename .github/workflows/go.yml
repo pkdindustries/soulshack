@@ -56,6 +56,12 @@ jobs:
         GOARCH: arm64
       run: go build -o ${{ github.event.repository.name }}-darwin-arm64 ./...
 
+    - name: Build release - Windows amd64
+      env:
+        GOOS: windows
+        GOARCH: amd64
+      run: go build -o ${{ github.event.repository.name }}-windows-amd64.exe ./...
+
     - name: Upload linux amd64 binary
       uses: actions/upload-artifact@v3.1.2
       with:
@@ -73,6 +79,12 @@ jobs:
       with:
         name: ${{ github.event.repository.name }}-darwin-arm64
         path: ${{ github.event.repository.name }}-darwin-arm64
+    
+    - name: Upload Windows amd64 binary
+      uses: actions/upload-artifact@v3.1.2
+      with:
+        name: ${{ github.event.repository.name }}-windows-amd64.exe
+        path: ${{ github.event.repository.name }}-windows-amd64.exe
 
     - name: Package personalities directory
       run: tar czf personalities.tar.gz personalities/
@@ -131,6 +143,16 @@ jobs:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
         asset_path: ${{ github.event.repository.name }}-darwin-arm64
         asset_name: ${{ github.event.repository.name }}-darwin-arm64
+        asset_content_type: application/octet-stream
+
+    - name: Attach Artifacts to Release
+      uses: actions/upload-release-asset@v1.0.2
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ${{ github.event.repository.name }}-windows-amd64.exe
+        asset_name: ${{ github.event.repository.name }}-windows-amd64.exe
         asset_content_type: application/octet-stream
 
     - name: Attach personalities tarball to Release
