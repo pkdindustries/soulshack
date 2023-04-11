@@ -34,7 +34,7 @@ func sendMessage(ctx *ChatContext, message string) {
 	ctx.Reply(message)
 }
 
-var configParams = map[string]string{"prompt": "", "model": "", "nick": "", "greeting": "", "goodbye": "", "directory": "", "session": ""}
+var configParams = map[string]string{"prompt": "", "model": "", "nick": "", "greeting": "", "goodbye": "", "directory": "", "session": "", "addressed": ""}
 
 func handleSet(ctx *ChatContext) {
 
