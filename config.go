@@ -38,7 +38,7 @@ func init() {
 	root.PersistentFlags().StringP("directory", "d", "./personalities", "personalities configuration directory")
 	root.PersistentFlags().BoolP("verbose", "v", false, "enable verbose logging of sessions and configuration")
 	root.PersistentFlags().BoolP("addressed", "a", true, "require bot be addressed by nick for response")
-	root.PersistentFlags().DurationP("chunkdelay", "C", time.Second*7, "after this delay, bot will look to split the incoming buffer on sentence boundaries")
+	root.PersistentFlags().DurationP("chunkdelay", "C", time.Second*5, "after this delay, bot will look to split the incoming buffer on sentence boundaries")
 	root.PersistentFlags().IntP("chunkmax", "m", 350, "maximum number of characters to send as a single message")
 
 	vip.BindPFlags(root.PersistentFlags())

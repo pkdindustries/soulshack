@@ -181,23 +181,18 @@ func BenchmarkSessionStress(b *testing.B) {
 
 			for i := 0; i < b.N; i++ {
 
-				const sessionsPerUser = 5
+				const sessionsPerUser = 50
 				const messagesPerUser = 50
-				const testDuration = 5 * time.Second
 
 				var wg sync.WaitGroup
 				wg.Add(concurrentUsers)
-
-				startTime := time.Now()
 
 				for i := 0; i < concurrentUsers; i++ {
 					go func(userIndex int) {
 						defer wg.Done()
 
-						endTime := startTime.Add(testDuration)
-
-						for time.Now().Before(endTime) {
-							sessionID := fmt.Sprintf("session%d-%d", userIndex, rand.Intn(sessionsPerUser))
+						for k := 0; k < sessionsPerUser; k++ {
+							sessionID := fmt.Sprintf("session%d-%d", userIndex, k)
 							session := sessions.Get(sessionID)
 
 							action := rand.Intn(4)

@@ -43,6 +43,7 @@ func chatCompletionStream(cc *ChatContext, channel chan<- *string) {
 		Last:     time.Now(),
 		Boundary: boundary,
 		Timeout:  cc.Session.Config.Chunkdelay,
+		Buffer:   &bytes.Buffer{},
 	}
 
 	for {
@@ -59,7 +60,7 @@ func chatCompletionStream(cc *ChatContext, channel chan<- *string) {
 		}
 		for {
 			if ready, chunk := chunker.Chunk(); ready {
-				send(chunk, channel)
+				send(string(*chunk), channel)
 			} else {
 				break
 			}
@@ -79,42 +80,46 @@ func send(chunk string, channel chan<- *string) {
 type Chunker struct {
 	Size     int
 	Last     time.Time
-	Buffer   bytes.Buffer
-	Boundary regexp.Regexp
+	Buffer   *bytes.Buffer
+	Boundary *regexp.Regexp
 	Timeout  time.Duration
 }
 
-var boundary = *regexp.MustCompile(`(?m)[.:!?]\s`)
+var boundary = regexp.MustCompile(`[.:!?][ \t]`)
 
-func (c *Chunker) Chunk() (bool, string) {
+func (c *Chunker) Chunk() (bool, *[]byte) {
 
-	// chunk if n seconds have passed since the last chunk
-	if time.Since(c.Last) >= c.Timeout {
-		content := c.Buffer.String()
-		indices := c.Boundary.FindAllStringIndex(content, -1)
-		if len(indices) > 0 {
-			last := indices[len(indices)-1]
-			chunk := c.Buffer.Next(last[1])
-			c.Last = time.Now()
-			return true, string(chunk)
-		}
+	// always chunk on a newline in first chunksize
+	buffer := c.Buffer.Bytes()
+	end := c.Size
+	if len(buffer) < c.Size {
+		end = len(buffer)
 	}
-
-	// always chunk on a newline in the buffer
-	index := bytes.IndexByte(c.Buffer.Bytes(), '\n')
-	if index != -1 && index < c.Size {
+	index := bytes.IndexByte(buffer[:end], '\n')
+	if index != -1 {
 		chunk := c.Buffer.Next(index + 1)
 		c.Last = time.Now()
-		return true, string(chunk)
+		return true, &chunk
+	}
+
+	// chunk on boundary if n seconds have passed since the last chunk
+	if time.Since(c.Last) >= c.Timeout {
+		content := c.Buffer.String()
+		indices := c.Boundary.FindStringIndex(content[:end])
+		if len(indices) > 0 {
+			chunk := c.Buffer.Next(indices[1])
+			c.Last = time.Now()
+			return true, &chunk
+		}
 	}
 
 	// chunk if full buffer satisfies chunk size
 	if c.Buffer.Len() >= c.Size {
 		chunk := c.Buffer.Next(c.Size)
 		c.Last = time.Now()
-		return true, string(chunk)
+		return true, &chunk
 	}
 
-	return false, ""
-
+	// no chunk
+	return false, nil
 }

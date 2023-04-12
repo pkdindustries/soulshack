@@ -10,32 +10,32 @@ import (
 )
 
 func TestChunker_Chunk(t *testing.T) {
-	boundary := *regexp.MustCompile(`(?m)[.:!?]\s`)
+	boundary := regexp.MustCompile(`[.:!?][ \t]`)
 	timeout := 1000 * time.Millisecond
 
 	tests := []struct {
 		name     string
 		input    string
 		size     int
-		expected string
+		expected []byte
 	}{
 		{
 			name:     "chunk on newline",
 			input:    "Hello\nworld",
 			size:     350,
-			expected: "Hello\n",
+			expected: []byte("Hello\n"),
 		},
 		{
 			name:     "chunk on buffer size",
 			input:    "Hello",
 			size:     5,
-			expected: "Hello",
+			expected: []byte("Hello"),
 		},
 		{
 			name:     "no chunk",
 			input:    "Hello",
 			size:     10,
-			expected: "",
+			expected: []byte(""),
 		},
 	}
 
@@ -44,14 +44,14 @@ func TestChunker_Chunk(t *testing.T) {
 			c := &Chunker{
 				Size:     tt.size,
 				Last:     time.Now(),
-				Buffer:   bytes.Buffer{},
+				Buffer:   &bytes.Buffer{},
 				Boundary: boundary,
 				Timeout:  timeout,
 			}
 			c.Buffer.WriteString(tt.input)
 
 			chunked, chunk := c.Chunk()
-			if chunked && chunk != tt.expected {
+			if chunked && string(*chunk) != string(tt.expected) {
 				t.Errorf("Chunk() got = %v, want = %v", chunk, tt.expected)
 			}
 		})
@@ -60,13 +60,13 @@ func TestChunker_Chunk(t *testing.T) {
 
 // Test for chunking based on timeout
 func TestChunker_Chunk_Timeout(t *testing.T) {
-	boundary := *regexp.MustCompile(`(?m)[.:!?]\s`)
+	boundary := regexp.MustCompile(`[.:!?][ \t]`)
 	timeout := 100 * time.Millisecond
 
 	c := &Chunker{
-		Size:     10,
+		Size:     50,
 		Last:     time.Now(),
-		Buffer:   bytes.Buffer{},
+		Buffer:   &bytes.Buffer{},
 		Boundary: boundary,
 		Timeout:  timeout,
 	}
@@ -76,14 +76,14 @@ func TestChunker_Chunk_Timeout(t *testing.T) {
 	time.Sleep(500 * time.Millisecond)
 
 	chunked, chunk := c.Chunk()
-	expected := "Hello world! "
-	if chunked && chunk != expected {
+	expected := []byte("Hello world! ")
+	if chunked && string(*chunk) != string(expected) {
 		t.Errorf("Chunk() got = %v, want = %v", chunk, expected)
 	}
 }
 
 func generateRandomText(size int) string {
-	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789      ............!?\n\n\n\n\n\n\n\n\n\n\n"
+	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789                   ............!?\n"
 	result := make([]byte, size)
 	for i := range result {
 		result[i] = charset[rand.Intn(len(charset))]
@@ -92,22 +92,21 @@ func generateRandomText(size int) string {
 }
 
 func BenchmarkChunker_StressTest(b *testing.B) {
-	boundary := *regexp.MustCompile(`(?m)[.:!?]\s`)
-	timeout := 1000 * time.Millisecond
-
+	boundary := regexp.MustCompile(`[.:!?][ \t]`)
+	timeout := 1 * time.Nanosecond
 	// Test with different buffer sizes
 	bufferSizes := []int{500, 1000, 5000, 10000}
 
 	for _, bufSize := range bufferSizes {
 		// Generate random text
-		text := generateRandomText(bufSize * 10)
-
+		text := generateRandomText(bufSize)
+		b.ResetTimer()
 		b.Run(fmt.Sprintf("StressTest_BufferSize_%d", bufSize), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				c := &Chunker{
-					Size:     bufSize,
+					Size:     40,
 					Last:     time.Now(),
-					Buffer:   bytes.Buffer{},
+					Buffer:   &bytes.Buffer{},
 					Boundary: boundary,
 					Timeout:  timeout,
 				}
