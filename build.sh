@@ -6,4 +6,4 @@ fi
 
 echo "building with tag: $TAG"
 
-docker build . -t $TAG
+docker build . -t "$TAG"

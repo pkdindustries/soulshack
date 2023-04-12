@@ -163,7 +163,7 @@ func TestSingleSessionConcurrency(t *testing.T) {
 	})
 }
 
-func TestStress(t *testing.T) {
+func BenchmarkSessionStress(b *testing.B) {
 	vip.Set("session", 1*time.Second) // Short session duration to trigger more expirations
 	vip.Set("history", 5)             // Shorter history length to trigger more trimming
 
@@ -174,52 +174,54 @@ func TestStress(t *testing.T) {
 	}
 	log.SetOutput(io.Discard)
 
-	t.Run("stress", func(t *testing.T) {
+	concurrentUsers := []int{10, 100, 1000}
+	for _, concurrentUsers := range concurrentUsers {
 
-		const concurrentUsers = 1000
-		const sessionsPerUser = 5
-		const messagesPerUser = 50
-		const testDuration = 5 * time.Second
+		b.Run(fmt.Sprintf("SessionStress_%d", concurrentUsers), func(b *testing.B) {
 
-		var wg sync.WaitGroup
-		wg.Add(concurrentUsers)
+			for i := 0; i < b.N; i++ {
 
-		startTime := time.Now()
+				const sessionsPerUser = 5
+				const messagesPerUser = 50
+				const testDuration = 5 * time.Second
 
-		for i := 0; i < concurrentUsers; i++ {
-			go func(userIndex int) {
-				defer wg.Done()
+				var wg sync.WaitGroup
+				wg.Add(concurrentUsers)
 
-				endTime := startTime.Add(testDuration)
+				startTime := time.Now()
 
-				for time.Now().Before(endTime) {
-					sessionID := fmt.Sprintf("session%d-%d", userIndex, rand.Intn(sessionsPerUser))
-					session := sessions.Get(sessionID)
+				for i := 0; i < concurrentUsers; i++ {
+					go func(userIndex int) {
+						defer wg.Done()
 
-					action := rand.Intn(4)
+						endTime := startTime.Add(testDuration)
 
-					switch action {
-					case 0: // Add user message
-						for j := 0; j < messagesPerUser; j++ {
-							session.Message(ctx, ai.ChatMessageRoleUser, fmt.Sprintf("User %d message %d", userIndex, j))
+						for time.Now().Before(endTime) {
+							sessionID := fmt.Sprintf("session%d-%d", userIndex, rand.Intn(sessionsPerUser))
+							session := sessions.Get(sessionID)
+
+							action := rand.Intn(4)
+
+							switch action {
+							case 0: // Add user message
+								for j := 0; j < messagesPerUser; j++ {
+									session.Message(ctx, ai.ChatMessageRoleUser, fmt.Sprintf("User %d message %d", userIndex, j))
+								}
+							case 1: // Add assistant message
+								for j := 0; j < messagesPerUser; j++ {
+									session.Message(ctx, ai.ChatMessageRoleAssistant, fmt.Sprintf("Assistant response to user %d message %d", userIndex, j))
+								}
+							case 2: // Reset the session
+								session.Reset()
+							case 3: // Expire the session
+								session.Reap()
+							}
 						}
-					case 1: // Add assistant message
-						for j := 0; j < messagesPerUser; j++ {
-							session.Message(ctx, ai.ChatMessageRoleAssistant, fmt.Sprintf("Assistant response to user %d message %d", userIndex, j))
-						}
-					case 2: // Reset the session
-						session.Reset()
-					case 3: // Expire the session
-						session.Reap()
-					}
+					}(i)
 				}
-			}(i)
-		}
 
-		wg.Wait()
-		elapsedTime := time.Since(startTime)
-		totalMessages := concurrentUsers * messagesPerUser * 2
-		messagesPerSecond := float64(totalMessages) / elapsedTime.Seconds()
-		t.Logf("Processed %d messages in %v, which is %.2f messages per second\n", totalMessages, elapsedTime, messagesPerSecond)
-	})
+				wg.Wait()
+			}
+		})
+	}
 }
