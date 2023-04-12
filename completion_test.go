@@ -4,13 +4,11 @@ import (
 	"bytes"
 	"fmt"
 	"math/rand"
-	"regexp"
 	"testing"
 	"time"
 )
 
 func TestChunker_Chunk(t *testing.T) {
-	boundary := regexp.MustCompile(`[.:!?][ \t]`)
 	timeout := 1000 * time.Millisecond
 
 	tests := []struct {
@@ -42,11 +40,10 @@ func TestChunker_Chunk(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := &Chunker{
-				Size:     tt.size,
-				Last:     time.Now(),
-				Buffer:   &bytes.Buffer{},
-				Boundary: boundary,
-				Timeout:  timeout,
+				Size:    tt.size,
+				Last:    time.Now(),
+				Buffer:  &bytes.Buffer{},
+				Timeout: timeout,
 			}
 			c.Buffer.WriteString(tt.input)
 
@@ -60,15 +57,13 @@ func TestChunker_Chunk(t *testing.T) {
 
 // Test for chunking based on timeout
 func TestChunker_Chunk_Timeout(t *testing.T) {
-	boundary := regexp.MustCompile(`[.:!?][ \t]`)
 	timeout := 100 * time.Millisecond
 
 	c := &Chunker{
-		Size:     50,
-		Last:     time.Now(),
-		Buffer:   &bytes.Buffer{},
-		Boundary: boundary,
-		Timeout:  timeout,
+		Size:    50,
+		Last:    time.Now(),
+		Buffer:  &bytes.Buffer{},
+		Timeout: timeout,
 	}
 	c.Buffer.WriteString("Hello world! How are you?")
 
@@ -92,7 +87,6 @@ func generateRandomText(size int) string {
 }
 
 func BenchmarkChunker_StressTest(b *testing.B) {
-	boundary := regexp.MustCompile(`[.:!?][ \t]`)
 	timeout := 1 * time.Nanosecond
 	// Test with different buffer sizes
 	bufferSizes := []int{500, 1000, 5000, 10000}
@@ -104,11 +98,10 @@ func BenchmarkChunker_StressTest(b *testing.B) {
 		b.Run(fmt.Sprintf("StressTest_BufferSize_%d", bufSize), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				c := &Chunker{
-					Size:     40,
-					Last:     time.Now(),
-					Buffer:   &bytes.Buffer{},
-					Boundary: boundary,
-					Timeout:  timeout,
+					Size:    40,
+					Last:    time.Now(),
+					Buffer:  &bytes.Buffer{},
+					Timeout: timeout,
 				}
 				c.Buffer.WriteString(text)
 

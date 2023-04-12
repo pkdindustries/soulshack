@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"regexp"
 	"time"
 
 	ai "github.com/sashabaranov/go-openai"
@@ -39,11 +38,10 @@ func chatCompletionStream(cc *ChatContext, channel chan<- *string) {
 
 	defer stream.Close()
 	chunker := &Chunker{
-		Size:     cc.Session.Config.Chunkmax,
-		Last:     time.Now(),
-		Boundary: boundary,
-		Timeout:  cc.Session.Config.Chunkdelay,
-		Buffer:   &bytes.Buffer{},
+		Size:    cc.Session.Config.Chunkmax,
+		Last:    time.Now(),
+		Timeout: cc.Session.Config.Chunkdelay,
+		Buffer:  &bytes.Buffer{},
 	}
 
 	for {
@@ -78,14 +76,11 @@ func send(chunk string, channel chan<- *string) {
 }
 
 type Chunker struct {
-	Size     int
-	Last     time.Time
-	Buffer   *bytes.Buffer
-	Boundary *regexp.Regexp
-	Timeout  time.Duration
+	Size    int
+	Last    time.Time
+	Buffer  *bytes.Buffer
+	Timeout time.Duration
 }
-
-var boundary = regexp.MustCompile(`[.:!?][ \t]`)
 
 func (c *Chunker) Chunk() (bool, *[]byte) {
 
@@ -104,10 +99,10 @@ func (c *Chunker) Chunk() (bool, *[]byte) {
 
 	// chunk on boundary if n seconds have passed since the last chunk
 	if time.Since(c.Last) >= c.Timeout {
-		content := c.Buffer.String()
-		indices := c.Boundary.FindStringIndex(content[:end])
-		if len(indices) > 0 {
-			chunk := c.Buffer.Next(indices[1])
+		content := c.Buffer.Bytes()
+		index := c.Boundary(&content)
+		if index != -1 {
+			chunk := c.Buffer.Next(index + 1)
 			c.Last = time.Now()
 			return true, &chunk
 		}
@@ -122,4 +117,12 @@ func (c *Chunker) Chunk() (bool, *[]byte) {
 
 	// no chunk
 	return false, nil
+}
+func (c *Chunker) Boundary(s *[]byte) int {
+	for i := 0; i < len(*s)-1; i++ {
+		if ((*s)[i] == '.' || (*s)[i] == ':' || (*s)[i] == '!' || (*s)[i] == '?') && ((*s)[i+1] == ' ' || (*s)[i+1] == '\t') {
+			return i + 1
+		}
+	}
+	return -1
 }
