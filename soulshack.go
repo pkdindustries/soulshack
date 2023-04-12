@@ -45,11 +45,11 @@ var root = &cobra.Command{
 
 func run(r *cobra.Command, _ []string) {
 
+	aiClient := ai.NewClient(vip.GetString("openaikey"))
+
 	if err := verifyConfig(vip.GetViper()); err != nil {
 		log.Fatal(err)
 	}
-
-	aiClient := ai.NewClient(vip.GetString("openaikey"))
 
 	irc := girc.New(girc.Config{
 		Server:    vip.GetString("server"),
