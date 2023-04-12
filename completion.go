@@ -5,12 +5,11 @@ import (
 	"context"
 	"errors"
 	"io"
-	"log"
+	"regexp"
+	"time"
 
 	ai "github.com/sashabaranov/go-openai"
 )
-
-var aiClient *ai.Client
 
 func ChatCompletionTask(ctx *ChatContext) <-chan *string {
 	ch := make(chan *string)
@@ -21,12 +20,12 @@ func ChatCompletionTask(ctx *ChatContext) <-chan *string {
 func chatCompletionStream(cc *ChatContext, channel chan<- *string) {
 
 	defer close(channel)
-	logcompletion(cc)
+	cc.Stats()
 
 	ctx, cancel := context.WithTimeout(cc, cc.Session.Config.ClientTimeout)
 	defer cancel()
 
-	stream, err := aiClient.CreateChatCompletionStream(ctx, ai.ChatCompletionRequest{
+	stream, err := cc.AI.CreateChatCompletionStream(ctx, ai.ChatCompletionRequest{
 		MaxTokens: cc.Session.Config.MaxTokens,
 		Model:     cc.Personality.Model,
 		Messages:  cc.Session.GetHistory(),
@@ -39,48 +38,33 @@ func chatCompletionStream(cc *ChatContext, channel chan<- *string) {
 	}
 
 	defer stream.Close()
-
-	buffer := bytes.Buffer{}
-	const size = 350
+	chunker := &Chunker{
+		Size:     cc.Session.Config.Chunkmax,
+		Last:     time.Now(),
+		Boundary: boundary,
+		Timeout:  cc.Session.Config.Chunkdelay,
+	}
 
 	for {
 		response, err := stream.Recv()
-
 		if err != nil {
 			if !errors.Is(err, io.EOF) {
 				senderror(err, channel)
 			}
-			send(buffer.String(), channel)
+			send(chunker.Buffer.String(), channel)
 			return
 		}
-
 		if len(response.Choices) != 0 {
-			buffer.WriteString(response.Choices[0].Delta.Content)
+			chunker.Buffer.WriteString(response.Choices[0].Delta.Content)
 		}
-
 		for {
-			if ready, chunk := chunkable(&buffer, size); ready {
+			if ready, chunk := chunker.Chunk(); ready {
 				send(chunk, channel)
 			} else {
 				break
 			}
 		}
 	}
-}
-
-func chunkable(b *bytes.Buffer, chunksize int) (bool, string) {
-	index := bytes.IndexByte(b.Bytes(), '\n')
-	if index != -1 && index < chunksize {
-		chunk := b.Next(index + 1)
-		return true, string(chunk)
-	}
-
-	if b.Len() < chunksize {
-		return false, ""
-	}
-
-	chunk := b.Next(chunksize)
-	return true, string(chunk)
 }
 
 func senderror(err error, channel chan<- *string) {
@@ -92,14 +76,45 @@ func send(chunk string, channel chan<- *string) {
 	channel <- &chunk
 }
 
-func logcompletion(cc *ChatContext) {
-	log.Printf("completion: messages %d, bytes %d, maxtokens %d, model %s",
-		len(cc.Session.GetHistory()),
-		cc.Session.Totalchars,
-		cc.Session.Config.MaxTokens,
-		cc.Personality.Model)
+type Chunker struct {
+	Size     int
+	Last     time.Time
+	Buffer   bytes.Buffer
+	Boundary regexp.Regexp
+	Timeout  time.Duration
+}
 
-	if cc.Config.Verbose {
-		cc.Session.Debug()
+var boundary = *regexp.MustCompile(`(?m)[.:!?]\s`)
+
+func (c *Chunker) Chunk() (bool, string) {
+
+	// chunk if n seconds have passed since the last chunk
+	if time.Since(c.Last) >= c.Timeout {
+		content := c.Buffer.String()
+		indices := c.Boundary.FindAllStringIndex(content, -1)
+		if len(indices) > 0 {
+			last := indices[len(indices)-1]
+			chunk := c.Buffer.Next(last[1])
+			c.Last = time.Now()
+			return true, string(chunk)
+		}
 	}
+
+	// always chunk on a newline in the buffer
+	index := bytes.IndexByte(c.Buffer.Bytes(), '\n')
+	if index != -1 && index < c.Size {
+		chunk := c.Buffer.Next(index + 1)
+		c.Last = time.Now()
+		return true, string(chunk)
+	}
+
+	// chunk if full buffer satisfies chunk size
+	if c.Buffer.Len() >= c.Size {
+		chunk := c.Buffer.Next(c.Size)
+		c.Last = time.Now()
+		return true, string(chunk)
+	}
+
+	return false, ""
+
 }

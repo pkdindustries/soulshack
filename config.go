@@ -25,19 +25,22 @@ func init() {
 	root.PersistentFlags().String("greeting", "hello.", "prompt to be used when the bot joins the channel")
 	root.PersistentFlags().String("model", ai.GPT4, "model to be used for responses (e.g., gpt-4")
 	root.PersistentFlags().String("openaikey", "", "openai api key")
-	root.PersistentFlags().String("prompt", "", "initial system prompt for the ai")
+	root.PersistentFlags().String("prompt", "respond in a short text:", "initial system prompt for the ai")
 	root.PersistentFlags().StringP("become", "b", "chatbot", "become the named personality")
 	root.PersistentFlags().StringP("channel", "c", "", "irc channel to join")
-	root.PersistentFlags().StringP("nick", "n", "", "bot's nickname on the irc server")
+	root.PersistentFlags().StringP("nick", "n", "soulshack", "bot's nickname on the irc server")
 	root.PersistentFlags().StringP("server", "s", "localhost", "irc server address")
 	root.PersistentFlags().StringSliceP("admins", "A", []string{}, "comma-separated list of allowed users to administrate the bot (e.g., user1,user2,user3)")
 	root.PersistentFlags().DurationP("session", "S", time.Minute*3, "duration for the chat session; message context will be cleared after this time")
 	root.PersistentFlags().IntP("history", "H", 15, "maximum number of lines of context to keep per session")
-	root.PersistentFlags().DurationP("timeout", "t", time.Second*30, "timeout for each completion request to openai")
+	root.PersistentFlags().DurationP("timeout", "t", time.Second*60, "timeout for each completion request to openai")
 	root.PersistentFlags().BoolP("list", "l", false, "list configured personalities")
 	root.PersistentFlags().StringP("directory", "d", "./personalities", "personalities configuration directory")
 	root.PersistentFlags().BoolP("verbose", "v", false, "enable verbose logging of sessions and configuration")
 	root.PersistentFlags().BoolP("addressed", "a", true, "require bot be addressed by nick for response")
+	root.PersistentFlags().DurationP("chunkdelay", "C", time.Second*7, "after this delay, bot will look to split the incoming buffer on sentence boundaries")
+	root.PersistentFlags().IntP("chunkmax", "m", 350, "maximum number of characters to send as a single message")
+
 	vip.BindPFlags(root.PersistentFlags())
 
 	vip.SetEnvPrefix("SOULSHACK")
@@ -49,7 +52,7 @@ func initConfig() {
 	fmt.Println(getBanner())
 
 	if _, err := os.Stat(vip.GetString("directory")); errors.Is(err, fs.ErrNotExist) {
-		log.Printf("! configuration directory %s does not exist", vip.GetString("directory"))
+		log.Printf("? configuration directory %s does not exist", vip.GetString("directory"))
 	}
 
 	if vip.GetBool("list") {
@@ -62,10 +65,10 @@ func initConfig() {
 	vip.SetConfigName(vip.GetString("become"))
 
 	if err := vip.ReadInConfig(); err != nil {
-		log.Println(err)
-		log.Fatalln("! no personality found:", vip.GetString("become"))
+		log.Println("? no personality file found:", vip.GetString("become"))
+	} else {
+		log.Println("using personality file:", vip.ConfigFileUsed())
 	}
-	log.Println("using personality file:", vip.ConfigFileUsed())
 }
 
 func verifyConfig(v *vip.Viper) error {

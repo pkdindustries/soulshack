@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"log"
 	"strings"
 
 	"github.com/lrstanley/girc"
+	ai "github.com/sashabaranov/go-openai"
 	vip "github.com/spf13/viper"
 )
 
@@ -30,6 +32,7 @@ type Config struct {
 
 type ChatContext struct {
 	context.Context
+	AI          *ai.Client
 	Personality *Personality
 	Config      *Config
 	Client      *girc.Client
@@ -85,6 +88,14 @@ func (c *ChatContext) IsAdmin() bool {
 	return false
 }
 
+func (c *ChatContext) Stats() {
+	log.Printf("session: messages %d, bytes %d, maxtokens %d, model %s",
+		len(c.Session.GetHistory()),
+		c.Session.Totalchars,
+		c.Session.Config.MaxTokens,
+		c.Personality.Model)
+}
+
 func (c *ChatContext) Reply(message string) *ChatContext {
 	c.Client.Cmd.Reply(*c.Event, message)
 	return c
@@ -110,11 +121,12 @@ func (c *ChatContext) GetCommand() string {
 	return strings.ToLower(c.Args[0])
 }
 
-func createChatContext(parent context.Context, v *vip.Viper, c *girc.Client, e *girc.Event) (*ChatContext, context.CancelFunc) {
+func CreateChatContext(parent context.Context, ai *ai.Client, v *vip.Viper, c *girc.Client, e *girc.Event) (*ChatContext, context.CancelFunc) {
 	timedctx, cancel := context.WithTimeout(parent, v.GetDuration("timeout"))
 
 	ctx := &ChatContext{
 		Context:     timedctx,
+		AI:          ai,
 		Client:      c,
 		Event:       e,
 		Args:        strings.Fields(e.Last()),

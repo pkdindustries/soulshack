@@ -25,6 +25,8 @@ type SessionConfig struct {
 	SessionTimeout time.Duration
 	MaxHistory     int
 	ClientTimeout  time.Duration
+	Chunkdelay     time.Duration
+	Chunkmax       int
 }
 
 type ChatSession struct {
@@ -129,6 +131,8 @@ func (chats *Chats) Get(id string) *ChatSession {
 			SessionTimeout: vip.GetDuration("session"),
 			MaxHistory:     vip.GetInt("history"),
 			ClientTimeout:  vip.GetDuration("timeout"),
+			Chunkdelay:     vip.GetDuration("chunkdelay"),
+			Chunkmax:       vip.GetInt("chunkmax"),
 		},
 	}
 

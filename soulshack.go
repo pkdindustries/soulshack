@@ -45,11 +45,11 @@ var root = &cobra.Command{
 
 func run(r *cobra.Command, _ []string) {
 
-	aiClient = ai.NewClient(vip.GetString("openaikey"))
-
 	if err := verifyConfig(vip.GetViper()); err != nil {
 		log.Fatal(err)
 	}
+
+	aiClient := ai.NewClient(vip.GetString("openaikey"))
 
 	irc := girc.New(girc.Config{
 		Server:    vip.GetString("server"),
@@ -62,7 +62,7 @@ func run(r *cobra.Command, _ []string) {
 	})
 
 	irc.Handlers.AddBg(girc.CONNECTED, func(c *girc.Client, e girc.Event) {
-		ctx, cancel := createChatContext(context.Background(), vip.GetViper(), c, &e)
+		ctx, cancel := CreateChatContext(context.Background(), aiClient, vip.GetViper(), c, &e)
 		defer cancel()
 
 		log.Println("joining channel:", ctx.Config.Channel)
@@ -74,7 +74,7 @@ func run(r *cobra.Command, _ []string) {
 
 	irc.Handlers.AddBg(girc.PRIVMSG, func(c *girc.Client, e girc.Event) {
 
-		ctx, cancel := createChatContext(context.Background(), vip.GetViper(), c, &e)
+		ctx, cancel := CreateChatContext(context.Background(), aiClient, vip.GetViper(), c, &e)
 		defer cancel()
 
 		if ctx.Valid() {
