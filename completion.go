@@ -47,10 +47,10 @@ func chatCompletionStream(cc *ChatContext, channel chan<- *string) {
 	for {
 		response, err := stream.Recv()
 		if err != nil {
+			send(chunker.Buffer.String(), channel)
 			if !errors.Is(err, io.EOF) {
 				senderror(err, channel)
 			}
-			send(chunker.Buffer.String(), channel)
 			return
 		}
 		if len(response.Choices) != 0 {
@@ -84,15 +84,22 @@ type Chunker struct {
 
 func (c *Chunker) Chunk() (bool, *[]byte) {
 
-	// always chunk on a newline in first chunksize
-	buffer := c.Buffer.Bytes()
 	end := c.Size
-	if len(buffer) < c.Size {
-		end = len(buffer)
+	if c.Buffer.Len() < end {
+		end = c.Buffer.Len()
 	}
-	index := bytes.IndexByte(buffer[:end], '\n')
+
+	// chunk on a newline in first chunksize
+	index := bytes.IndexByte(c.Buffer.Bytes()[:end], '\n')
 	if index != -1 {
 		chunk := c.Buffer.Next(index + 1)
+		c.Last = time.Now()
+		return true, &chunk
+	}
+
+	// chunk if full buffer satisfies chunk size
+	if c.Buffer.Len() >= c.Size {
+		chunk := c.Buffer.Next(c.Size)
 		c.Last = time.Now()
 		return true, &chunk
 	}
@@ -108,16 +115,11 @@ func (c *Chunker) Chunk() (bool, *[]byte) {
 		}
 	}
 
-	// chunk if full buffer satisfies chunk size
-	if c.Buffer.Len() >= c.Size {
-		chunk := c.Buffer.Next(c.Size)
-		c.Last = time.Now()
-		return true, &chunk
-	}
-
 	// no chunk
 	return false, nil
 }
+
+// other languages are a thing, but for now...
 func (c *Chunker) Boundary(s *[]byte) int {
 	for i := 0; i < len(*s)-1; i++ {
 		if ((*s)[i] == '.' || (*s)[i] == ':' || (*s)[i] == '!' || (*s)[i] == '?') && ((*s)[i+1] == ' ' || (*s)[i+1] == '\t') {
