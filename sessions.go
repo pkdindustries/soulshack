@@ -35,7 +35,6 @@ type ChatSession struct {
 	History    []ai.ChatCompletionMessage
 	mu         sync.RWMutex
 	Last       time.Time
-	Timer      *time.Timer
 	Totalchars int
 }
 
@@ -49,22 +48,6 @@ func (s *ChatSession) GetHistory() []ai.ChatCompletionMessage {
 	return historyCopy
 }
 
-// show string of all msg contents
-func (s *ChatSession) Debug() {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	for _, msg := range s.History {
-		ds := ""
-		if msg.Role == ai.ChatMessageRoleAssistant {
-			ds += "< "
-		} else {
-			ds += "> "
-		}
-		ds += fmt.Sprintf("%s:%s", msg.Role, msg.Content)
-		log.Println(ds)
-	}
-}
-
 func (s *ChatSession) Message(ctx *ChatContext, role string, message string) *ChatSession {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -76,43 +59,43 @@ func (s *ChatSession) Message(ctx *ChatContext, role string, message string) *Ch
 
 	s.History = append(s.History, ai.ChatCompletionMessage{Role: role, Content: message})
 	s.Totalchars += len(message)
+	s.Last = time.Now()
 
 	s.trim()
 
-	if s.Timer != nil {
-		s.Timer.Stop()
-	}
-	s.Timer = time.AfterFunc(s.Config.SessionTimeout, func() {
-		s.Reap()
-	})
-
-	s.Last = time.Now()
 	return s
 }
 
+// contining the no alloc tradition to mock python users
+func (s *ChatSession) trim() {
+	if len(s.History) > s.Config.MaxHistory {
+		rm := len(s.History) - s.Config.MaxHistory
+		for i := 1; i <= s.Config.MaxHistory; i++ {
+			s.History[i] = s.History[i+rm-1]
+		}
+		s.History = s.History[:s.Config.MaxHistory+1]
+	}
+}
+
 func (s *ChatSession) Reset() {
-	log.Printf("resetting session %s", s.Name)
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.History = []ai.ChatCompletionMessage{}
+	s.History = s.History[:0]
 	s.Last = time.Now()
 }
 
-func (s *ChatSession) trim() {
-	if len(s.History) > s.Config.MaxHistory {
-		log.Printf("trimming session %s", s.Name)
-		s.History = append(s.History[:1], s.History[len(s.History)-s.Config.MaxHistory:]...)
-	}
-}
-
-func (s *ChatSession) Reap() {
+func (s *ChatSession) Reap() bool {
 	now := time.Now()
 	sessions.mu.Lock()
 	defer sessions.mu.Unlock()
-	if now.Sub(s.Last) > s.Config.SessionTimeout {
-		log.Printf("expired session: %s", s.Name)
-		delete(sessions.sessionMap, s.Name)
+	if sessions.sessionMap[s.Name] == nil {
+		return true
 	}
+	if now.Sub(s.Last) > s.Config.SessionTimeout {
+		delete(sessions.sessionMap, s.Name)
+		return true
+	}
+	return false
 }
 
 func (chats *Chats) Get(id string) *ChatSession {
@@ -136,6 +119,33 @@ func (chats *Chats) Get(id string) *ChatSession {
 		},
 	}
 
+	// start session reaper, returns when the session is gone
+	go func() {
+		for {
+			time.Sleep(session.Config.SessionTimeout)
+			if session.Reap() {
+				log.Println("session reaped:", session.Name)
+				return
+			}
+		}
+	}()
+
 	chats.sessionMap[id] = session
 	return session
+}
+
+// show string of all msg contents
+func (s *ChatSession) Debug() {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, msg := range s.History {
+		ds := ""
+		if msg.Role == ai.ChatMessageRoleAssistant {
+			ds += "< "
+		} else {
+			ds += "> "
+		}
+		ds += fmt.Sprintf("%s:%s", msg.Role, msg.Content)
+		log.Println(ds)
+	}
 }

@@ -144,7 +144,6 @@ func TestSingleSessionConcurrency(t *testing.T) {
 		for i := 0; i < concurrentUsers; i++ {
 			go func(userIndex int) {
 				defer wg.Done()
-
 				for j := 0; j < messagesPerUser; j++ {
 					session.Message(ctx, ai.ChatMessageRoleUser, fmt.Sprintf("User %d message %d", userIndex, j))
 					session.Message(ctx, ai.ChatMessageRoleAssistant, fmt.Sprintf("Assistant response to user %d message %d", userIndex, j))
@@ -161,6 +160,135 @@ func TestSingleSessionConcurrency(t *testing.T) {
 		assert.Len(t, session.History, totalMessages+1, "The session should have the correct number of messages")
 		t.Logf("Processed %d messages in %v, which is %.2f messages per second\n", totalMessages, elapsedTime, messagesPerSecond)
 	})
+}
+func countActiveSessions() int {
+	activeSessions := 0
+	sessions.mu.Lock()
+	defer sessions.mu.Unlock()
+
+	for _, session := range sessions.sessionMap {
+		if time.Since(session.Last) <= session.Config.SessionTimeout {
+			activeSessions++
+		}
+	}
+
+	return activeSessions
+}
+
+func TestSessionReapStress(t *testing.T) {
+	// Set up test configurations
+	numSessions := 2000
+	timeout := 100 * time.Millisecond
+	log.SetOutput(io.Discard)
+	sessions.sessionMap = make(map[string]*ChatSession)
+	vip.Set("session", timeout)
+	vip.Set("history", 10)
+	vip.Set("chunkdelay", 200*time.Millisecond)
+	vip.Set("chunkmax", 5)
+
+	// Create and store sessions
+	for i := 0; i < numSessions; i++ {
+		sessionID := fmt.Sprintf("session-%d", i)
+		sessions.Get(sessionID)
+	}
+
+	// Verify that all sessions are created
+	if len(sessions.sessionMap) != numSessions {
+		t.Fatalf("Expected %d sessions, got %d", numSessions, len(sessions.sessionMap))
+	}
+
+	// Simulate activity for some sessions
+	testPersonality := Personality{
+		Prompt: "Test prompt",
+	}
+
+	time.Sleep(50 * time.Millisecond)
+	// half are half aged
+	for i := 0; i < numSessions/2; i++ {
+		sessionID := fmt.Sprintf("session-%d", i)
+		session := sessions.Get(sessionID)
+		session.Message(&ChatContext{Personality: &testPersonality}, ai.ChatMessageRoleUser, fmt.Sprintf("message-%d", 0))
+		session.Message(&ChatContext{Personality: &testPersonality}, ai.ChatMessageRoleUser, fmt.Sprintf("message-%d", 1))
+	}
+
+	// wait for the unfreshened half to time out
+	time.Sleep(55 * time.Millisecond)
+	activeSessions := countActiveSessions()
+
+	expectedActiveSessions := numSessions / 2
+	if activeSessions != expectedActiveSessions {
+		t.Fatalf("Expected %d active sessions, got %d", expectedActiveSessions, activeSessions)
+	}
+
+}
+
+func TestSessionWindow(t *testing.T) {
+	testCases := []struct {
+		name       string
+		history    []ai.ChatCompletionMessage
+		maxHistory int
+		expected   []ai.ChatCompletionMessage
+	}{
+		{
+			name: "Simple_case",
+			history: []ai.ChatCompletionMessage{
+				{Role: ai.ChatMessageRoleUser, Content: "Prompt"},
+				{Role: ai.ChatMessageRoleUser, Content: "Message 1"},
+				{Role: ai.ChatMessageRoleUser, Content: "Message 2"},
+				{Role: ai.ChatMessageRoleUser, Content: "Message 3"},
+				{Role: ai.ChatMessageRoleUser, Content: "Message 4"},
+			},
+			maxHistory: 2,
+			expected: []ai.ChatCompletionMessage{
+				{Role: ai.ChatMessageRoleUser, Content: "Prompt"},
+				{Role: ai.ChatMessageRoleUser, Content: "Message 3"},
+				{Role: ai.ChatMessageRoleUser, Content: "Message 4"},
+			},
+		},
+		// Add more test cases if needed
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			session := ChatSession{
+				History: tc.history,
+				Config:  SessionConfig{MaxHistory: tc.maxHistory},
+			}
+
+			session.trim()
+
+			if len(session.History) != len(tc.expected) {
+				t.Errorf("Expected history length to be %d, but got %d", len(tc.expected), len(session.History))
+			}
+
+			for i, msg := range session.History {
+				if msg.Role != tc.expected[i].Role || msg.Content != tc.expected[i].Content {
+					t.Errorf("Expected message at index %d to be %+v, but got %+v", i, tc.expected[i], msg)
+				}
+			}
+		})
+	}
+}
+func BenchmarkTrim(b *testing.B) {
+	testCases := []int{100, 1000, 10000, 20000}
+	for _, msgCount := range testCases {
+		messages := make([]ai.ChatCompletionMessage, msgCount)
+		for i := 0; i < msgCount; i++ {
+			messages[i] = ai.ChatCompletionMessage{Role: ai.ChatMessageRoleUser, Content: fmt.Sprintf("Message %d", i)}
+		}
+		b.Run(fmt.Sprintf("MsgCount_%d", msgCount), func(b *testing.B) {
+			session := ChatSession{
+				History: messages,
+				Config:  SessionConfig{MaxHistory: msgCount / 2},
+			}
+
+			b.ResetTimer()
+
+			for i := 0; i < b.N; i++ {
+				session.trim()
+			}
+		})
+	}
 }
 
 func BenchmarkSessionStress(b *testing.B) {
