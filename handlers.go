@@ -16,22 +16,23 @@ func sendGreeting(ctx *ChatContext) {
 	log.Println("sending greeting...")
 	ctx.Session.Message(ctx, ai.ChatMessageRoleAssistant, ctx.Personality.Greeting)
 	rch := ChatCompletionTask(ctx)
-	_ = sendMessageFromChannel(ctx, rch)
+	_ = spoolFromChannel(ctx, rch)
 	ctx.Session.Reset()
 }
 
-func sendMessageFromChannel(ctx *ChatContext, msgch <-chan *string) string {
-	all := ""
+func spoolFromChannel(ctx *ChatContext, msgch <-chan *string) *string {
+	all := strings.Builder{}
 	for reply := range msgch {
-		all += *reply
-		sendMessage(ctx, *reply)
+		all.WriteString(*reply)
+		sendMessage(ctx, reply)
 	}
-	return all
+	s := all.String()
+	return &s
 }
 
-func sendMessage(ctx *ChatContext, message string) {
-	log.Println("<<", ctx.Personality.Nick, message)
-	ctx.Reply(message)
+func sendMessage(ctx *ChatContext, message *string) {
+	log.Println("<<", ctx.Personality.Nick, *message)
+	ctx.Reply(*message)
 }
 
 var configParams = map[string]string{"prompt": "", "model": "", "nick": "", "greeting": "", "goodbye": "", "directory": "", "session": "", "addressed": ""}
@@ -177,8 +178,8 @@ func handleDefault(ctx *ChatContext) {
 	msg := strings.Join(args, " ")
 	ctx.Session.Message(ctx, ai.ChatMessageRoleUser, msg)
 	rch := ChatCompletionTask(ctx)
-	reply := sendMessageFromChannel(ctx, rch)
-	ctx.Session.Message(ctx, ai.ChatMessageRoleAssistant, reply)
+	reply := spoolFromChannel(ctx, rch)
+	ctx.Session.Message(ctx, ai.ChatMessageRoleAssistant, *reply)
 }
 
 func handleSay(ctx *ChatContext) {
