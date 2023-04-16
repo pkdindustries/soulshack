@@ -74,13 +74,3 @@ func SessionFromViper(v *vip.Viper) *SessionConfig {
 		Chunkmax:       vip.GetInt("chunkmax"),
 	}
 }
-
-type DiscordConfig struct {
-	Token string
-}
-
-func DiscordFromViper(v *vip.Viper) *DiscordConfig {
-	return &DiscordConfig{
-		Token: v.GetString("discordtoken"),
-	}
-}

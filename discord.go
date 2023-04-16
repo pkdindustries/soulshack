@@ -24,6 +24,16 @@ type DiscordContext struct {
 	config      *DiscordConfig
 }
 
+type DiscordConfig struct {
+	Token string
+}
+
+func DiscordFromViper(v *vip.Viper) *DiscordConfig {
+	return &DiscordConfig{
+		Token: v.GetString("discordtoken"),
+	}
+}
+
 func NewDiscordContext(parent context.Context, ai *ai.Client, v *vip.Viper, m *discordgo.MessageCreate, s *discordgo.Session) (*DiscordContext, context.CancelFunc) {
 	timedctx, cancel := context.WithTimeout(parent, v.GetDuration("timeout"))
 
