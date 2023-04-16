@@ -1,10 +1,10 @@
 module pkdindustries/soulshack
 
-go 1.19
+go 1.20
 
 require (
 	github.com/lrstanley/girc v0.0.0-20230303230257-fefe1cab7695
-	github.com/sashabaranov/go-openai v1.7.0
+	github.com/sashabaranov/go-openai v1.8.0
 	github.com/spf13/cobra v1.7.0
 	github.com/spf13/viper v1.15.0
 	github.com/stretchr/testify v1.8.2
@@ -23,6 +23,7 @@ require (
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/magiconair/properties v1.8.7 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
+	github.com/neurosnap/sentences v1.1.2
 	github.com/pelletier/go-toml/v2 v2.0.7 // indirect
 	github.com/spf13/afero v1.9.5 // indirect
 	github.com/spf13/cast v1.5.0 // indirect

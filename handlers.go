@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"log"
 	"os"
@@ -12,44 +13,60 @@ import (
 	vip "github.com/spf13/viper"
 )
 
-func sendGreeting(ctx *ChatContext) {
-	log.Println("sending greeting...")
-	ctx.Session.Message(ctx, ai.ChatMessageRoleAssistant, ctx.Personality.Greeting)
-	rch := ChatCompletionTask(ctx)
-	_ = spoolFromChannel(ctx, rch)
-	ctx.Session.Reset()
-}
+func complete(c ChatContext, msg string) {
+	session := c.GetSession()
+	personality := c.GetPersonality()
+	session.AddMessage(c, ai.ChatMessageRoleUser, msg)
 
-func spoolFromChannel(ctx *ChatContext, msgch <-chan *string) *string {
-	all := strings.Builder{}
-	for reply := range msgch {
-		all.WriteString(*reply)
-		sendMessage(ctx, reply)
+	respch := CompletionTask(c, &CompletionRequest{
+		Client:    c.GetAI(),
+		Timeout:   session.Config.ClientTimeout,
+		Model:     personality.Model,
+		MaxTokens: session.Config.MaxTokens,
+		Messages:  session.GetHistory(),
+	})
+
+	chunker := &Chunker{
+		Size:       session.Config.Chunkmax,
+		Chunkdelay: session.Config.Chunkdelay,
+		Last:       time.Now(),
+		Buffer:     &bytes.Buffer{},
 	}
-	s := all.String()
-	return &s
+
+	chunkch := chunker.ChunkFilter(respch)
+
+	all := strings.Builder{}
+	for reply := range chunkch {
+		all.WriteString(reply)
+		log.Printf("<< <%s> %s", personality.Nick, reply)
+		c.Reply(reply)
+	}
+
+	session.AddMessage(c, ai.ChatMessageRoleAssistant, all.String())
 }
 
-func sendMessage(ctx *ChatContext, message *string) {
-	log.Println("<<", ctx.Personality.Nick, *message)
-	ctx.Reply(*message)
+func sendGreeting(ctx ChatContext) {
+	log.Println("sending greeting...")
+	complete(ctx, ctx.GetPersonality().Greeting)
+	ctx.GetSession().Reset()
 }
 
 var configParams = map[string]string{"prompt": "", "model": "", "nick": "", "greeting": "", "goodbye": "", "directory": "", "session": "", "addressed": ""}
 
-func handleSet(ctx *ChatContext) {
+func handleSet(ctx ChatContext) {
 
 	if !ctx.IsAdmin() {
 		ctx.Reply("You don't have permission to perform this action.")
 		return
 	}
 
-	if len(ctx.Args) < 3 {
+	args := ctx.GetArgs()
+	if len(args) < 3 {
 		ctx.Reply(fmt.Sprintf("Usage: /set %s <value>", keysAsString(configParams)))
 		return
 	}
 
-	param, v := ctx.Args[1], ctx.Args[2:]
+	param, v := args[1], args[2:]
 	value := strings.Join(v, " ")
 	if _, ok := configParams[param]; !ok {
 		ctx.Reply(fmt.Sprintf("Unknown parameter. Supported parameters: %v", keysAsString(configParams)))
@@ -61,15 +78,15 @@ func handleSet(ctx *ChatContext) {
 	ctx.Reply(fmt.Sprintf("%s set to: %s", param, vip.GetString(param)))
 
 	if param == "nick" {
-		ctx.Client.Cmd.Nick(value)
+		ctx.ChangeName(value)
 	}
 
-	ctx.Session.Reset()
+	ctx.GetSession().Reset()
 }
 
-func handleGet(ctx *ChatContext) {
+func handleGet(ctx ChatContext) {
 
-	tokens := ctx.Args
+	tokens := ctx.GetArgs()
 	if len(tokens) < 2 {
 		ctx.Reply(fmt.Sprintf("Usage: /get %s", keysAsString(configParams)))
 		return
@@ -85,9 +102,9 @@ func handleGet(ctx *ChatContext) {
 	ctx.Reply(fmt.Sprintf("%s: %s", param, value))
 }
 
-func handleSave(ctx *ChatContext) {
+func handleSave(ctx ChatContext) {
 
-	tokens := ctx.Args
+	tokens := ctx.GetArgs()
 	if !ctx.IsAdmin() {
 		ctx.Reply("You don't have permission to perform this action.")
 		return
@@ -102,11 +119,11 @@ func handleSave(ctx *ChatContext) {
 
 	v := vip.New()
 
-	v.Set("nick", ctx.Personality.Nick)
-	v.Set("prompt", ctx.Personality.Prompt)
-	v.Set("model", ctx.Personality.Model)
-	v.Set("greeting", ctx.Personality.Greeting)
-	v.Set("goodbye", ctx.Personality.Goodbye)
+	v.Set("nick", ctx.GetPersonality().Nick)
+	v.Set("prompt", ctx.GetPersonality().Prompt)
+	v.Set("model", ctx.GetPersonality().Model)
+	v.Set("greeting", ctx.GetPersonality().Greeting)
+	v.Set("goodbye", ctx.GetPersonality().Goodbye)
 
 	if err := v.WriteConfigAs(vip.GetString("directory") + "/" + filename + ".yml"); err != nil {
 		ctx.Reply(fmt.Sprintf("Error saving configuration: %s", err.Error()))
@@ -116,14 +133,14 @@ func handleSave(ctx *ChatContext) {
 	ctx.Reply(fmt.Sprintf("Configuration saved to: %s", filename))
 }
 
-func handleBecome(ctx *ChatContext) {
+func handleBecome(ctx ChatContext) {
 
 	if !ctx.IsAdmin() {
 		ctx.Reply("You don't have permission to perform this action.")
 		return
 	}
 
-	tokens := ctx.Args
+	tokens := ctx.GetArgs()
 	if len(tokens) < 2 {
 		ctx.Reply("Usage: /become <personality>")
 		return
@@ -135,22 +152,21 @@ func handleBecome(ctx *ChatContext) {
 		return
 	} else {
 		vip.MergeConfigMap(cfg.AllSettings())
-		ctx.SetConfig(cfg)
+		ctx.GetPersonality().SetConfig(cfg)
 	}
-	ctx.Session.Reset()
-	log.Printf("changing nick to %s", ctx.Personality.Nick)
+	ctx.GetSession().Reset()
 
-	ctx.Client.Cmd.Nick(ctx.Personality.Nick)
+	ctx.ChangeName(ctx.GetPersonality().Nick)
 	time.Sleep(2 * time.Second)
 	sendGreeting(ctx)
 }
 
-func handleList(ctx *ChatContext) {
+func handleList(ctx ChatContext) {
 	personalities := listPersonalities()
 	ctx.Reply(fmt.Sprintf("Available personalities: %s", strings.Join(personalities, ", ")))
 }
 
-func handleLeave(ctx *ChatContext) {
+func handleLeave(ctx ChatContext) {
 
 	if !ctx.IsAdmin() {
 		ctx.Reply("You don't have permission to perform this action.")
@@ -173,23 +189,19 @@ func handleLeave(ctx *ChatContext) {
 	}()
 }
 
-func handleDefault(ctx *ChatContext) {
-	args := ctx.Args
-	msg := strings.Join(args, " ")
-	ctx.Session.Message(ctx, ai.ChatMessageRoleUser, msg)
-	rch := ChatCompletionTask(ctx)
-	reply := spoolFromChannel(ctx, rch)
-	ctx.Session.Message(ctx, ai.ChatMessageRoleAssistant, *reply)
+func handleDefault(ctx ChatContext) {
+	complete(ctx, strings.Join(ctx.GetArgs(), " "))
 }
 
-func handleSay(ctx *ChatContext) {
+func handleSay(ctx ChatContext) {
 
 	if !ctx.IsAdmin() {
 		ctx.Reply("You don't have permission to perform this action.")
 		return
 	}
 
-	if len(ctx.Args) < 2 {
+	args := ctx.GetArgs()
+	if len(args) < 2 {
 		ctx.Reply("Usage: /say [/as <personality>] <message>")
 		ctx.Reply("Example: /msg chatbot /say /as marvin talk about life")
 		return
@@ -198,23 +210,22 @@ func handleSay(ctx *ChatContext) {
 	// if second token is '/as' then third token is a personality
 	// and we should play as that personality
 	as := vip.GetString("become")
-	if len(ctx.Args) > 2 && ctx.Args[1] == "/as" {
-		as = ctx.Args[2]
-		ctx.Args = ctx.Args[2:]
+	if len(args) > 2 && args[1] == "/as" {
+		as = args[2]
+		ctx.SetArgs(args[2:])
 	}
 
 	if cfg, err := loadPersonality(as); err != nil {
 		ctx.Reply(fmt.Sprintf("Error loading personality: %s", err.Error()))
 		return
 	} else {
-		ctx.SetConfig(cfg)
+		ctx.GetPersonality().SetConfig(cfg)
 	}
 
-	ctx.Session = sessions.Get(uuid.New().String())
-	ctx.Session.Reset()
-	ctx.Event.Params[0] = ctx.Config.Channel
-	ctx.Event.Source.Name = ctx.Personality.Nick
-	ctx.Args = ctx.Args[1:]
+	ctx.SetSession(sessions.Get(uuid.New().String()))
+	ctx.GetSession().Reset()
+	ctx.ResetSource()
+	ctx.SetArgs(ctx.GetArgs()[1:])
 
 	handleDefault(ctx)
 }

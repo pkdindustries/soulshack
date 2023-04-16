@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"strings"
 
@@ -9,6 +10,20 @@ import (
 	ai "github.com/sashabaranov/go-openai"
 	vip "github.com/spf13/viper"
 )
+
+type ChatContext interface {
+	context.Context
+	IsAdmin() bool
+	Reply(message string)
+	ResetSource()
+	ChangeName(nick string)
+	GetSession() *Session
+	SetSession(*Session)
+	GetPersonality() *Personality
+	GetArgs() []string
+	SetArgs([]string)
+	GetAI() *ai.Client
+}
 
 type Personality struct {
 	Prompt   string
@@ -18,9 +33,8 @@ type Personality struct {
 	Goodbye  string
 }
 
-type Config struct {
+type IrcConfig struct {
 	Channel   string
-	Nick      string
 	Admins    []string
 	Directory string
 	Verbose   bool
@@ -30,15 +44,15 @@ type Config struct {
 	Addressed bool
 }
 
-type ChatContext struct {
+type IrcContext struct {
 	context.Context
-	AI          *ai.Client
-	Personality *Personality
-	Config      *Config
-	Client      *girc.Client
-	Event       *girc.Event
-	Session     *ChatSession
-	Args        []string
+	ai          *ai.Client
+	personality *Personality
+	config      *IrcConfig
+	client      *girc.Client
+	event       *girc.Event
+	session     *Session
+	args        []string
 }
 
 func PersonalityFromViper(v *vip.Viper) *Personality {
@@ -51,10 +65,9 @@ func PersonalityFromViper(v *vip.Viper) *Personality {
 	}
 }
 
-func IrcFromViper(v *vip.Viper) *Config {
-	return &Config{
+func IrcFromViper(v *vip.Viper) *IrcConfig {
+	return &IrcConfig{
 		Channel:   v.GetString("channel"),
-		Nick:      v.GetString("nick"),
 		Admins:    v.GetStringSlice("admins"),
 		Directory: v.GetString("directory"),
 		Verbose:   v.GetBool("verbose"),
@@ -66,17 +79,26 @@ func IrcFromViper(v *vip.Viper) *Config {
 }
 
 // merge in the viper config
-func (c *ChatContext) SetConfig(v *vip.Viper) {
-	c.Personality = PersonalityFromViper(v)
+func (c *Personality) SetConfig(v *vip.Viper) {
+	c.Prompt = v.GetString("prompt")
+	c.Greeting = v.GetString("greeting")
+	c.Nick = v.GetString("nick")
+	c.Model = v.GetString("model")
+	c.Goodbye = v.GetString("goodbye")
 }
 
-func (s *ChatContext) IsAddressed() bool {
-	return strings.HasPrefix(s.Event.Last(), s.Client.GetNick())
+func (s *IrcContext) IsAddressed() bool {
+	return strings.HasPrefix(s.event.Last(), s.client.GetNick())
 }
 
-func (c *ChatContext) IsAdmin() bool {
+// ai
+func (c *IrcContext) GetAI() *ai.Client {
+	return c.ai
+}
+
+func (c *IrcContext) IsAdmin() bool {
 	admins := vip.GetStringSlice("admins")
-	nick := c.Event.Source.Name
+	nick := c.event.Source.Name
 	if len(admins) == 0 {
 		return true
 	}
@@ -88,23 +110,31 @@ func (c *ChatContext) IsAdmin() bool {
 	return false
 }
 
-func (c *ChatContext) Stats() {
-	log.Printf("session: messages %d, bytes %d, maxtokens %d, model %s",
-		len(c.Session.GetHistory()),
-		c.Session.Totalchars,
-		c.Session.Config.MaxTokens,
-		c.Personality.Model)
+func (c *IrcContext) ChangeName(nick string) {
+	c.client.Cmd.Nick(nick)
 }
 
-func (c *ChatContext) Reply(message string) *ChatContext {
-	c.Client.Cmd.Reply(*c.Event, message)
-	return c
+func (c *IrcContext) Stats() string {
+	return fmt.Sprintf("session: messages %d, bytes %d, maxtokens %d, model %s",
+		len(c.session.GetHistory()),
+		c.session.Totalchars,
+		c.session.Config.MaxTokens,
+		c.personality.Model)
 }
 
-func (c *ChatContext) Valid() bool {
+func (c *IrcContext) Reply(message string) {
+	c.client.Cmd.Reply(*c.event, message)
+}
+
+func (c *IrcContext) ResetSource() {
+	c.event.Params[0] = c.config.Channel
+	c.event.Source.Name = c.personality.Nick
+}
+
+func (c *IrcContext) IsValid() bool {
 	// check if the message is addressed to the bot or if being addressed is not required
-	addressed := c.IsAddressed() || !c.Config.Addressed
-	hasArguments := len(c.Args) > 0
+	addressed := c.IsAddressed() || !c.config.Addressed
+	hasArguments := len(c.args) > 0
 
 	// valid if:
 	// - the message is either addressed to the bot or being addressed is not required
@@ -113,29 +143,74 @@ func (c *ChatContext) Valid() bool {
 	return (addressed || c.IsPrivate()) && hasArguments
 }
 
-func (c *ChatContext) IsPrivate() bool {
-	return !strings.HasPrefix(c.Event.Params[0], "#")
+func (c *IrcContext) IsPrivate() bool {
+	return !strings.HasPrefix(c.event.Params[0], "#")
 }
 
-func (c *ChatContext) GetCommand() string {
-	return strings.ToLower(c.Args[0])
+func (c *IrcContext) GetCommand() string {
+	return strings.ToLower(c.args[0])
 }
 
-func CreateChatContext(parent context.Context, ai *ai.Client, v *vip.Viper, c *girc.Client, e *girc.Event) (*ChatContext, context.CancelFunc) {
+func (c *IrcContext) GetMessage() string {
+	return c.event.Last()
+}
+
+func (c *IrcContext) GetArgument() string {
+	return strings.Join(c.args[1:], " ")
+}
+
+func (c *IrcContext) GetArgs() []string {
+	return c.args
+}
+
+// set args
+func (c *IrcContext) SetArgs(args []string) {
+	c.args = args
+}
+
+func (c *IrcContext) SetNick(nick string) {
+	log.Printf("changing nick to %s", nick)
+	c.personality.Nick = nick
+	c.client.Cmd.Nick(c.personality.Nick)
+}
+
+func (c *IrcContext) GetSession() *Session {
+	return c.session
+}
+func (c *IrcContext) SetSession(s *Session) {
+	c.session = s
+}
+
+func (c *IrcContext) GetPersonality() *Personality {
+	return c.personality
+}
+
+// func spoolFromChannel(ctx *IrcContext, msgch <-chan *string) *string {
+// 	all := strings.Builder{}
+// 	for reply := range msgch {
+// 		all.WriteString(*reply)
+// 		log.Printf("<< <%s> %s", ctx.personality.Nick, *reply)
+// 		ctx.Reply(*reply)
+// 	}
+// 	s := all.String()
+// 	return &s
+// }
+
+func NewIrcContext(parent context.Context, ai *ai.Client, v *vip.Viper, c *girc.Client, e *girc.Event) (*IrcContext, context.CancelFunc) {
 	timedctx, cancel := context.WithTimeout(parent, v.GetDuration("timeout"))
 
-	ctx := &ChatContext{
+	ctx := &IrcContext{
 		Context:     timedctx,
-		AI:          ai,
-		Client:      c,
-		Event:       e,
-		Args:        strings.Fields(e.Last()),
-		Personality: PersonalityFromViper(v),
-		Config:      IrcFromViper(v),
+		ai:          ai,
+		client:      c,
+		event:       e,
+		args:        strings.Fields(e.Last()),
+		personality: PersonalityFromViper(v),
+		config:      IrcFromViper(v),
 	}
 
 	if ctx.IsAddressed() {
-		ctx.Args = ctx.Args[1:]
+		ctx.args = ctx.args[1:]
 	}
 
 	if e.Source == nil {
@@ -148,6 +223,6 @@ func CreateChatContext(parent context.Context, ai *ai.Client, v *vip.Viper, c *g
 	if !girc.IsValidChannel(key) {
 		key = e.Source.Name
 	}
-	ctx.Session = sessions.Get(key)
+	ctx.session = sessions.Get(key)
 	return ctx, cancel
 }

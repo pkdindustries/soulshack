@@ -10,51 +10,53 @@ import (
 	vip "github.com/spf13/viper"
 )
 
-var sessions = Chats{
-	sessionMap: make(map[string]*ChatSession),
+var sessions = SessionMap{
+	sessionMap: make(map[string]*Session),
 	mu:         sync.RWMutex{},
 }
 
-type Chats struct {
-	sessionMap map[string]*ChatSession
+type SessionMap struct {
+	sessionMap map[string]*Session
 	mu         sync.RWMutex
 }
 
 type SessionConfig struct {
-	MaxTokens      int
-	SessionTimeout time.Duration
-	MaxHistory     int
-	ClientTimeout  time.Duration
 	Chunkdelay     time.Duration
 	Chunkmax       int
+	ClientTimeout  time.Duration
+	MaxHistory     int
+	MaxTokens      int
+	SessionTimeout time.Duration
 }
 
-type ChatSession struct {
-	Config     SessionConfig
-	Name       string
+type Session struct {
+	Config     *SessionConfig
 	History    []ai.ChatCompletionMessage
-	mu         sync.RWMutex
 	Last       time.Time
+	mu         sync.RWMutex
+	Name       string
+	Reaper     bool
 	Totalchars int
 }
 
-func (s *ChatSession) GetHistory() []ai.ChatCompletionMessage {
+func (s *Session) GetHistory() []ai.ChatCompletionMessage {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	historyCopy := make([]ai.ChatCompletionMessage, len(s.History))
-	copy(historyCopy, s.History)
+	history := make([]ai.ChatCompletionMessage, len(s.History))
+	copy(history, s.History)
 
-	return historyCopy
+	return history
 }
 
-func (s *ChatSession) Message(ctx *ChatContext, role string, message string) *ChatSession {
+func (s *Session) AddMessage(ctx ChatContext, role string, message string) *Session {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	personality := ctx.GetPersonality()
 	if len(s.History) == 0 {
-		s.History = append(s.History, ai.ChatCompletionMessage{Role: ai.ChatMessageRoleSystem, Content: ctx.Personality.Prompt})
-		s.Totalchars += len(ctx.Personality.Prompt)
+		s.History = append(s.History, ai.ChatCompletionMessage{Role: ai.ChatMessageRoleSystem, Content: personality.Prompt})
+		s.Totalchars += len(personality.Prompt)
 	}
 
 	s.History = append(s.History, ai.ChatCompletionMessage{Role: role, Content: message})
@@ -67,7 +69,7 @@ func (s *ChatSession) Message(ctx *ChatContext, role string, message string) *Ch
 }
 
 // contining the no alloc tradition to mock python users
-func (s *ChatSession) trim() {
+func (s *Session) trim() {
 	if len(s.History) > s.Config.MaxHistory {
 		rm := len(s.History) - s.Config.MaxHistory
 		for i := 1; i <= s.Config.MaxHistory; i++ {
@@ -77,14 +79,14 @@ func (s *ChatSession) trim() {
 	}
 }
 
-func (s *ChatSession) Reset() {
+func (s *Session) Reset() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.History = s.History[:0]
 	s.Last = time.Now()
 }
 
-func (s *ChatSession) Reap() bool {
+func (s *Session) Reap() bool {
 	now := time.Now()
 	sessions.mu.Lock()
 	defer sessions.mu.Unlock()
@@ -98,18 +100,19 @@ func (s *ChatSession) Reap() bool {
 	return false
 }
 
-func (chats *Chats) Get(id string) *ChatSession {
-	chats.mu.Lock()
-	defer chats.mu.Unlock()
+func (sessions *SessionMap) Get(id string) *Session {
 
-	if v, ok := chats.sessionMap[id]; ok {
+	sessions.mu.Lock()
+	defer sessions.mu.Unlock()
+
+	if v, ok := sessions.sessionMap[id]; ok {
 		return v
 	}
 
-	session := &ChatSession{
+	session := &Session{
 		Name: id,
 		Last: time.Now(),
-		Config: SessionConfig{
+		Config: &SessionConfig{
 			MaxTokens:      vip.GetInt("maxtokens"),
 			SessionTimeout: vip.GetDuration("session"),
 			MaxHistory:     vip.GetInt("history"),
@@ -130,12 +133,12 @@ func (chats *Chats) Get(id string) *ChatSession {
 		}
 	}()
 
-	chats.sessionMap[id] = session
+	sessions.sessionMap[id] = session
 	return session
 }
 
 // show string of all msg contents
-func (s *ChatSession) Debug() {
+func (s *Session) Debug() {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	for _, msg := range s.History {

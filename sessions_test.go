@@ -20,16 +20,16 @@ func TestChatSession(t *testing.T) {
 
 	//log.SetOutput(io.Discard)
 
-	ctx := &ChatContext{
-		Personality: &Personality{
+	ctx := &IrcContext{
+		personality: &Personality{
 			Prompt: "You are a helpful assistant.",
 		},
 	}
 
 	t.Run("Test interactions and message history", func(t *testing.T) {
 		session1 := sessions.Get("session1")
-		session1.Message(ctx, ai.ChatMessageRoleUser, "Hello!")
-		session1.Message(ctx, ai.ChatMessageRoleAssistant, "Hi there!")
+		session1.AddMessage(ctx, ai.ChatMessageRoleUser, "Hello!")
+		session1.AddMessage(ctx, ai.ChatMessageRoleAssistant, "Hi there!")
 
 		assert.Len(t, session1.History, 3)
 		assert.Equal(t, session1.History[1].Content, "Hello!")
@@ -38,8 +38,8 @@ func TestChatSession(t *testing.T) {
 }
 func TestExpiry(t *testing.T) {
 	//log.SetOutput(io.Discard)
-	ctx := &ChatContext{
-		Personality: &Personality{
+	ctx := &IrcContext{
+		personality: &Personality{
 			Prompt: "You are a helpful assistant.",
 		},
 	}
@@ -48,9 +48,9 @@ func TestExpiry(t *testing.T) {
 		vip.Set("history", 20)
 
 		session2 := sessions.Get("session2")
-		session2.Message(ctx, ai.ChatMessageRoleUser, "How are you?")
-		session2.Message(ctx, ai.ChatMessageRoleAssistant, "I'm doing great, thanks!")
-		session2.Message(ctx, ai.ChatMessageRoleUser, "What's your name?")
+		session2.AddMessage(ctx, ai.ChatMessageRoleUser, "How are you?")
+		session2.AddMessage(ctx, ai.ChatMessageRoleAssistant, "I'm doing great, thanks!")
+		session2.AddMessage(ctx, ai.ChatMessageRoleUser, "What's your name?")
 
 		time.Sleep(2 * time.Second)
 		session3 := sessions.Get("session2")
@@ -58,8 +58,8 @@ func TestExpiry(t *testing.T) {
 		assert.NotEqual(t, session2, session3, "Expired session should not be reused")
 		assert.Len(t, session3.History, 0, "New session history should be empty")
 
-		session3.Message(ctx, ai.ChatMessageRoleUser, "Hello again!")
-		session3.Message(ctx, ai.ChatMessageRoleAssistant, "Hi! Nice to see you again!")
+		session3.AddMessage(ctx, ai.ChatMessageRoleUser, "Hello again!")
+		session3.AddMessage(ctx, ai.ChatMessageRoleAssistant, "Hi! Nice to see you again!")
 
 		assert.Len(t, session3.History, 3, "History should include the latest 2 messages plus the initial system message")
 		assert.Equal(t, session3.History[1].Content, "Hello again!")
@@ -70,15 +70,15 @@ func TestExpiry(t *testing.T) {
 func TestSessionConcurrency(t *testing.T) {
 	vip.Set("session", 1*time.Hour)
 	vip.Set("history", 10)
-
+	sessions.sessionMap = make(map[string]*Session)
 	log.SetOutput(io.Discard)
 
 	t.Run("Test session concurrency", func(t *testing.T) {
 		vip.Set("session", 1*time.Hour)
 		vip.Set("history", 500*2000)
 
-		ctx := &ChatContext{
-			Personality: &Personality{
+		ctx := &IrcContext{
+			personality: &Personality{
 				Prompt: "You are a helpful assistant.",
 			},
 		}
@@ -98,8 +98,8 @@ func TestSessionConcurrency(t *testing.T) {
 				session := sessions.Get(sessionID)
 
 				for j := 0; j < messagesPerUser; j++ {
-					session.Message(ctx, ai.ChatMessageRoleUser, fmt.Sprintf("User %d message %d", userIndex, j))
-					session.Message(ctx, ai.ChatMessageRoleAssistant, fmt.Sprintf("Assistant response to user %d message %d", userIndex, j))
+					session.AddMessage(ctx, ai.ChatMessageRoleUser, fmt.Sprintf("User %d message %d", userIndex, j))
+					session.AddMessage(ctx, ai.ChatMessageRoleAssistant, fmt.Sprintf("Assistant response to user %d message %d", userIndex, j))
 				}
 			}(i)
 		}
@@ -113,8 +113,8 @@ func TestSessionConcurrency(t *testing.T) {
 		}
 		elapsedTime := time.Since(startTime)
 		totalMessages := concurrentUsers * messagesPerUser * 2
-		messagesPerSecond := float64(totalMessages) / elapsedTime.Seconds()
-		t.Logf("Processed %d messages in %v, which is %.2f messages per second\n", totalMessages, elapsedTime, messagesPerSecond)
+		messagesPerSecond := float64(totalMessages) / float64(elapsedTime.Milliseconds())
+		t.Logf("Processed %d messages in %v, which is %.2f messages per ms??\n", totalMessages, elapsedTime, messagesPerSecond)
 	})
 }
 
@@ -125,8 +125,8 @@ func TestSingleSessionConcurrency(t *testing.T) {
 		vip.Set("session", 1*time.Hour)
 		vip.Set("history", 500*200)
 
-		ctx := &ChatContext{
-			Personality: &Personality{
+		ctx := &IrcContext{
+			personality: &Personality{
 				Prompt: "You are a helpful assistant.",
 			},
 		}
@@ -145,8 +145,8 @@ func TestSingleSessionConcurrency(t *testing.T) {
 			go func(userIndex int) {
 				defer wg.Done()
 				for j := 0; j < messagesPerUser; j++ {
-					session.Message(ctx, ai.ChatMessageRoleUser, fmt.Sprintf("User %d message %d", userIndex, j))
-					session.Message(ctx, ai.ChatMessageRoleAssistant, fmt.Sprintf("Assistant response to user %d message %d", userIndex, j))
+					session.AddMessage(ctx, ai.ChatMessageRoleUser, fmt.Sprintf("User %d message %d", userIndex, j))
+					session.AddMessage(ctx, ai.ChatMessageRoleAssistant, fmt.Sprintf("Assistant response to user %d message %d", userIndex, j))
 				}
 			}(i)
 		}
@@ -155,24 +155,11 @@ func TestSingleSessionConcurrency(t *testing.T) {
 
 		elapsedTime := time.Since(startTime)
 		totalMessages := concurrentUsers * messagesPerUser * 2
-		messagesPerSecond := float64(totalMessages) / elapsedTime.Seconds()
+		messagesPerSecond := float64(totalMessages) / float64(elapsedTime.Milliseconds())
 
 		assert.Len(t, session.History, totalMessages+1, "The session should have the correct number of messages")
-		t.Logf("Processed %d messages in %v, which is %.2f messages per second\n", totalMessages, elapsedTime, messagesPerSecond)
+		t.Logf("Processed %d messages in %v, which is %.2f messages per ms??\n", totalMessages, elapsedTime, messagesPerSecond)
 	})
-}
-func countActiveSessions() int {
-	activeSessions := 0
-	sessions.mu.Lock()
-	defer sessions.mu.Unlock()
-
-	for _, session := range sessions.sessionMap {
-		if time.Since(session.Last) <= session.Config.SessionTimeout {
-			activeSessions++
-		}
-	}
-
-	return activeSessions
 }
 
 func TestSessionReapStress(t *testing.T) {
@@ -180,7 +167,7 @@ func TestSessionReapStress(t *testing.T) {
 	numSessions := 2000
 	timeout := 100 * time.Millisecond
 	log.SetOutput(io.Discard)
-	sessions.sessionMap = make(map[string]*ChatSession)
+	sessions.sessionMap = make(map[string]*Session)
 	vip.Set("session", timeout)
 	vip.Set("history", 10)
 	vip.Set("chunkdelay", 200*time.Millisecond)
@@ -207,14 +194,13 @@ func TestSessionReapStress(t *testing.T) {
 	for i := 0; i < numSessions/2; i++ {
 		sessionID := fmt.Sprintf("session-%d", i)
 		session := sessions.Get(sessionID)
-		session.Message(&ChatContext{Personality: &testPersonality}, ai.ChatMessageRoleUser, fmt.Sprintf("message-%d", 0))
-		session.Message(&ChatContext{Personality: &testPersonality}, ai.ChatMessageRoleUser, fmt.Sprintf("message-%d", 1))
+		session.AddMessage(&IrcContext{personality: &testPersonality}, ai.ChatMessageRoleUser, fmt.Sprintf("message-%d", 0))
+		session.AddMessage(&IrcContext{personality: &testPersonality}, ai.ChatMessageRoleUser, fmt.Sprintf("message-%d", 1))
 	}
 
 	// wait for the unfreshened half to time out
 	time.Sleep(55 * time.Millisecond)
-	activeSessions := countActiveSessions()
-
+	activeSessions := len(sessions.sessionMap)
 	expectedActiveSessions := numSessions / 2
 	if activeSessions != expectedActiveSessions {
 		t.Fatalf("Expected %d active sessions, got %d", expectedActiveSessions, activeSessions)
@@ -250,9 +236,9 @@ func TestSessionWindow(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			session := ChatSession{
+			session := Session{
 				History: tc.history,
-				Config:  SessionConfig{MaxHistory: tc.maxHistory},
+				Config:  &SessionConfig{MaxHistory: tc.maxHistory},
 			}
 
 			session.trim()
@@ -277,9 +263,9 @@ func BenchmarkTrim(b *testing.B) {
 			messages[i] = ai.ChatCompletionMessage{Role: ai.ChatMessageRoleUser, Content: fmt.Sprintf("Message %d", i)}
 		}
 		b.Run(fmt.Sprintf("MsgCount_%d", msgCount), func(b *testing.B) {
-			session := ChatSession{
+			session := Session{
 				History: messages,
-				Config:  SessionConfig{MaxHistory: msgCount / 2},
+				Config:  &SessionConfig{MaxHistory: msgCount / 2},
 			}
 
 			b.ResetTimer()
@@ -295,8 +281,8 @@ func BenchmarkSessionStress(b *testing.B) {
 	vip.Set("session", 1*time.Second) // Short session duration to trigger more expirations
 	vip.Set("history", 5)             // Shorter history length to trigger more trimming
 
-	ctx := &ChatContext{
-		Personality: &Personality{
+	ctx := &IrcContext{
+		personality: &Personality{
 			Prompt: "You are a helpful assistant.",
 		},
 	}
@@ -328,11 +314,11 @@ func BenchmarkSessionStress(b *testing.B) {
 							switch action {
 							case 0: // Add user message
 								for j := 0; j < messagesPerUser; j++ {
-									session.Message(ctx, ai.ChatMessageRoleUser, fmt.Sprintf("User %d message %d", userIndex, j))
+									session.AddMessage(ctx, ai.ChatMessageRoleUser, fmt.Sprintf("User %d message %d", userIndex, j))
 								}
 							case 1: // Add assistant message
 								for j := 0; j < messagesPerUser; j++ {
-									session.Message(ctx, ai.ChatMessageRoleAssistant, fmt.Sprintf("Assistant response to user %d message %d", userIndex, j))
+									session.AddMessage(ctx, ai.ChatMessageRoleAssistant, fmt.Sprintf("Assistant response to user %d message %d", userIndex, j))
 								}
 							case 2: // Reset the session
 								session.Reset()
