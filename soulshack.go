@@ -47,5 +47,6 @@ func run(_ *cobra.Command, _ []string) {
 	}
 
 	go startIrc(aiClient)
+	go startDiscord(aiClient)
 	select {}
 }

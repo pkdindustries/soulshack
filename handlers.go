@@ -13,6 +13,35 @@ import (
 	vip "github.com/spf13/viper"
 )
 
+func handleMessage(ctx ChatContext) {
+	if ctx.IsValid() {
+		switch ctx.GetCommand() {
+		case "/say":
+			handleSay(ctx)
+		case "/set":
+			handleSet(ctx)
+		case "/get":
+			handleGet(ctx)
+		case "/save":
+			handleSave(ctx)
+		case "/list":
+			handleList(ctx)
+		case "/become":
+			handleBecome(ctx)
+		case "/leave":
+			handleLeave(ctx)
+		case "/help":
+			fallthrough
+		case "/?":
+			ctx.Reply("Supported commands: /set, /say [/as], /get, /list, /become, /leave, /help, /version")
+		// case "/version":
+		// 	ctx.Reply(r.Version)
+		default:
+			handleDefault(ctx)
+		}
+	}
+}
+
 func complete(c ChatContext, msg string) {
 	session := c.GetSession()
 	personality := c.GetPersonality()
@@ -27,13 +56,13 @@ func complete(c ChatContext, msg string) {
 	})
 
 	chunker := &Chunker{
-		Size:       session.Config.Chunkmax,
+		Chunkmax:   session.Config.Chunkmax,
 		Chunkdelay: session.Config.Chunkdelay,
 		Last:       time.Now(),
 		Buffer:     &bytes.Buffer{},
 	}
 
-	chunkch := chunker.ChunkFilter(respch)
+	chunkch := chunker.Filter(respch)
 
 	all := strings.Builder{}
 	for reply := range chunkch {

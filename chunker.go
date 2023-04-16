@@ -10,34 +10,40 @@ import (
 )
 
 type Chunker struct {
-	Size       int
-	Last       time.Time
 	Buffer     *bytes.Buffer
 	Chunkdelay time.Duration
+	Chunkmax   int
+	Last       time.Time
 }
 
-func (c *Chunker) ChunkFilter(input <-chan *string) <-chan string {
+func (c *Chunker) Filter(input <-chan *string) <-chan string {
 	out := make(chan string)
+
 	go func() {
 		defer close(out)
 		for val := range input {
 			c.Buffer.WriteString(*val)
-			for {
-				if chunked, chunk := c.Chunk(); chunked {
-					out <- string(*chunk)
-				} else {
-					break
-				}
-			}
+			chunker(c, out)
 		}
-
 	}()
+
 	return out
 }
 
-func (c *Chunker) Chunk() (bool, *[]byte) {
+// chunker reads chunks from the Chunker and sends them to the output channel
+func chunker(c *Chunker, out chan<- string) {
+	for {
+		if chunked, chunk := c.chunk(); chunked {
+			out <- string(chunk)
+		} else {
+			break
+		}
+	}
+}
 
-	end := c.Size
+func (c *Chunker) chunk() (bool, []byte) {
+
+	end := c.Chunkmax
 	if c.Buffer.Len() < end {
 		end = c.Buffer.Len()
 	}
@@ -47,14 +53,14 @@ func (c *Chunker) Chunk() (bool, *[]byte) {
 	if index != -1 {
 		chunk := c.Buffer.Next(index + 1)
 		c.Last = time.Now()
-		return true, &chunk
+		return true, chunk
 	}
 
 	// chunk if full buffer satisfies chunk size
-	if c.Buffer.Len() >= c.Size {
-		chunk := c.Buffer.Next(c.Size)
+	if c.Buffer.Len() >= c.Chunkmax {
+		chunk := c.Buffer.Next(c.Chunkmax)
 		c.Last = time.Now()
-		return true, &chunk
+		return true, chunk
 	}
 
 	// chunk on boundary if n seconds have passed since the last chunk
@@ -64,7 +70,7 @@ func (c *Chunker) Chunk() (bool, *[]byte) {
 		if index != -1 {
 			chunk := c.Buffer.Next(index + 1)
 			c.Last = time.Now()
-			return true, &chunk
+			return true, chunk
 		}
 	}
 
@@ -88,7 +94,7 @@ var tokenizer *sentences.DefaultSentenceTokenizer
 func init() {
 	t, err := english.NewSentenceTokenizer(nil)
 	if err != nil {
-		log.Panicln("Error creating tokenizer:", err)
+		log.Fatal("Error creating tokenizer:", err)
 	}
 	tokenizer = t
 }

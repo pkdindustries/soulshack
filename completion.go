@@ -19,16 +19,14 @@ type CompletionRequest struct {
 
 func CompletionTask(ctx context.Context, req *CompletionRequest) <-chan *string {
 	ch := make(chan *string)
-	go completion(ctx, req, ch)
+	go completionstream(ctx, req, ch)
 	return ch
 }
 
-func completion(cc context.Context, req *CompletionRequest, channel chan<- *string) {
+func completionstream(ctx context.Context, req *CompletionRequest, ch chan<- *string) {
+	defer close(ch)
 
-	defer close(channel)
-	//log.Println(cc.Stats())
-
-	ctx, cancel := context.WithTimeout(cc, req.Timeout)
+	ctx, cancel := context.WithTimeout(ctx, req.Timeout)
 	defer cancel()
 
 	stream, err := req.Client.CreateChatCompletionStream(ctx, ai.ChatCompletionRequest{
@@ -39,40 +37,27 @@ func completion(cc context.Context, req *CompletionRequest, channel chan<- *stri
 	})
 
 	if err != nil {
-		senderror(err, channel)
+		ch <- strp(err.Error())
 		return
 	}
-
 	defer stream.Close()
-	// chunker := &Chunker{
-	// 	Size:    req.Chunkmax,
-	// 	Last:    time.Now(),
-	// 	Timeout: req.Chunkdelay,
-	// 	Buffer:  &bytes.Buffer{},
-	// }
 
 	for {
 		response, err := stream.Recv()
 		if err != nil {
 			if errors.Is(err, io.EOF) {
-				send("\n", channel)
+				ch <- strp("\n")
 			} else {
-				senderror(err, channel)
+				ch <- strp(err.Error())
 			}
-			return
+			break
 		}
-		if len(response.Choices) != 0 {
-			//log.Println(response.Choices[0].Delta.Content)
-			send(response.Choices[0].Delta.Content, channel)
+		if len(response.Choices) > 0 {
+			ch <- strp(response.Choices[0].Delta.Content)
 		}
 	}
 }
 
-func senderror(err error, channel chan<- *string) {
-	e := err.Error()
-	channel <- &e
-}
-
-func send(chunk string, channel chan<- *string) {
-	channel <- &chunk
+func strp(s string) *string {
+	return &s
 }

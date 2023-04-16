@@ -19,14 +19,14 @@ func init() {
 
 	cobra.OnInitialize(initConfig)
 
-	// irc client configuration
+	// irc configuration
 	root.PersistentFlags().StringP("nick", "n", "soulshack", "bot's nickname on the irc server")
 	root.PersistentFlags().StringP("server", "s", "localhost", "irc server address")
 	root.PersistentFlags().BoolP("ssl", "e", false, "enable SSL for the IRC connection")
 	root.PersistentFlags().IntP("port", "p", 6667, "irc server port")
 	root.PersistentFlags().StringP("channel", "c", "", "irc channel to join")
 
-	// bot configuration
+	// bot meta configuration
 	root.PersistentFlags().StringP("become", "b", "chatbot", "become the named personality")
 	root.PersistentFlags().StringP("directory", "d", "./personalities", "personalities configuration directory")
 	root.PersistentFlags().StringSliceP("admins", "A", []string{}, "comma-separated list of allowed users to administrate the bot (e.g., user1,user2,user3)")
@@ -52,6 +52,9 @@ func init() {
 	root.PersistentFlags().String("goodbye", "goodbye.", "prompt to be used when the bot leaves the channel")
 	root.PersistentFlags().String("greeting", "hello.", "prompt to be used when the bot joins the channel")
 	root.PersistentFlags().String("prompt", "respond in a short text:", "initial system prompt for the ai")
+
+	// discord??
+	root.PersistentFlags().String("discordtoken", "", "discord bot token")
 
 	vip.BindPFlags(root.PersistentFlags())
 

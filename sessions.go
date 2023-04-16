@@ -20,15 +20,6 @@ type SessionMap struct {
 	mu         sync.RWMutex
 }
 
-type SessionConfig struct {
-	Chunkdelay     time.Duration
-	Chunkmax       int
-	ClientTimeout  time.Duration
-	MaxHistory     int
-	MaxTokens      int
-	SessionTimeout time.Duration
-}
-
 type Session struct {
 	Config     *SessionConfig
 	History    []ai.ChatCompletionMessage
@@ -110,16 +101,9 @@ func (sessions *SessionMap) Get(id string) *Session {
 	}
 
 	session := &Session{
-		Name: id,
-		Last: time.Now(),
-		Config: &SessionConfig{
-			MaxTokens:      vip.GetInt("maxtokens"),
-			SessionTimeout: vip.GetDuration("session"),
-			MaxHistory:     vip.GetInt("history"),
-			ClientTimeout:  vip.GetDuration("timeout"),
-			Chunkdelay:     vip.GetDuration("chunkdelay"),
-			Chunkmax:       vip.GetInt("chunkmax"),
-		},
+		Name:   id,
+		Last:   time.Now(),
+		Config: SessionFromViper(vip.GetViper()),
 	}
 
 	// start session reaper, returns when the session is gone

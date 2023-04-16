@@ -49,13 +49,13 @@ func TestChunker_ChunkFilter(t *testing.T) {
 			close(in)
 
 			c := &Chunker{
-				Size:       tt.size,
+				Chunkmax:   tt.size,
 				Last:       time.Now(),
 				Buffer:     &bytes.Buffer{},
 				Chunkdelay: timeout,
 			}
 
-			out := c.ChunkFilter(in)
+			out := c.Filter(in)
 
 			var result []string
 			for s := range out {
@@ -151,15 +151,15 @@ func TestChunker_Chunk(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := &Chunker{
-				Size:       tt.size,
+				Chunkmax:   tt.size,
 				Last:       time.Now(),
 				Buffer:     &bytes.Buffer{},
 				Chunkdelay: timeout,
 			}
 			c.Buffer.WriteString(tt.input)
 
-			chunked, chunk := c.Chunk()
-			if chunked && string(*chunk) != string(tt.expected) {
+			chunked, chunk := c.chunk()
+			if chunked && string(chunk) != string(tt.expected) {
 				t.Errorf("Chunk() got = %v, want = %v", chunk, tt.expected)
 			}
 		})
@@ -171,7 +171,7 @@ func TestChunker_Chunk_Timeout(t *testing.T) {
 	timeout := 100 * time.Millisecond
 
 	c := &Chunker{
-		Size:       50,
+		Chunkmax:   50,
 		Last:       time.Now(),
 		Buffer:     &bytes.Buffer{},
 		Chunkdelay: timeout,
@@ -181,9 +181,9 @@ func TestChunker_Chunk_Timeout(t *testing.T) {
 	// Wait for timeout duration
 	time.Sleep(500 * time.Millisecond)
 
-	chunked, chunk := c.Chunk()
+	chunked, chunk := c.chunk()
 	expected := []byte("Hello world! ")
-	if chunked && string(*chunk) != string(expected) {
+	if chunked && string(chunk) != string(expected) {
 		t.Errorf("Chunk() got = %v, want = %v", chunk, expected)
 	}
 }
@@ -211,7 +211,7 @@ func BenchmarkChunker_StressTest(b *testing.B) {
 		b.Run(fmt.Sprintf("StressTest_BufferSize_%d", bufSize), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				c := &Chunker{
-					Size:       40,
+					Chunkmax:   40,
 					Last:       time.Now(),
 					Buffer:     &bytes.Buffer{},
 					Chunkdelay: timeout,
@@ -219,9 +219,9 @@ func BenchmarkChunker_StressTest(b *testing.B) {
 				c.Buffer.WriteString(text)
 
 				// Continuously call Chunk() until no chunks are left
-				for chunked, t := c.Chunk(); chunked; chunked, t = c.Chunk() {
+				for chunked, t := c.chunk(); chunked; chunked, t = c.chunk() {
 					count++
-					leng += len(*t)
+					leng += len(t)
 				}
 			}
 			b.Logf("Processed %d chunks", count)
@@ -246,7 +246,7 @@ func BenchmarkChunker_ChunkFilter(b *testing.B) {
 		b.Run(fmt.Sprintf("ChunkFilter_BufferSize_%d", bufSize), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				c := &Chunker{
-					Size:       40,
+					Chunkmax:   40,
 					Last:       time.Now(),
 					Buffer:     &bytes.Buffer{},
 					Chunkdelay: timeout,
@@ -259,7 +259,7 @@ func BenchmarkChunker_ChunkFilter(b *testing.B) {
 				close(input)
 
 				// Call ChunkFilter and measure the time it takes to process the input channel
-				output := c.ChunkFilter(input)
+				output := c.Filter(input)
 				// Read all chunks from the output channel
 				for t := range output {
 					leng += len(t)
