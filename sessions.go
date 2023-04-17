@@ -26,7 +26,6 @@ type Session struct {
 	Last       time.Time
 	mu         sync.RWMutex
 	Name       string
-	Reaper     bool
 	Totalchars int
 }
 

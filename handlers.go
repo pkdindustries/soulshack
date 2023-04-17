@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	ai "github.com/sashabaranov/go-openai"
 	vip "github.com/spf13/viper"
+	"github.com/subosito/shorturl"
 )
 
 func handleMessage(ctx ChatContext) {
@@ -30,6 +31,8 @@ func handleMessage(ctx ChatContext) {
 			handleBecome(ctx)
 		case "/leave":
 			handleLeave(ctx)
+		case "/image":
+			handleImage(ctx)
 		case "/help":
 			fallthrough
 		case "/?":
@@ -61,10 +64,10 @@ func complete(c ChatContext, msg string) {
 		Last:       time.Now(),
 		Buffer:     &bytes.Buffer{},
 	}
-
-	chunkch := chunker.Filter(respch)
+	chunkch := chunker.ChannelFilter(respch)
 
 	all := strings.Builder{}
+
 	for reply := range chunkch {
 		all.WriteString(reply)
 		log.Printf("<< <%s> %s", personality.Nick, reply)
@@ -257,6 +260,32 @@ func handleSay(ctx ChatContext) {
 	ctx.SetArgs(ctx.GetArgs()[1:])
 
 	handleDefault(ctx)
+}
+
+// handleimage
+func handleImage(ctx ChatContext) {
+	prompt := strings.Join(ctx.GetArgs()[1:], " ")
+	ctx.Reply("creating image...")
+	req := ai.ImageRequest{
+		Prompt:         prompt,
+		Size:           ai.CreateImageSize256x256,
+		ResponseFormat: ai.CreateImageResponseFormatURL,
+		N:              1,
+	}
+	resp, err := ctx.GetAI().CreateImage(ctx, req)
+	if err != nil {
+		ctx.Reply(fmt.Sprintf("Image creation error: %v\n", err))
+		return
+	}
+
+	u, err := shorturl.Shorten(resp.Data[0].URL, "tinyurl")
+	if err != nil {
+		log.Printf("Error shortening url: %v\n", err)
+		ctx.Reply(resp.Data[0].URL)
+	} else {
+		ctx.Reply(string(u))
+	}
+
 }
 
 func keysAsString(m map[string]string) string {

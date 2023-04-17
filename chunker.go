@@ -16,7 +16,7 @@ type Chunker struct {
 	Last       time.Time
 }
 
-func (c *Chunker) Filter(input <-chan *string) <-chan string {
+func (c *Chunker) ChannelFilter(input <-chan *string) <-chan string {
 	out := make(chan string)
 
 	go func() {
@@ -27,6 +27,17 @@ func (c *Chunker) Filter(input <-chan *string) <-chan string {
 		}
 	}()
 
+	return out
+}
+
+func (c *Chunker) NullChannelFilter(input <-chan *string) <-chan string {
+	out := make(chan string)
+	go func() {
+		defer close(out)
+		for val := range input {
+			out <- *val
+		}
+	}()
 	return out
 }
 
@@ -42,7 +53,14 @@ func chunker(c *Chunker, out chan<- string) {
 }
 
 func (c *Chunker) chunk() (bool, []byte) {
+	// if chunkdelay is -1, huck the buffer right now
+	if c.Chunkdelay == -1 && c.Buffer.Len() > 0 {
+		chunk := c.Buffer.Next(c.Buffer.Len())
+		c.Last = time.Now()
+		return true, chunk
+	}
 
+	// chunk on a newline in first chunksize
 	end := c.Chunkmax
 	if c.Buffer.Len() < end {
 		end = c.Buffer.Len()

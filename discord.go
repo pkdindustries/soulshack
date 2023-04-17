@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -46,7 +45,41 @@ func NewDiscordContext(parent context.Context, ai *ai.Client, v *vip.Viper, m *d
 		session:     sessions.Get(m.ChannelID),
 		config:      DiscordFromViper(v),
 	}
+
 	return ctx, cancel
+}
+
+func startDiscord(a *ai.Client) {
+
+	dg, err := discordgo.New("Bot " + vip.GetString("discordtoken"))
+	if err != nil {
+		log.Println("Error creating Discord session: ", err)
+		return
+	}
+
+	dg.AddHandler(func(s *discordgo.Session, m *discordgo.MessageCreate) {
+		if m.Author.ID == s.State.User.ID {
+			return
+		}
+		ctx, cancel := NewDiscordContext(context.Background(), a, vip.GetViper(), m, s)
+		ctx.discord.ChannelTyping(m.ChannelID)
+		defer cancel()
+		handleMessage(ctx)
+	})
+
+	dg.Identify.Intents = discordgo.IntentsGuildMessages
+
+	err = dg.Open()
+	defer dg.Close()
+
+	if err != nil {
+		log.Fatal("Error opening Discord session: ", err)
+	}
+
+	log.Println("discord bot server is now running")
+	sc := make(chan os.Signal, 1)
+	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
+	<-sc
 }
 
 // getcommand
@@ -67,9 +100,36 @@ func (c *DiscordContext) IsValid() bool {
 	return true
 }
 
-// reply
 func (c *DiscordContext) Reply(message string) {
-	c.discord.ChannelMessageSend(c.msg.ChannelID, message)
+
+	// Send a new message and store it in the map
+	_, err := c.discord.ChannelMessageSend(c.msg.ChannelID, message)
+	if err != nil {
+		log.Println(err)
+	}
+
+	// embed := &discordgo.MessageEmbed{
+	// 	Color: 0x78141b,
+	// 	Fields: []*discordgo.MessageEmbedField{
+	// 		{
+	// 			Value: "```" + message + "```",
+	// 		},
+	// 	},
+	// }
+	// embedmsg, err := c.discord.ChannelMessageSendEmbed(c.msg.ChannelID, embed)
+	// if err != nil {
+	// 	log.Println(err)
+	// }
+	// // Edit the message after a 5-second delay
+	// for i := 0; i < 5; i++ {
+	// 	time.Sleep(1 * time.Second)
+	// 	message = message + "??????yo!...!"
+	// 	embed.Fields[0].Value = "```" + message + "```"
+	// 	_, err = c.discord.ChannelMessageEditEmbeds(c.msg.ChannelID, embedmsg.ID, []*discordgo.MessageEmbed{embed})
+	// 	if err != nil {
+	// 		log.Println(err)
+	// 	}
+	// }
 }
 
 // resetsource
@@ -108,41 +168,6 @@ func (c *DiscordContext) SetArgs(args []string) {
 // ai
 func (c *DiscordContext) GetAI() *ai.Client {
 	return c.ai
-}
-
-func startDiscord(a *ai.Client) {
-
-	dg, err := discordgo.New("Bot " + vip.GetString("discordtoken"))
-
-	//	dg, err := discordgo.New("Bot ODYyNTQ4NDkwNDQxNzE5ODA4.YOZ84Q.TA9toCRKlgieivShb4Z5IrcQsSY")
-	if err != nil {
-		log.Println("Error creating Discord session: ", err)
-		return
-	}
-
-	dg.AddHandler(func(s *discordgo.Session, m *discordgo.MessageCreate) {
-		if m.Author.ID == s.State.User.ID {
-			return
-		}
-		ctx, cancel := NewDiscordContext(context.Background(), a, vip.GetViper(), m, s)
-		defer cancel()
-		ctx.discord.ChannelTyping(m.ChannelID)
-		handleMessage(ctx)
-	})
-
-	dg.Identify.Intents = discordgo.IntentsGuildMessages
-
-	err = dg.Open()
-	if err != nil {
-		log.Fatal("Error opening Discord session: ", err)
-	}
-
-	fmt.Println("Discord bot is now running.  Press CTRL-C to exit.")
-	sc := make(chan os.Signal, 1)
-	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
-	<-sc
-
-	dg.Close()
 }
 
 // func onMessage(s *discordgo.Session, m *discordgo.MessageCreate) {

@@ -55,7 +55,7 @@ func TestChunker_ChunkFilter(t *testing.T) {
 				Chunkdelay: timeout,
 			}
 
-			out := c.Filter(in)
+			out := c.ChannelFilter(in)
 
 			var result []string
 			for s := range out {
@@ -259,7 +259,7 @@ func BenchmarkChunker_ChunkFilter(b *testing.B) {
 				close(input)
 
 				// Call ChunkFilter and measure the time it takes to process the input channel
-				output := c.Filter(input)
+				output := c.ChannelFilter(input)
 				// Read all chunks from the output channel
 				for t := range output {
 					leng += len(t)
