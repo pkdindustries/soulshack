@@ -5,7 +5,9 @@
     // |____/   \___/   \__,_| |_| |____/  |_| |_|  \__,_|  \___| |_|\_\
     //  .  .  .  because  real  people  are  overrated
 
-soulshack is an ai-powered irc chat bot that utilizes the openai api to generate human-like responses. 
+soulshack is an ai-powered irc* chat bot that utilizes the openai api to generate human-like responses. 
+
+*...and discord
 
 ## features
 
@@ -32,19 +34,18 @@ docker build . -t soulshack:dev
 soulshack --nick chatbot --server irc.freenode.net --port 6697 --channel '#soulshack' --ssl --openaikey ****************
 ```
 
+
+```bash
+soulshack --discordtoken **************** --openaikkey ****************
+```
+
+
 ## configuration
 
 soulshack can be configured using command line flags, environment variables, or personality configuration files. it uses viper to manage configuration settings.
 
 ### flags
 ```
-Usage:
-  soulshack [flags]
-
-Examples:
-soulshack --nick chatbot --server irc.freenode.net --port 6697 --channel '#soulshack' --ssl --openaikey ****************
-
-Flags:
   -a, --addressed             require bot be addressed by nick for response (default true)
   -A, --admins strings        comma-separated list of allowed users to administrate the bot (e.g., user1,user2,user3)
   -b, --become string         become the named personality (default "chatbot")
@@ -52,6 +53,7 @@ Flags:
   -C, --chunkdelay duration   after this delay, bot will look to split the incoming buffer on sentence boundaries (default 7s)
   -m, --chunkmax int          maximum number of characters to send as a single message (default 350)
   -d, --directory string      personalities configuration directory (default "./personalities")
+      --discordtoken string   discord bot token
       --goodbye string        prompt to be used when the bot leaves the channel (default "goodbye.")
       --greeting string       prompt to be used when the bot joins the channel (default "hello.")
   -h, --help                  help for soulshack
@@ -59,7 +61,7 @@ Flags:
   -l, --list                  list configured personalities
       --maxtokens int         maximum number of tokens to generate (default 512)
       --model string          model to be used for responses e.g., gpt-4 (default "gpt-4")
-  -n, --nick string           bot's nickname on the irc server (default "soulshack")
+  -n, --nick string           bot nickname on the irc server (default "soulshack")
       --openaikey string      openai api key
   -p, --port int              irc server port (default 6667)
       --prompt string         initial system prompt for the ai (default "respond in a short text:")
@@ -96,6 +98,9 @@ prompt: "you are marvin the paranoid android. respond with a short text message:
 ```bash
 soulshack --server localhost --channel '#marvinshouse' --become marvin 
 ```
+
+
+
 
 ## commands
 

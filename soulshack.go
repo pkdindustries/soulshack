@@ -46,7 +46,11 @@ func run(_ *cobra.Command, _ []string) {
 		log.Fatal(err)
 	}
 
-	go startIrc(aiClient)
-	go startDiscord(aiClient)
+	if len(vip.GetString("discordtoken")) > 0 {
+		go startDiscord(aiClient)
+	} else {
+		go startIrc(aiClient)
+	}
+
 	select {}
 }
