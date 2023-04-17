@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"net/url"
 	"os"
 	"os/signal"
 	"strings"
@@ -62,8 +63,11 @@ func startDiscord(a *ai.Client) {
 			return
 		}
 		ctx, cancel := NewDiscordContext(context.Background(), a, vip.GetViper(), m, s)
-		ctx.discord.ChannelTyping(m.ChannelID)
 		defer cancel()
+
+		ctx.GetSession().Config.Chunkquoted = true
+		ctx.GetSession().Config.Chunkmax = 2000
+		ctx.discord.ChannelTyping(m.ChannelID)
 		handleMessage(ctx)
 	})
 
@@ -101,35 +105,36 @@ func (c *DiscordContext) IsValid() bool {
 }
 
 func (c *DiscordContext) Reply(message string) {
+	// if message is empty, don't send anything
 
-	// Send a new message and store it in the map
-	_, err := c.discord.ChannelMessageSend(c.msg.ChannelID, message)
-	if err != nil {
-		log.Println(err)
+	if strings.TrimSpace(message) == "" {
+		return
 	}
 
-	// embed := &discordgo.MessageEmbed{
-	// 	Color: 0x78141b,
-	// 	Fields: []*discordgo.MessageEmbedField{
-	// 		{
-	// 			Value: "```" + message + "```",
-	// 		},
-	// 	},
-	// }
-	// embedmsg, err := c.discord.ChannelMessageSendEmbed(c.msg.ChannelID, embed)
-	// if err != nil {
-	// 	log.Println(err)
-	// }
-	// // Edit the message after a 5-second delay
-	// for i := 0; i < 5; i++ {
-	// 	time.Sleep(1 * time.Second)
-	// 	message = message + "??????yo!...!"
-	// 	embed.Fields[0].Value = "```" + message + "```"
-	// 	_, err = c.discord.ChannelMessageEditEmbeds(c.msg.ChannelID, embedmsg.ID, []*discordgo.MessageEmbed{embed})
-	// 	if err != nil {
-	// 		log.Println(err)
-	// 	}
-	// }
+	if isURL(message) {
+		embed := &discordgo.MessageEmbed{
+			URL:   message,
+			Color: 0x00ff00,
+			Image: &discordgo.MessageEmbedImage{URL: message},
+		}
+		_, err := c.discord.ChannelMessageSendEmbed(c.msg.ChannelID, embed)
+		if err != nil {
+			log.Println(err)
+		}
+	} else {
+		_, err := c.discord.ChannelMessageSend(c.msg.ChannelID, message)
+		if err != nil {
+			log.Println(err)
+		}
+	}
+}
+
+func isURL(str string) bool {
+	if !strings.HasPrefix(str, "http") {
+		return false
+	}
+	_, err := url.Parse(str)
+	return err == nil
 }
 
 // resetsource
@@ -169,28 +174,3 @@ func (c *DiscordContext) SetArgs(args []string) {
 func (c *DiscordContext) GetAI() *ai.Client {
 	return c.ai
 }
-
-// func onMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
-
-// 	// If the message is "ping" reply with "Pong!"
-// 	// if m.Content == "ping" {
-// 	// 	embed := &discordgo.MessageEmbed{
-// 	// 		Title:       "PONG!!",
-// 	// 		URL:         "http://image5.sixthtone.com/image/5/41/132.jpg",
-// 	// 		Description: "Embed Description",
-// 	// 		Color:       0x78141b,
-// 	// 		Fields: []*discordgo.MessageEmbedField{
-// 	// 			{
-// 	// 				Name:   "Inline field 1 title",
-// 	// 				Value:  "value 1",
-// 	// 				Inline: true,
-// 	// 			},
-// 	// 		},
-// 	// 	}
-// 	// 	s.ChannelMessageSendEmbed(m.ChannelID, embed)
-// 	// }
-
-// 	log.Println(m.Content)
-// 	//	s.ChannelMessageSend(m.ChannelID, "pong!")
-
-// }

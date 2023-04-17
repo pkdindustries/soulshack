@@ -57,6 +57,7 @@ func (c *Personality) SetConfig(v *vip.Viper) {
 type SessionConfig struct {
 	Chunkdelay     time.Duration
 	Chunkmax       int
+	Chunkquoted    bool
 	ClientTimeout  time.Duration
 	MaxHistory     int
 	MaxTokens      int

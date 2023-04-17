@@ -10,10 +10,11 @@ import (
 )
 
 type Chunker struct {
-	Buffer     *bytes.Buffer
-	Chunkdelay time.Duration
-	Chunkmax   int
-	Last       time.Time
+	Buffer      *bytes.Buffer
+	Chunkdelay  time.Duration
+	Chunkmax    int
+	Chunkquoted bool
+	Last        time.Time
 }
 
 func (c *Chunker) ChannelFilter(input <-chan *string) <-chan string {
@@ -60,6 +61,22 @@ func (c *Chunker) chunk() (bool, []byte) {
 		return true, chunk
 	}
 
+	// if chunkquoted is true, chunk a whole block quote
+	if c.Chunkquoted {
+		content := c.Buffer.Bytes()
+		// block quotes
+		blockstart := bytes.Index(content, []byte("```"))
+		if blockstart != -1 {
+			blockend := bytes.Index(content[blockstart+3:], []byte("```"))
+			if blockend != -1 {
+				chunk := c.Buffer.Next(blockstart + 3 + blockend + 3)
+				c.Last = time.Now()
+				return true, chunk
+			}
+			// not found, don't chunk
+			return false, nil
+		}
+	}
 	// chunk on a newline in first chunksize
 	end := c.Chunkmax
 	if c.Buffer.Len() < end {

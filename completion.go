@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"time"
 
@@ -44,6 +45,7 @@ func completionstream(ctx context.Context, req *CompletionRequest, ch chan<- *st
 
 	for {
 		response, err := stream.Recv()
+		fmt.Printf(".")
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				ch <- strp("\n")

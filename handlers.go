@@ -59,10 +59,11 @@ func complete(c ChatContext, msg string) {
 	})
 
 	chunker := &Chunker{
-		Chunkmax:   session.Config.Chunkmax,
-		Chunkdelay: session.Config.Chunkdelay,
-		Last:       time.Now(),
-		Buffer:     &bytes.Buffer{},
+		Chunkmax:    session.Config.Chunkmax,
+		Chunkdelay:  session.Config.Chunkdelay,
+		Chunkquoted: session.Config.Chunkquoted,
+		Last:        time.Now(),
+		Buffer:      &bytes.Buffer{},
 	}
 	chunkch := chunker.ChannelFilter(respch)
 
