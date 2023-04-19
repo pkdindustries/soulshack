@@ -36,7 +36,7 @@ func handleMessage(ctx ChatContext) {
 		case "/help":
 			fallthrough
 		case "/?":
-			ctx.Reply("Supported commands: /set, /say [/as], /get, /list, /become, /leave, /help, /version")
+			ctx.Reply("Supported commands: /set, /say [/as], /get, /list, /become, /leave, /help, /version, /image")
 		// case "/version":
 		// 	ctx.Reply(r.Version)
 		default:
@@ -71,10 +71,8 @@ func complete(c ChatContext, msg string) {
 
 	for reply := range chunkch {
 		all.WriteString(reply)
-		log.Printf("<< <%s> %s", personality.Nick, reply)
 		c.Reply(reply)
 	}
-
 	session.AddMessage(c, ai.ChatMessageRoleAssistant, all.String())
 }
 
@@ -180,7 +178,7 @@ func handleBecome(ctx ChatContext) {
 	}
 
 	personality := tokens[1]
-	if cfg, err := loadPersonality(personality); err != nil {
+	if cfg, err := loadConfig(personality); err != nil {
 		ctx.Reply(fmt.Sprintf("Error loading personality: %s", err.Error()))
 		return
 	} else {
@@ -195,7 +193,7 @@ func handleBecome(ctx ChatContext) {
 }
 
 func handleList(ctx ChatContext) {
-	personalities := listPersonalities()
+	personalities := listConfigs()
 	ctx.Reply(fmt.Sprintf("Available personalities: %s", strings.Join(personalities, ", ")))
 }
 
@@ -207,13 +205,6 @@ func handleLeave(ctx ChatContext) {
 	}
 
 	// sendMessage(c, &e, getChatCompletionString(
-	// 	[]ai.ChatCompletionMessage{
-	// 		{
-	// 			Role:    ai.ChatMessageRoleAssistant,
-	// 			Content: viper.GetString("prompt") + viper.GetString("goodbye"),
-	// 		},
-	// 	},
-	// ))
 
 	log.Println("exiting...")
 	go func() {
@@ -248,7 +239,7 @@ func handleSay(ctx ChatContext) {
 		ctx.SetArgs(args[2:])
 	}
 
-	if cfg, err := loadPersonality(as); err != nil {
+	if cfg, err := loadConfig(as); err != nil {
 		ctx.Reply(fmt.Sprintf("Error loading personality: %s", err.Error()))
 		return
 	} else {
@@ -265,28 +256,47 @@ func handleSay(ctx ChatContext) {
 
 // handleimage
 func handleImage(ctx ChatContext) {
-	prompt := strings.Join(ctx.GetArgs()[1:], " ")
-	ctx.Reply("creating image...")
+	args := ctx.GetArgs()
+
+	validrez := map[string]bool{
+		"256x256":   true,
+		"512x512":   true,
+		"1024x1024": true,
+	}
+
+	if len(args) < 2 {
+		ctx.Reply("Usage: /image [resolution] prompt")
+		return
+	}
+
+	resolution := "256x256"
+	prompt := strings.Join(args[1:], " ")
+	if validrez[args[1]] {
+		resolution = args[1]
+		prompt = strings.Join(args[2:], " ")
+	}
+
+	ctx.Reply(fmt.Sprintf("creating %s image...", resolution))
 	req := ai.ImageRequest{
 		Prompt:         prompt,
-		Size:           ai.CreateImageSize256x256,
+		Size:           resolution,
 		ResponseFormat: ai.CreateImageResponseFormatURL,
 		N:              1,
 	}
+
 	resp, err := ctx.GetAI().CreateImage(ctx, req)
 	if err != nil {
-		ctx.Reply(fmt.Sprintf("Image creation error: %v\n", err))
+		ctx.Reply(fmt.Sprintf("image creation error: %v", err))
 		return
 	}
 
 	u, err := shorturl.Shorten(resp.Data[0].URL, "tinyurl")
 	if err != nil {
-		log.Printf("Error shortening url: %v\n", err)
+		log.Printf("error shortening url: %v", err)
 		ctx.Reply(resp.Data[0].URL)
 	} else {
 		ctx.Reply(string(u))
 	}
-
 }
 
 func keysAsString(m map[string]string) string {

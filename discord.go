@@ -50,7 +50,7 @@ func NewDiscordContext(parent context.Context, ai *ai.Client, v *vip.Viper, m *d
 	return ctx, cancel
 }
 
-func startDiscord(a *ai.Client) {
+func startDiscord(aiclient *ai.Client) {
 
 	dg, err := discordgo.New("Bot " + vip.GetString("discordtoken"))
 	if err != nil {
@@ -62,7 +62,7 @@ func startDiscord(a *ai.Client) {
 		if m.Author.ID == s.State.User.ID {
 			return
 		}
-		ctx, cancel := NewDiscordContext(context.Background(), a, vip.GetViper(), m, s)
+		ctx, cancel := NewDiscordContext(context.Background(), aiclient, vip.GetViper(), m, s)
 		defer cancel()
 
 		ctx.GetSession().Config.Chunkquoted = true
@@ -105,36 +105,15 @@ func (c *DiscordContext) IsValid() bool {
 }
 
 func (c *DiscordContext) Reply(message string) {
-	// if message is empty, don't send anything
 
 	if strings.TrimSpace(message) == "" {
 		return
 	}
 
-	if isURL(message) {
-		embed := &discordgo.MessageEmbed{
-			URL:   message,
-			Color: 0x00ff00,
-			Image: &discordgo.MessageEmbedImage{URL: message},
-		}
-		_, err := c.discord.ChannelMessageSendEmbed(c.msg.ChannelID, embed)
-		if err != nil {
-			log.Println(err)
-		}
-	} else {
-		_, err := c.discord.ChannelMessageSend(c.msg.ChannelID, message)
-		if err != nil {
-			log.Println(err)
-		}
+	_, err := c.discord.ChannelMessageSend(c.msg.ChannelID, message)
+	if err != nil {
+		log.Println(err)
 	}
-}
-
-func isURL(str string) bool {
-	if !strings.HasPrefix(str, "http") {
-		return false
-	}
-	_, err := url.Parse(str)
-	return err == nil
 }
 
 // resetsource
@@ -173,4 +152,12 @@ func (c *DiscordContext) SetArgs(args []string) {
 // ai
 func (c *DiscordContext) GetAI() *ai.Client {
 	return c.ai
+}
+
+func isURL(str string) bool {
+	if !strings.HasPrefix(str, "http") {
+		return false
+	}
+	_, err := url.Parse(str)
+	return err == nil
 }

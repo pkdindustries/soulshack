@@ -110,7 +110,9 @@ func (sessions *SessionMap) Get(id string) *Session {
 		for {
 			time.Sleep(session.Config.SessionTimeout)
 			if session.Reap() {
-				log.Println("session reaped:", session.Name)
+				if false {
+					log.Println("session reaped:", session.Name)
+				}
 				return
 			}
 		}

@@ -18,8 +18,7 @@ type Chunker struct {
 }
 
 func (c *Chunker) ChannelFilter(input <-chan *string) <-chan string {
-	out := make(chan string)
-
+	out := make(chan string, 10)
 	go func() {
 		defer close(out)
 		for val := range input {
@@ -27,7 +26,6 @@ func (c *Chunker) ChannelFilter(input <-chan *string) <-chan string {
 			chunker(c, out)
 		}
 	}()
-
 	return out
 }
 

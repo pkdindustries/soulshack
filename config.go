@@ -71,7 +71,7 @@ func initConfig() {
 	}
 
 	if vip.GetBool("list") {
-		personalities := listPersonalities()
+		personalities := listConfigs()
 		log.Printf("Available personalities: %s", strings.Join(personalities, ", "))
 		os.Exit(0)
 	}
@@ -106,7 +106,7 @@ func verifyConfig(v *vip.Viper) error {
 	return nil
 }
 
-func listPersonalities() []string {
+func listConfigs() []string {
 	files, err := os.ReadDir(vip.GetString("directory"))
 	if err != nil {
 		log.Fatal(err)
@@ -120,7 +120,7 @@ func listPersonalities() []string {
 	return personalities
 }
 
-func loadPersonality(p string) (*vip.Viper, error) {
+func loadConfig(p string) (*vip.Viper, error) {
 	log.Println("loading personality:", p)
 	conf := vip.New()
 	conf.SetConfigFile(vip.GetString("directory") + "/" + p + ".yml")

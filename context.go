@@ -45,7 +45,6 @@ func PersonalityFromViper(v *vip.Viper) *Personality {
 	}
 }
 
-// merge in the viper config
 func (c *Personality) SetConfig(v *vip.Viper) {
 	c.Prompt = v.GetString("prompt")
 	c.Greeting = v.GetString("greeting")
@@ -67,11 +66,11 @@ type SessionConfig struct {
 // sessionconfigfromviper
 func SessionFromViper(v *vip.Viper) *SessionConfig {
 	return &SessionConfig{
-		MaxTokens:      vip.GetInt("maxtokens"),
-		SessionTimeout: vip.GetDuration("session"),
-		MaxHistory:     vip.GetInt("history"),
-		ClientTimeout:  vip.GetDuration("timeout"),
 		Chunkdelay:     vip.GetDuration("chunkdelay"),
 		Chunkmax:       vip.GetInt("chunkmax"),
+		ClientTimeout:  vip.GetDuration("timeout"),
+		MaxHistory:     vip.GetInt("history"),
+		MaxTokens:      vip.GetInt("maxtokens"),
+		SessionTimeout: vip.GetDuration("session"),
 	}
 }

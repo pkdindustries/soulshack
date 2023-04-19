@@ -253,7 +253,7 @@ func BenchmarkChunker_ChunkFilter(b *testing.B) {
 				}
 
 				// Create an input channel and send the text to it
-				input := make(chan *string, 1)
+				input := make(chan *string, 10)
 
 				input <- &text
 				close(input)
