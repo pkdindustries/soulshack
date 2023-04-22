@@ -10,11 +10,11 @@ import (
 )
 
 type Chunker struct {
-	Buffer      *bytes.Buffer
-	Chunkdelay  time.Duration
-	Chunkmax    int
-	Chunkquoted bool
-	Last        time.Time
+	buffer *bytes.Buffer
+	delay  time.Duration
+	max    int
+	quote  bool
+	last   time.Time
 }
 
 func (c *Chunker) ChannelFilter(input <-chan *string) <-chan string {
@@ -22,19 +22,8 @@ func (c *Chunker) ChannelFilter(input <-chan *string) <-chan string {
 	go func() {
 		defer close(out)
 		for val := range input {
-			c.Buffer.WriteString(*val)
+			c.buffer.WriteString(*val)
 			chunker(c, out)
-		}
-	}()
-	return out
-}
-
-func (c *Chunker) NullChannelFilter(input <-chan *string) <-chan string {
-	out := make(chan string)
-	go func() {
-		defer close(out)
-		for val := range input {
-			out <- *val
 		}
 	}()
 	return out
@@ -53,22 +42,22 @@ func chunker(c *Chunker, out chan<- string) {
 
 func (c *Chunker) chunk() (bool, []byte) {
 	// if chunkdelay is -1, huck the buffer right now
-	if c.Chunkdelay == -1 && c.Buffer.Len() > 0 {
-		chunk := c.Buffer.Next(c.Buffer.Len())
-		c.Last = time.Now()
+	if c.delay == -1 && c.buffer.Len() > 0 {
+		chunk := c.buffer.Next(c.buffer.Len())
+		c.last = time.Now()
 		return true, chunk
 	}
 
 	// if chunkquoted is true, chunk a whole block quote
-	if c.Chunkquoted {
-		content := c.Buffer.Bytes()
+	if c.quote {
+		content := c.buffer.Bytes()
 		// block quotes
 		blockstart := bytes.Index(content, []byte("```"))
 		if blockstart != -1 {
 			blockend := bytes.Index(content[blockstart+3:], []byte("```"))
 			if blockend != -1 {
-				chunk := c.Buffer.Next(blockstart + 3 + blockend + 3)
-				c.Last = time.Now()
+				chunk := c.buffer.Next(blockstart + 3 + blockend + 3)
+				c.last = time.Now()
 				return true, chunk
 			}
 			// not found, don't chunk
@@ -76,33 +65,33 @@ func (c *Chunker) chunk() (bool, []byte) {
 		}
 	}
 	// chunk on a newline in first chunksize
-	end := c.Chunkmax
-	if c.Buffer.Len() < end {
-		end = c.Buffer.Len()
+	end := c.max
+	if c.buffer.Len() < end {
+		end = c.buffer.Len()
 	}
 
 	// chunk on a newline in first chunksize
-	index := bytes.IndexByte(c.Buffer.Bytes()[:end], '\n')
+	index := bytes.IndexByte(c.buffer.Bytes()[:end], '\n')
 	if index != -1 {
-		chunk := c.Buffer.Next(index + 1)
-		c.Last = time.Now()
+		chunk := c.buffer.Next(index + 1)
+		c.last = time.Now()
 		return true, chunk
 	}
 
 	// chunk if full buffer satisfies chunk size
-	if c.Buffer.Len() >= c.Chunkmax {
-		chunk := c.Buffer.Next(c.Chunkmax)
-		c.Last = time.Now()
+	if c.buffer.Len() >= c.max {
+		chunk := c.buffer.Next(c.max)
+		c.last = time.Now()
 		return true, chunk
 	}
 
 	// chunk on boundary if n seconds have passed since the last chunk
-	if time.Since(c.Last) >= c.Chunkdelay {
-		content := c.Buffer.Bytes()
+	if time.Since(c.last) >= c.delay {
+		content := c.buffer.Bytes()
 		index := dumbBoundary(&content)
 		if index != -1 {
-			chunk := c.Buffer.Next(index + 1)
-			c.Last = time.Now()
+			chunk := c.buffer.Next(index + 1)
+			c.last = time.Now()
 			return true, chunk
 		}
 	}

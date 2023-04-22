@@ -18,13 +18,34 @@ type CompletionRequest struct {
 	Messages  []ai.ChatCompletionMessage
 }
 
-func CompletionTask(ctx context.Context, req *CompletionRequest) <-chan *string {
+func CompletionStreamTask(ctx context.Context, req *CompletionRequest) <-chan *string {
 	ch := make(chan *string)
-	go completionstream(ctx, req, ch)
+	go stream(ctx, req, ch)
 	return ch
 }
 
-func completionstream(ctx context.Context, req *CompletionRequest, ch chan<- *string) {
+func CompletionTask(ctx context.Context, req *CompletionRequest) (*string, error) {
+	ctx, cancel := context.WithTimeout(ctx, req.Timeout)
+	defer cancel()
+
+	response, err := req.Client.CreateChatCompletion(ctx, ai.ChatCompletionRequest{
+		MaxTokens: req.MaxTokens,
+		Model:     req.Model,
+		Messages:  req.Messages,
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	if len(response.Choices) == 0 {
+		return nil, errors.New("no choices")
+	}
+
+	return &response.Choices[0].Message.Content, nil
+}
+
+func stream(ctx context.Context, req *CompletionRequest, ch chan<- *string) {
 	defer close(ch)
 
 	ctx, cancel := context.WithTimeout(ctx, req.Timeout)

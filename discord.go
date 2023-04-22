@@ -1,13 +1,15 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"log"
-	"net/url"
 	"os"
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/bwmarrin/discordgo"
 	ai "github.com/sashabaranov/go-openai"
@@ -47,6 +49,8 @@ func NewDiscordContext(parent context.Context, ai *ai.Client, v *vip.Viper, m *d
 		config:      DiscordFromViper(v),
 	}
 
+	ctx.discord.ChannelTyping(m.ChannelID)
+
 	return ctx, cancel
 }
 
@@ -64,10 +68,6 @@ func startDiscord(aiclient *ai.Client) {
 		}
 		ctx, cancel := NewDiscordContext(context.Background(), aiclient, vip.GetViper(), m, s)
 		defer cancel()
-
-		ctx.GetSession().Config.Chunkquoted = true
-		ctx.GetSession().Config.Chunkmax = 2000
-		ctx.discord.ChannelTyping(m.ChannelID)
 		handleMessage(ctx)
 	})
 
@@ -86,9 +86,113 @@ func startDiscord(aiclient *ai.Client) {
 	<-sc
 }
 
-// getcommand
-func (c *DiscordContext) GetCommand() string {
-	return c.GetArgs()[0]
+func (c *DiscordContext) Complete(msg string) {
+	session := c.GetSession()
+	personality := c.GetPersonality()
+	session.AddMessage(c, ai.ChatMessageRoleUser, msg)
+
+	respch := CompletionStreamTask(c, &CompletionRequest{
+		Client:    c.GetAI(),
+		Timeout:   session.Config.ClientTimeout,
+		Model:     personality.Model,
+		MaxTokens: session.Config.MaxTokens,
+		Messages:  session.GetHistory(),
+	})
+
+	chunker := &Chunker{
+		buffer: &bytes.Buffer{},
+		delay:  0,
+		max:    9999,
+		quote:  false,
+		last:   time.Now(),
+	}
+	chunkch := chunker.ChannelFilter(respch)
+
+	typer := time.NewTicker(10 * time.Second)
+	donetyping := make(chan struct{})
+	defer typer.Stop()
+	defer close(donetyping)
+	go func() {
+		for {
+			select {
+			case <-typer.C:
+				c.discord.ChannelTyping(c.msg.ChannelID)
+			case <-donetyping:
+				return
+			}
+		}
+	}()
+
+	all := strings.Builder{}
+	sent := ""
+	for chunk := range chunkch {
+		all.WriteString(chunk)
+		if sent == "" {
+			messageID, err := c.initmessage(chunk)
+			if err == nil {
+				sent = messageID
+			}
+		} else {
+			msg := all.String()
+			quotes := strings.Count(msg, "```")
+			if quotes%2 != 0 {
+				msg += "```"
+			}
+			if len(msg) > 2000 {
+				all.Reset()
+				all.WriteString(chunk)
+				messageID, err := c.initmessage(chunk)
+				if err == nil {
+					sent = messageID
+				}
+			} else {
+				c.editmessage(sent, msg)
+			}
+		}
+	}
+	session.AddMessage(c, ai.ChatMessageRoleAssistant, all.String())
+}
+
+func (c *DiscordContext) initmessage(message string) (string, error) {
+	if strings.TrimSpace(message) == "" {
+		return "", errors.New("empty message")
+	}
+
+	sentMessage, err := c.discord.ChannelMessageSend(c.msg.ChannelID, message)
+	if err != nil {
+		log.Println(err)
+		return "", err
+	}
+
+	return sentMessage.ID, nil
+}
+
+func (c *DiscordContext) editmessage(messageID, content string) {
+	if strings.TrimSpace(content) == "" {
+		return
+	}
+	_, err := c.discord.ChannelMessageEdit(c.msg.ChannelID, messageID, content)
+	if err != nil {
+		log.Println(err)
+	}
+}
+
+func (c *DiscordContext) Sendmessage(message string) {
+	if strings.TrimSpace(message) == "" {
+		return
+	}
+	_, err := c.discord.ChannelMessageSend(c.msg.ChannelID, message)
+	if err != nil {
+		log.Println(err)
+	}
+}
+
+// changename
+func (c *DiscordContext) ChangeName(name string) {
+	err := c.discord.GuildMemberNickname(c.msg.GuildID, c.discord.State.User.ID, name)
+	if err != nil {
+		log.Println("error changing nickname:", err)
+	}
 }
 
 func (c *DiscordContext) IsAdmin() bool {
@@ -104,24 +208,8 @@ func (c *DiscordContext) IsValid() bool {
 	return true
 }
 
-func (c *DiscordContext) Reply(message string) {
-
-	if strings.TrimSpace(message) == "" {
-		return
-	}
-
-	_, err := c.discord.ChannelMessageSend(c.msg.ChannelID, message)
-	if err != nil {
-		log.Println(err)
-	}
-}
-
 // resetsource
 func (c *DiscordContext) ResetSource() {
-}
-
-// changename
-func (c *DiscordContext) ChangeName(name string) {
 }
 
 // getsession
@@ -152,12 +240,4 @@ func (c *DiscordContext) SetArgs(args []string) {
 // ai
 func (c *DiscordContext) GetAI() *ai.Client {
 	return c.ai
-}
-
-func isURL(str string) bool {
-	if !strings.HasPrefix(str, "http") {
-		return false
-	}
-	_, err := url.Parse(str)
-	return err == nil
 }

@@ -31,9 +31,9 @@ func TestChatSession(t *testing.T) {
 		session1.AddMessage(ctx, ai.ChatMessageRoleUser, "Hello!")
 		session1.AddMessage(ctx, ai.ChatMessageRoleAssistant, "Hi there!")
 
-		assert.Len(t, session1.History, 3)
-		assert.Equal(t, session1.History[1].Content, "Hello!")
-		assert.Equal(t, session1.History[2].Content, "Hi there!")
+		assert.Len(t, session1.history, 3)
+		assert.Equal(t, session1.history[1].Content, "Hello!")
+		assert.Equal(t, session1.history[2].Content, "Hi there!")
 	})
 }
 func TestExpiry(t *testing.T) {
@@ -56,14 +56,14 @@ func TestExpiry(t *testing.T) {
 		session3 := sessions.Get("session2")
 
 		assert.NotEqual(t, session2, session3, "Expired session should not be reused")
-		assert.Len(t, session3.History, 0, "New session history should be empty")
+		assert.Len(t, session3.history, 0, "New session history should be empty")
 
 		session3.AddMessage(ctx, ai.ChatMessageRoleUser, "Hello again!")
 		session3.AddMessage(ctx, ai.ChatMessageRoleAssistant, "Hi! Nice to see you again!")
 
-		assert.Len(t, session3.History, 3, "History should include the latest 2 messages plus the initial system message")
-		assert.Equal(t, session3.History[1].Content, "Hello again!")
-		assert.Equal(t, session3.History[2].Content, "Hi! Nice to see you again!")
+		assert.Len(t, session3.history, 3, "History should include the latest 2 messages plus the initial system message")
+		assert.Equal(t, session3.history[1].Content, "Hello again!")
+		assert.Equal(t, session3.history[2].Content, "Hi! Nice to see you again!")
 	})
 }
 
@@ -109,7 +109,7 @@ func TestSessionConcurrency(t *testing.T) {
 		for i := 0; i < concurrentUsers; i++ {
 			sessionID := fmt.Sprintf("usersession%d", i)
 			session := sessions.Get(sessionID)
-			assert.Len(t, session.History, messagesPerUser*2+1, "Each session should have the correct number of messages")
+			assert.Len(t, session.history, messagesPerUser*2+1, "Each session should have the correct number of messages")
 		}
 		elapsedTime := time.Since(startTime)
 		totalMessages := concurrentUsers * messagesPerUser * 2
@@ -157,7 +157,7 @@ func TestSingleSessionConcurrency(t *testing.T) {
 		totalMessages := concurrentUsers * messagesPerUser * 2
 		messagesPerSecond := float64(totalMessages) / float64(elapsedTime.Milliseconds())
 
-		assert.Len(t, session.History, totalMessages+1, "The session should have the correct number of messages")
+		assert.Len(t, session.history, totalMessages+1, "The session should have the correct number of messages")
 		t.Logf("Processed %d messages in %v, which is %.2f messages per ms??\n", totalMessages, elapsedTime, messagesPerSecond)
 	})
 }
@@ -237,17 +237,17 @@ func TestSessionWindow(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			session := Session{
-				History: tc.history,
+				history: tc.history,
 				Config:  &SessionConfig{MaxHistory: tc.maxHistory},
 			}
 
 			session.trim()
 
-			if len(session.History) != len(tc.expected) {
-				t.Errorf("Expected history length to be %d, but got %d", len(tc.expected), len(session.History))
+			if len(session.history) != len(tc.expected) {
+				t.Errorf("Expected history length to be %d, but got %d", len(tc.expected), len(session.history))
 			}
 
-			for i, msg := range session.History {
+			for i, msg := range session.history {
 				if msg.Role != tc.expected[i].Role || msg.Content != tc.expected[i].Content {
 					t.Errorf("Expected message at index %d to be %+v, but got %+v", i, tc.expected[i], msg)
 				}
@@ -264,7 +264,7 @@ func BenchmarkTrim(b *testing.B) {
 		}
 		b.Run(fmt.Sprintf("MsgCount_%d", msgCount), func(b *testing.B) {
 			session := Session{
-				History: messages,
+				history: messages,
 				Config:  &SessionConfig{MaxHistory: msgCount / 2},
 			}
 

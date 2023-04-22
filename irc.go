@@ -1,9 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
-	"fmt"
 	"log"
 	"strings"
 	"time"
@@ -17,7 +17,6 @@ type IrcConfig struct {
 	Channel   string
 	Admins    []string
 	Directory string
-	Verbose   bool
 	Server    string
 	Port      int
 	SSL       bool
@@ -106,12 +105,41 @@ func startIrc(aiClient *ai.Client) {
 	}
 }
 
+func (c *IrcContext) Complete(msg string) {
+	session := c.GetSession()
+	personality := c.GetPersonality()
+	session.AddMessage(c, ai.ChatMessageRoleUser, msg)
+
+	respch := CompletionStreamTask(c, &CompletionRequest{
+		Client:    c.GetAI(),
+		Timeout:   session.Config.ClientTimeout,
+		Model:     personality.Model,
+		MaxTokens: session.Config.MaxTokens,
+		Messages:  session.GetHistory(),
+	})
+
+	chunker := &Chunker{
+		buffer: &bytes.Buffer{},
+		max:    session.Config.Chunkmax,
+		delay:  session.Config.Chunkdelay,
+		quote:  session.Config.Chunkquoted,
+		last:   time.Now(),
+	}
+	chunkch := chunker.ChannelFilter(respch)
+
+	all := strings.Builder{}
+	for reply := range chunkch {
+		all.WriteString(reply)
+		c.Sendmessage(reply)
+	}
+	session.AddMessage(c, ai.ChatMessageRoleAssistant, all.String())
+}
+
 func IrcFromViper(v *vip.Viper) *IrcConfig {
 	return &IrcConfig{
 		Channel:   v.GetString("channel"),
 		Admins:    v.GetStringSlice("admins"),
 		Directory: v.GetString("directory"),
-		Verbose:   v.GetBool("verbose"),
 		Server:    v.GetString("server"),
 		Port:      v.GetInt("port"),
 		SSL:       v.GetBool("ssl"),
@@ -146,15 +174,7 @@ func (c *IrcContext) ChangeName(nick string) {
 	c.client.Cmd.Nick(nick)
 }
 
-func (c *IrcContext) Stats() string {
-	return fmt.Sprintf("session: messages %d, bytes %d, maxtokens %d, model %s",
-		len(c.session.GetHistory()),
-		c.session.Totalchars,
-		c.session.Config.MaxTokens,
-		c.personality.Model)
-}
-
-func (c *IrcContext) Reply(message string) {
+func (c *IrcContext) Sendmessage(message string) {
 	c.client.Cmd.Reply(*c.event, message)
 }
 
@@ -177,10 +197,6 @@ func (c *IrcContext) IsValid() bool {
 
 func (c *IrcContext) IsPrivate() bool {
 	return !strings.HasPrefix(c.event.Params[0], "#")
-}
-
-func (c *IrcContext) GetCommand() string {
-	return strings.ToLower(c.args[0])
 }
 
 func (c *IrcContext) GetMessage() string {

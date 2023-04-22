@@ -49,10 +49,10 @@ func TestChunker_ChunkFilter(t *testing.T) {
 			close(in)
 
 			c := &Chunker{
-				Chunkmax:   tt.size,
-				Last:       time.Now(),
-				Buffer:     &bytes.Buffer{},
-				Chunkdelay: timeout,
+				max:    tt.size,
+				last:   time.Now(),
+				buffer: &bytes.Buffer{},
+				delay:  timeout,
 			}
 
 			out := c.ChannelFilter(in)
@@ -151,12 +151,12 @@ func TestChunker_Chunk(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := &Chunker{
-				Chunkmax:   tt.size,
-				Last:       time.Now(),
-				Buffer:     &bytes.Buffer{},
-				Chunkdelay: timeout,
+				max:    tt.size,
+				last:   time.Now(),
+				buffer: &bytes.Buffer{},
+				delay:  timeout,
 			}
-			c.Buffer.WriteString(tt.input)
+			c.buffer.WriteString(tt.input)
 
 			chunked, chunk := c.chunk()
 			if chunked && string(chunk) != string(tt.expected) {
@@ -171,12 +171,12 @@ func TestChunker_Chunk_Timeout(t *testing.T) {
 	timeout := 100 * time.Millisecond
 
 	c := &Chunker{
-		Chunkmax:   50,
-		Last:       time.Now(),
-		Buffer:     &bytes.Buffer{},
-		Chunkdelay: timeout,
+		max:    50,
+		last:   time.Now(),
+		buffer: &bytes.Buffer{},
+		delay:  timeout,
 	}
-	c.Buffer.WriteString("Hello world! How are you?")
+	c.buffer.WriteString("Hello world! How are you?")
 
 	// Wait for timeout duration
 	time.Sleep(500 * time.Millisecond)
@@ -211,12 +211,12 @@ func BenchmarkChunker_StressTest(b *testing.B) {
 		b.Run(fmt.Sprintf("StressTest_BufferSize_%d", bufSize), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				c := &Chunker{
-					Chunkmax:   40,
-					Last:       time.Now(),
-					Buffer:     &bytes.Buffer{},
-					Chunkdelay: timeout,
+					max:    40,
+					last:   time.Now(),
+					buffer: &bytes.Buffer{},
+					delay:  timeout,
 				}
-				c.Buffer.WriteString(text)
+				c.buffer.WriteString(text)
 
 				// Continuously call Chunk() until no chunks are left
 				for chunked, t := c.chunk(); chunked; chunked, t = c.chunk() {
@@ -246,10 +246,10 @@ func BenchmarkChunker_ChunkFilter(b *testing.B) {
 		b.Run(fmt.Sprintf("ChunkFilter_BufferSize_%d", bufSize), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				c := &Chunker{
-					Chunkmax:   40,
-					Last:       time.Now(),
-					Buffer:     &bytes.Buffer{},
-					Chunkdelay: timeout,
+					max:    40,
+					last:   time.Now(),
+					buffer: &bytes.Buffer{},
+					delay:  timeout,
 				}
 
 				// Create an input channel and send the text to it

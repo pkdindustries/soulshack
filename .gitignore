@@ -2,3 +2,4 @@
 *.env
 soulshack
 __debug_bin
+action.prompt

@@ -13,14 +13,14 @@ type ChatContext interface {
 	// msg
 	IsAdmin() bool
 	IsValid() bool
-	GetCommand() string
 	IsAddressed() bool
-	Reply(message string)
+	Sendmessage(string)
+	Complete(string)
 	ResetSource()
 	GetArgs() []string
 	SetArgs([]string)
 	// session
-	ChangeName(nick string)
+	ChangeName(string)
 	GetSession() *Session
 	SetSession(*Session)
 	GetPersonality() *Personality
@@ -32,7 +32,6 @@ type Personality struct {
 	Greeting string
 	Nick     string
 	Model    string
-	Goodbye  string
 }
 
 func PersonalityFromViper(v *vip.Viper) *Personality {
@@ -41,36 +40,34 @@ func PersonalityFromViper(v *vip.Viper) *Personality {
 		Greeting: v.GetString("greeting"),
 		Nick:     v.GetString("nick"),
 		Model:    v.GetString("model"),
-		Goodbye:  v.GetString("goodbye"),
 	}
 }
 
-func (c *Personality) SetConfig(v *vip.Viper) {
+func (c *Personality) SetPersonality(v *vip.Viper) {
 	c.Prompt = v.GetString("prompt")
 	c.Greeting = v.GetString("greeting")
 	c.Nick = v.GetString("nick")
 	c.Model = v.GetString("model")
-	c.Goodbye = v.GetString("goodbye")
 }
 
 type SessionConfig struct {
-	Chunkdelay     time.Duration
-	Chunkmax       int
-	Chunkquoted    bool
-	ClientTimeout  time.Duration
-	MaxHistory     int
-	MaxTokens      int
-	SessionTimeout time.Duration
+	Chunkdelay    time.Duration
+	Chunkmax      int
+	Chunkquoted   bool
+	ClientTimeout time.Duration
+	MaxHistory    int
+	MaxTokens     int
+	TTL           time.Duration
 }
 
 // sessionconfigfromviper
 func SessionFromViper(v *vip.Viper) *SessionConfig {
 	return &SessionConfig{
-		Chunkdelay:     vip.GetDuration("chunkdelay"),
-		Chunkmax:       vip.GetInt("chunkmax"),
-		ClientTimeout:  vip.GetDuration("timeout"),
-		MaxHistory:     vip.GetInt("history"),
-		MaxTokens:      vip.GetInt("maxtokens"),
-		SessionTimeout: vip.GetDuration("session"),
+		Chunkdelay:    vip.GetDuration("chunkdelay"),
+		Chunkmax:      vip.GetInt("chunkmax"),
+		ClientTimeout: vip.GetDuration("timeout"),
+		MaxHistory:    vip.GetInt("history"),
+		MaxTokens:     vip.GetInt("maxtokens"),
+		TTL:           vip.GetDuration("session"),
 	}
 }

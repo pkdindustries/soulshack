@@ -49,7 +49,6 @@ func init() {
 	root.PersistentFlags().IntP("chunkmax", "m", 350, "maximum number of characters to send as a single message")
 
 	// personality / prompting
-	root.PersistentFlags().String("goodbye", "goodbye.", "prompt to be used when the bot leaves the channel")
 	root.PersistentFlags().String("greeting", "hello.", "prompt to be used when the bot joins the channel")
 	root.PersistentFlags().String("prompt", "respond in a short text:", "initial system prompt for the ai")
 

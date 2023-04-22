@@ -54,7 +54,6 @@ soulshack can be configured using command line flags, environment variables, or 
   -m, --chunkmax int          maximum number of characters to send as a single message (default 350)
   -d, --directory string      personalities configuration directory (default "./personalities")
       --discordtoken string   discord bot token
-      --goodbye string        prompt to be used when the bot leaves the channel (default "goodbye.")
       --greeting string       prompt to be used when the bot joins the channel (default "hello.")
   -h, --help                  help for soulshack
   -H, --history int           maximum number of lines of context to keep per session (default 15)
@@ -91,7 +90,6 @@ to add a new personality to soulshack, follow these steps:
 ```yml
 nick: marvin
 greeting: "explain the size of your brain compared to common household objects."
-goodbye: "goodbye."
 prompt: "you are marvin the paranoid android. respond with a short text message: "
 ```
 
