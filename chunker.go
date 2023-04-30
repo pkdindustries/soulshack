@@ -100,16 +100,6 @@ func (c *Chunker) chunk() (bool, []byte) {
 	return false, nil
 }
 
-// :(
-func dumberBoundary(s *[]byte) int {
-	for i := len(*s) - 2; i >= 0; i-- {
-		if ((*s)[i] == '.' || (*s)[i] == ':' || (*s)[i] == '!' || (*s)[i] == '?') && ((*s)[i+1] == ' ' || (*s)[i+1] == '\t') {
-			return i + 1
-		}
-	}
-	return -1
-}
-
 // painfully slow on startup etc but 'correcter..ish' for english
 var tokenizer *sentences.DefaultSentenceTokenizer
 

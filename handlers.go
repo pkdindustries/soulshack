@@ -14,14 +14,13 @@ import (
 )
 
 func handleMessage(ctx ChatContext) {
+	log.Println(ctx.GetArgs())
 	if ctx.IsValid() {
 		switch strings.ToLower(ctx.GetArgs()[0]) {
 		case "/say":
 			handleSay(ctx)
-		case "/set":
-			handleSet(ctx)
-		case "/get":
-			handleGet(ctx)
+		case "/config":
+			handleConfig(ctx)
 		case "/save":
 			handleSave(ctx)
 		case "/list":
@@ -32,8 +31,8 @@ func handleMessage(ctx ChatContext) {
 			handleLeave(ctx)
 		case "/image":
 			handleImage(ctx)
-		case "/crawl":
-			handleCrawl(ctx)
+		case "/wikipedia":
+			handleWiki(ctx)
 		case "/help":
 			fallthrough
 		case "/?":
@@ -46,6 +45,31 @@ func handleMessage(ctx ChatContext) {
 	}
 }
 
+func handleConfig(ctx ChatContext) {
+	if !ctx.IsAdmin() {
+		ctx.Sendmessage("You don't have permission to perform this action.")
+		return
+	}
+
+	config := &ConfigAction{}
+	r, e := config.Execute(ctx, strings.Join(ctx.GetArgs(), " "))
+	if e != nil {
+		ctx.Sendmessage(e.Error())
+		return
+	}
+	ctx.Sendmessage(r)
+}
+
+func handleWiki(ctx ChatContext) {
+	crawl := &WikipediaAction{}
+	r, e := crawl.Execute(ctx, strings.Join(ctx.GetArgs(), " "))
+	if e != nil {
+		ctx.Sendmessage(e.Error())
+		return
+	}
+	ctx.Sendmessage(r)
+}
+
 func handleDefault(ctx ChatContext) {
 	ctx.Complete(strings.Join(ctx.GetArgs(), " "))
 }
@@ -54,57 +78,6 @@ func sendGreeting(ctx ChatContext) {
 	log.Println("sending greeting...")
 	ctx.Complete(ctx.GetPersonality().Greeting)
 	ctx.GetSession().Reset()
-}
-
-var configParams = map[string]string{"prompt": "", "model": "", "nick": "", "greeting": "", "directory": "", "session": "", "addressed": ""}
-
-func handleSet(ctx ChatContext) {
-
-	if !ctx.IsAdmin() {
-		ctx.Sendmessage("You don't have permission to perform this action.")
-		return
-	}
-
-	args := ctx.GetArgs()
-	if len(args) < 3 {
-		ctx.Sendmessage(fmt.Sprintf("Usage: /set %s <value>", keysAsString(configParams)))
-		return
-	}
-
-	param, v := args[1], args[2:]
-	value := strings.Join(v, " ")
-	if _, ok := configParams[param]; !ok {
-		ctx.Sendmessage(fmt.Sprintf("Unknown parameter. Supported parameters: %v", keysAsString(configParams)))
-		return
-	}
-
-	// set on global config
-	vip.Set(param, value)
-	ctx.Sendmessage(fmt.Sprintf("%s set to: %s", param, vip.GetString(param)))
-
-	if param == "nick" {
-		ctx.ChangeName(value)
-	}
-
-	ctx.GetSession().Reset()
-}
-
-func handleGet(ctx ChatContext) {
-
-	tokens := ctx.GetArgs()
-	if len(tokens) < 2 {
-		ctx.Sendmessage(fmt.Sprintf("Usage: /get %s", keysAsString(configParams)))
-		return
-	}
-
-	param := tokens[1]
-	if _, ok := configParams[param]; !ok {
-		ctx.Sendmessage(fmt.Sprintf("Unknown parameter. Supported parameters: %v", keysAsString(configParams)))
-		return
-	}
-
-	value := vip.GetString(param)
-	ctx.Sendmessage(fmt.Sprintf("%s: %s", param, value))
 }
 
 func handleSave(ctx ChatContext) {
@@ -151,12 +124,12 @@ func handleBecome(ctx ChatContext) {
 	}
 
 	personality := tokens[1]
-	if cfg, err := loadConfig(personality); err != nil {
+	if cfg, err := LoadConfig(personality); err != nil {
 		ctx.Sendmessage(fmt.Sprintf("Error loading personality: %s", err.Error()))
 		return
 	} else {
 		vip.MergeConfigMap(cfg.AllSettings())
-		ctx.GetPersonality().SetPersonality(cfg)
+		ctx.GetPersonality().FromViper(cfg)
 	}
 	ctx.GetSession().Reset()
 
@@ -166,7 +139,7 @@ func handleBecome(ctx ChatContext) {
 }
 
 func handleList(ctx ChatContext) {
-	personalities := listConfigs()
+	personalities := ListConfigs()
 	ctx.Sendmessage(fmt.Sprintf("Available personalities: %s", strings.Join(personalities, ", ")))
 }
 
@@ -204,11 +177,11 @@ func handleSay(ctx ChatContext) {
 		ctx.SetArgs(args[2:])
 	}
 
-	if cfg, err := loadConfig(as); err != nil {
+	if cfg, err := LoadConfig(as); err != nil {
 		ctx.Sendmessage(fmt.Sprintf("Error loading personality: %s", err.Error()))
 		return
 	} else {
-		ctx.GetPersonality().SetPersonality(cfg)
+		ctx.GetPersonality().FromViper(cfg)
 	}
 
 	ctx.SetSession(sessions.Get(uuid.New().String()))
@@ -262,36 +235,4 @@ func handleImage(ctx ChatContext) {
 	} else {
 		ctx.Sendmessage(string(u))
 	}
-}
-
-func keysAsString(m map[string]string) string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	return strings.Join(keys, ", ")
-}
-
-func handleAction(ctx ChatContext) {
-	action := ctx.GetArgs()[1]
-	args := ctx.GetArgs()[2:]
-	ctx.SetArgs(ctx.GetArgs()[1:])
-	switch action {
-	case "set":
-		handleSet(ctx)
-	case "get":
-		handleGet(ctx)
-	case "become":
-		handleBecome(ctx)
-	case "image":
-		handleImage(ctx)
-	case "crawl":
-		handleCrawl(ctx)
-	default:
-		ctx.Sendmessage(fmt.Sprintf("* %s %s", action, strings.Join(args, " ")))
-	}
-}
-
-func handleCrawl(_ ChatContext) {
-	log.Println("crawl unimplemented")
 }

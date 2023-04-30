@@ -20,20 +20,10 @@ type DiscordContext struct {
 	context.Context
 	ai          *ai.Client
 	personality *Personality
-	session     *Session
+	session     *Sessions
 	msg         *discordgo.MessageCreate
 	discord     *discordgo.Session
 	config      *DiscordConfig
-}
-
-type DiscordConfig struct {
-	Token string
-}
-
-func DiscordFromViper(v *vip.Viper) *DiscordConfig {
-	return &DiscordConfig{
-		Token: v.GetString("discordtoken"),
-	}
 }
 
 func NewDiscordContext(parent context.Context, ai *ai.Client, v *vip.Viper, m *discordgo.MessageCreate, s *discordgo.Session) (*DiscordContext, context.CancelFunc) {
@@ -49,12 +39,10 @@ func NewDiscordContext(parent context.Context, ai *ai.Client, v *vip.Viper, m *d
 		config:      DiscordFromViper(v),
 	}
 
-	ctx.discord.ChannelTyping(m.ChannelID)
-
 	return ctx, cancel
 }
 
-func startDiscord(aiclient *ai.Client) {
+func Discord(aiclient *ai.Client) {
 
 	dg, err := discordgo.New("Bot " + vip.GetString("discordtoken"))
 	if err != nil {
@@ -87,14 +75,18 @@ func startDiscord(aiclient *ai.Client) {
 }
 
 func (c *DiscordContext) Complete(msg string) {
+	log.Println("DiscordContext.Complete", msg)
 	session := c.GetSession()
 	personality := c.GetPersonality()
-	session.AddMessage(c, ai.ChatMessageRoleUser, msg)
 
-	respch := CompletionStreamTask(c, &CompletionRequest{
+	c.discord.ChannelTyping(c.msg.ChannelID)
+
+	session.AddMessage(c.personality, ai.ChatMessageRoleUser, msg)
+	respch := ChatCompletionStreamTask(c, &CompletionRequest{
 		Client:    c.GetAI(),
 		Timeout:   session.Config.ClientTimeout,
 		Model:     personality.Model,
+		Temp:      personality.Temp,
 		MaxTokens: session.Config.MaxTokens,
 		Messages:  session.GetHistory(),
 	})
@@ -108,7 +100,7 @@ func (c *DiscordContext) Complete(msg string) {
 	}
 	chunkch := chunker.ChannelFilter(respch)
 
-	typer := time.NewTicker(10 * time.Second)
+	typer := time.NewTicker(8 * time.Second)
 	donetyping := make(chan struct{})
 	defer typer.Stop()
 	defer close(donetyping)
@@ -150,7 +142,9 @@ func (c *DiscordContext) Complete(msg string) {
 			}
 		}
 	}
-	session.AddMessage(c, ai.ChatMessageRoleAssistant, all.String())
+
+	session.AddMessage(c.personality, ai.ChatMessageRoleAssistant, all.String())
+	ReactActionObservation(c, all.String())
 }
 
 func (c *DiscordContext) initmessage(message string) (string, error) {
@@ -188,11 +182,9 @@ func (c *DiscordContext) Sendmessage(message string) {
 }
 
 // changename
-func (c *DiscordContext) ChangeName(name string) {
+func (c *DiscordContext) ChangeName(name string) error {
 	err := c.discord.GuildMemberNickname(c.msg.GuildID, c.discord.State.User.ID, name)
-	if err != nil {
-		log.Println("error changing nickname:", err)
-	}
+	return err
 }
 
 func (c *DiscordContext) IsAdmin() bool {
@@ -213,12 +205,12 @@ func (c *DiscordContext) ResetSource() {
 }
 
 // getsession
-func (c *DiscordContext) GetSession() *Session {
+func (c *DiscordContext) GetSession() *Sessions {
 	return c.session
 }
 
 // setsession
-func (c *DiscordContext) SetSession(s *Session) {
+func (c *DiscordContext) SetSession(s *Sessions) {
 	c.session = s
 }
 

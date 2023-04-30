@@ -18,39 +18,61 @@ import (
 	ai "github.com/sashabaranov/go-openai"
 )
 
-func getBanner() string {
-	return fmt.Sprintf("%s\n%s",
-		figure.NewColorFigure("SoulShack", "", "green", true).ColorString(),
-		figure.NewColorFigure(" . . . because real people are overrated", "term", "green", true).ColorString())
+var RootCmd = &cobra.Command{
+	Use:     "soulshack",
+	Example: "soulshack irc|discord",
+	Short:   GetBanner(),
+	Version: "0.50 - http://github.com/pkdindustries/soulshack",
+}
+
+var IrcCmd = &cobra.Command{
+	Use:     "irc",
+	Example: "soulshack irc",
+	Short:   "run soulshack as an irc bot",
+	Run:     runIrc,
+}
+
+var DiscordCmd = &cobra.Command{
+	Use:     "discord",
+	Example: "soulshack discord",
+	Short:   "run soulshack as a discord bot",
+	Run:     runDiscord,
 }
 
 func main() {
-	if err := root.Execute(); err != nil {
+	RootCmd.AddCommand(IrcCmd)
+	RootCmd.AddCommand(DiscordCmd)
+	if err := RootCmd.Execute(); err != nil {
 		log.Fatal(err)
 	}
 }
 
-var root = &cobra.Command{
-	Use:     "soulshack",
-	Example: "soulshack --nick chatbot --server irc.freenode.net --port 6697 --channel '#soulshack' --ssl --openaikey ****************",
-	Short:   getBanner(),
-	Run:     run,
-	Version: "0.42 - http://github.com/pkdindustries/soulshack",
-}
-
-func run(_ *cobra.Command, _ []string) {
-
+func runIrc(_ *cobra.Command, _ []string) {
+	log.Println("running soulshack as an irc bot")
 	aiClient := ai.NewClient(vip.GetString("openaikey"))
 
-	if err := verifyConfig(vip.GetViper()); err != nil {
+	if err := VerifyConfig(vip.GetViper()); err != nil {
 		log.Fatal(err)
 	}
 
-	if len(vip.GetString("discordtoken")) > 0 {
-		go startDiscord(aiClient)
-	} else {
-		go startIrc(aiClient)
+	go Irc(aiClient)
+	select {}
+}
+
+func runDiscord(_ *cobra.Command, _ []string) {
+	log.Println("running soulshack as a discord bot")
+	aiClient := ai.NewClient(vip.GetString("openaikey"))
+
+	if err := VerifyConfig(vip.GetViper()); err != nil {
+		log.Fatal(err)
 	}
 
+	go Discord(aiClient)
 	select {}
+}
+
+func GetBanner() string {
+	return fmt.Sprintf("%s\n%s",
+		figure.NewColorFigure("SoulShack", "", "green", true).ColorString(),
+		figure.NewColorFigure(" . . . because real people are overrated", "term", "green", true).ColorString())
 }

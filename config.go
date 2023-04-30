@@ -17,60 +17,63 @@ import (
 
 func init() {
 
-	cobra.OnInitialize(initConfig)
+	cobra.OnInitialize(startup)
 
 	// irc configuration
-	root.PersistentFlags().StringP("nick", "n", "soulshack", "bot's nickname on the irc server")
-	root.PersistentFlags().StringP("server", "s", "localhost", "irc server address")
-	root.PersistentFlags().BoolP("ssl", "e", false, "enable SSL for the IRC connection")
-	root.PersistentFlags().IntP("port", "p", 6667, "irc server port")
-	root.PersistentFlags().StringP("channel", "c", "soulshack", "irc channel to join")
+	IrcCmd.PersistentFlags().StringP("nick", "n", "soulshack", "bot's nickname on the irc server")
+	IrcCmd.PersistentFlags().StringP("server", "s", "localhost", "irc server address")
+	IrcCmd.PersistentFlags().BoolP("ssl", "e", false, "enable SSL for the IRC connection")
+	IrcCmd.PersistentFlags().IntP("port", "p", 6667, "irc server port")
+	IrcCmd.PersistentFlags().StringP("channel", "c", "soulshack", "irc channel to join")
 
 	// bot meta configuration
-	root.PersistentFlags().StringP("become", "b", "chatbot", "become the named personality")
-	root.PersistentFlags().StringP("directory", "d", "./personalities", "personalities configuration directory")
-	root.PersistentFlags().StringSliceP("admins", "A", []string{}, "comma-separated list of allowed users to administrate the bot (e.g., user1,user2,user3)")
+	RootCmd.PersistentFlags().StringP("become", "b", "chatbot", "become the named personality")
+	RootCmd.PersistentFlags().StringP("directory", "d", "./personalities", "personalities configuration directory")
+	RootCmd.PersistentFlags().StringSliceP("admins", "A", []string{}, "comma-separated list of allowed users to administrate the bot (e.g., user1,user2,user3)")
 
 	// informational
-	root.PersistentFlags().BoolP("list", "l", false, "list configured personalities")
-	root.PersistentFlags().BoolP("verbose", "v", false, "enable verbose logging of sessions and configuration")
+	RootCmd.PersistentFlags().BoolP("list", "l", false, "list configured personalities")
+	RootCmd.PersistentFlags().BoolP("verbose", "v", false, "enable verbose logging of sessions and configuration")
 
 	// openai configuration
-	root.PersistentFlags().String("openaikey", "", "openai api key")
-	root.PersistentFlags().Int("maxtokens", 512, "maximum number of tokens to generate")
-	root.PersistentFlags().String("model", ai.GPT4, "model to be used for responses (e.g., gpt-4)")
+	RootCmd.PersistentFlags().String("openaikey", "", "openai api key")
+	RootCmd.PersistentFlags().Int("maxtokens", 512, "maximum number of tokens to generate")
+	RootCmd.PersistentFlags().String("model", ai.GPT4, "model to be used for responses (e.g., gpt-4)")
+	RootCmd.PersistentFlags().Float64("temperature", 0.3, "temperature for the completion response")
 
 	// timeouts and behavior
-	root.PersistentFlags().BoolP("addressed", "a", true, "require bot be addressed by nick for response")
-	root.PersistentFlags().DurationP("session", "S", time.Minute*3, "duration for the chat session; message context will be cleared after this time")
-	root.PersistentFlags().DurationP("timeout", "t", time.Second*60, "timeout for each completion request to openai")
-	root.PersistentFlags().IntP("history", "H", 15, "maximum number of lines of context to keep per session")
-	root.PersistentFlags().DurationP("chunkdelay", "C", time.Second*15, "after this delay, bot will look to split the incoming buffer on sentence boundaries")
-	root.PersistentFlags().IntP("chunkmax", "m", 350, "maximum number of characters to send as a single message")
+	RootCmd.PersistentFlags().BoolP("addressed", "a", true, "require bot be addressed by nick for response")
+	RootCmd.PersistentFlags().DurationP("session", "S", time.Minute*3, "duration for the chat session; message context will be cleared after this time")
+	RootCmd.PersistentFlags().DurationP("timeout", "t", time.Second*120, "timeout for each message from the bot")
+	RootCmd.PersistentFlags().IntP("history", "H", 15, "maximum number of lines of context to keep per session")
+	RootCmd.PersistentFlags().DurationP("chunkdelay", "C", time.Second*15, "after this delay, bot will look to split the incoming buffer on sentence boundaries")
+	RootCmd.PersistentFlags().IntP("chunkmax", "m", 350, "maximum number of characters to send as a single message")
 
 	// personality / prompting
-	root.PersistentFlags().String("greeting", "hello.", "prompt to be used when the bot joins the channel")
-	root.PersistentFlags().String("prompt", "respond in a short text:", "initial system prompt for the ai")
+	RootCmd.PersistentFlags().String("greeting", "hello.", "prompt to be used when the bot joins the channel")
+	RootCmd.PersistentFlags().String("prompt", "respond in a short text:", "initial system prompt for the ai")
 
 	// discord??
-	root.PersistentFlags().String("discordtoken", "", "discord bot token")
+	DiscordCmd.PersistentFlags().String("discordtoken", "", "discord bot token")
 
-	vip.BindPFlags(root.PersistentFlags())
+	vip.BindPFlags(RootCmd.PersistentFlags())
+	vip.BindPFlags(IrcCmd.PersistentFlags())
+	vip.BindPFlags(DiscordCmd.PersistentFlags())
 
 	vip.SetEnvPrefix("SOULSHACK")
 	vip.AutomaticEnv()
 }
 
-func initConfig() {
+func startup() {
 
-	fmt.Println(getBanner())
+	fmt.Println(GetBanner())
 
 	if _, err := os.Stat(vip.GetString("directory")); errors.Is(err, fs.ErrNotExist) {
 		log.Printf("? configuration directory %s does not exist", vip.GetString("directory"))
 	}
 
 	if vip.GetBool("list") {
-		personalities := listConfigs()
+		personalities := ListConfigs()
 		log.Printf("Available personalities: %s", strings.Join(personalities, ", "))
 		os.Exit(0)
 	}
@@ -85,9 +88,9 @@ func initConfig() {
 	}
 }
 
-func verifyConfig(v *vip.Viper) error {
+func VerifyConfig(v *vip.Viper) error {
 	for _, varName := range v.AllKeys() {
-		if varName == "admins" {
+		if varName == "admins" || varName == "discordtoken" {
 			continue
 		}
 		value := v.GetString(varName)
@@ -105,7 +108,7 @@ func verifyConfig(v *vip.Viper) error {
 	return nil
 }
 
-func listConfigs() []string {
+func ListConfigs() []string {
 	files, err := os.ReadDir(vip.GetString("directory"))
 	if err != nil {
 		log.Fatal(err)
@@ -119,7 +122,7 @@ func listConfigs() []string {
 	return personalities
 }
 
-func loadConfig(p string) (*vip.Viper, error) {
+func LoadConfig(p string) (*vip.Viper, error) {
 	log.Println("loading personality:", p)
 	conf := vip.New()
 	conf.SetConfigFile(vip.GetString("directory") + "/" + p + ".yml")

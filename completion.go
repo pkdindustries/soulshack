@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"time"
 
 	ai "github.com/sashabaranov/go-openai"
@@ -12,19 +13,20 @@ import (
 
 type CompletionRequest struct {
 	Timeout   time.Duration
+	Temp      float64
 	Model     string
 	MaxTokens int
 	Client    *ai.Client
 	Messages  []ai.ChatCompletionMessage
 }
 
-func CompletionStreamTask(ctx context.Context, req *CompletionRequest) <-chan *string {
+func ChatCompletionStreamTask(ctx context.Context, req *CompletionRequest) <-chan *string {
 	ch := make(chan *string)
-	go stream(ctx, req, ch)
+	go completionstream(ctx, req, ch)
 	return ch
 }
 
-func CompletionTask(ctx context.Context, req *CompletionRequest) (*string, error) {
+func ChatCompletionTask(ctx context.Context, req *CompletionRequest) (*string, error) {
 	ctx, cancel := context.WithTimeout(ctx, req.Timeout)
 	defer cancel()
 
@@ -45,9 +47,24 @@ func CompletionTask(ctx context.Context, req *CompletionRequest) (*string, error
 	return &response.Choices[0].Message.Content, nil
 }
 
-func stream(ctx context.Context, req *CompletionRequest, ch chan<- *string) {
-	defer close(ch)
+func Completion(ctx context.Context, req *CompletionRequest, msg string) string {
+	cr := ai.CompletionRequest{
+		MaxTokens: req.MaxTokens,
+		Model:     req.Model,
+		Prompt:    msg,
+	}
 
+	resp, err := req.Client.CreateCompletion(ctx, cr)
+	if err != nil {
+		return ""
+	}
+
+	return resp.Choices[0].Text
+}
+
+func completionstream(ctx context.Context, req *CompletionRequest, ch chan<- *string) {
+	defer close(ch)
+	log.Printf("completionstream: %v\n", len(req.Messages))
 	ctx, cancel := context.WithTimeout(ctx, req.Timeout)
 	defer cancel()
 
@@ -59,6 +76,7 @@ func stream(ctx context.Context, req *CompletionRequest, ch chan<- *string) {
 	})
 
 	if err != nil {
+		log.Printf("completionstream: %v\n", err)
 		ch <- strp(err.Error())
 		return
 	}

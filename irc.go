@@ -13,16 +13,6 @@ import (
 	vip "github.com/spf13/viper"
 )
 
-type IrcConfig struct {
-	Channel   string
-	Admins    []string
-	Directory string
-	Server    string
-	Port      int
-	SSL       bool
-	Addressed bool
-}
-
 type IrcContext struct {
 	context.Context
 	ai          *ai.Client
@@ -30,7 +20,7 @@ type IrcContext struct {
 	config      *IrcConfig
 	client      *girc.Client
 	event       *girc.Event
-	session     *Session
+	session     *Sessions
 	args        []string
 }
 
@@ -65,7 +55,7 @@ func NewIrcContext(parent context.Context, ai *ai.Client, v *vip.Viper, c *girc.
 	return ctx, cancel
 }
 
-func startIrc(aiClient *ai.Client) {
+func Irc(aiClient *ai.Client) {
 	irc := girc.New(girc.Config{
 		Server:    vip.GetString("server"),
 		Port:      vip.GetInt("port"),
@@ -108,14 +98,15 @@ func startIrc(aiClient *ai.Client) {
 func (c *IrcContext) Complete(msg string) {
 	session := c.GetSession()
 	personality := c.GetPersonality()
-	session.AddMessage(c, ai.ChatMessageRoleUser, msg)
+	session.AddMessage(personality, ai.ChatMessageRoleUser, msg)
 
-	respch := CompletionStreamTask(c, &CompletionRequest{
+	respch := ChatCompletionStreamTask(c, &CompletionRequest{
 		Client:    c.GetAI(),
 		Timeout:   session.Config.ClientTimeout,
 		Model:     personality.Model,
 		MaxTokens: session.Config.MaxTokens,
 		Messages:  session.GetHistory(),
+		Temp:      personality.Temp,
 	})
 
 	chunker := &Chunker{
@@ -132,19 +123,9 @@ func (c *IrcContext) Complete(msg string) {
 		all.WriteString(reply)
 		c.Sendmessage(reply)
 	}
-	session.AddMessage(c, ai.ChatMessageRoleAssistant, all.String())
-}
 
-func IrcFromViper(v *vip.Viper) *IrcConfig {
-	return &IrcConfig{
-		Channel:   v.GetString("channel"),
-		Admins:    v.GetStringSlice("admins"),
-		Directory: v.GetString("directory"),
-		Server:    v.GetString("server"),
-		Port:      v.GetInt("port"),
-		SSL:       v.GetBool("ssl"),
-		Addressed: v.GetBool("addressed"),
-	}
+	session.AddMessage(c.personality, ai.ChatMessageRoleAssistant, all.String())
+	ReactActionObservation(c, all.String())
 }
 
 func (c *IrcContext) IsAdmin() bool {
@@ -170,8 +151,9 @@ func (c *IrcContext) GetAI() *ai.Client {
 	return c.ai
 }
 
-func (c *IrcContext) ChangeName(nick string) {
+func (c *IrcContext) ChangeName(nick string) error {
 	c.client.Cmd.Nick(nick)
+	return nil
 }
 
 func (c *IrcContext) Sendmessage(message string) {
@@ -222,10 +204,10 @@ func (c *IrcContext) SetNick(nick string) {
 	c.client.Cmd.Nick(c.personality.Nick)
 }
 
-func (c *IrcContext) GetSession() *Session {
+func (c *IrcContext) GetSession() *Sessions {
 	return c.session
 }
-func (c *IrcContext) SetSession(s *Session) {
+func (c *IrcContext) SetSession(s *Sessions) {
 	c.session = s
 }
 

@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"log"
-	"strings"
 	"sync"
 	"time"
 
@@ -12,26 +11,26 @@ import (
 )
 
 var sessions = SessionMap{
-	sessionMap: make(map[string]*Session),
+	sessionMap: make(map[string]*Sessions),
 	mu:         sync.RWMutex{},
 }
 
 type SessionMap struct {
-	sessionMap map[string]*Session
+	sessionMap map[string]*Sessions
 	mu         sync.RWMutex
 }
 
-type Session struct {
+type Sessions struct {
 	Config     *SessionConfig
 	history    []ai.ChatCompletionMessage
 	Last       time.Time
 	mu         sync.RWMutex
 	Name       string
 	Totalchars int
-	Stuff      map[string]string
+	Stash      map[string]string
 }
 
-func (s *Session) GetHistory() []ai.ChatCompletionMessage {
+func (s *Sessions) GetHistory() []ai.ChatCompletionMessage {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -41,18 +40,15 @@ func (s *Session) GetHistory() []ai.ChatCompletionMessage {
 	return history
 }
 
-func (s *Session) AddMessage(ctx ChatContext, role string, message string) {
-	if strings.HasPrefix(message, "action://soulshack") {
-		handleAction(ctx)
-		return
-	}
-
+func (s *Sessions) AddMessage(conf *Personality, role string, message string) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	personality := ctx.GetPersonality()
+
 	if len(s.history) == 0 {
-		s.history = append(s.history, ai.ChatCompletionMessage{Role: ai.ChatMessageRoleSystem, Content: personality.Prompt})
-		s.Totalchars += len(personality.Prompt)
+		s.history = append(s.history, ai.ChatCompletionMessage{
+			Role:    ai.ChatMessageRoleSystem,
+			Content: conf.Prompt + ReactPrompt(&ReactConfig{Actions: actionRegistry})},
+		)
+		s.Totalchars += len(conf.Prompt)
 	}
 
 	s.history = append(s.history, ai.ChatCompletionMessage{Role: role, Content: message})
@@ -60,10 +56,12 @@ func (s *Session) AddMessage(ctx ChatContext, role string, message string) {
 	s.Last = time.Now()
 
 	s.trim()
+	s.mu.Unlock()
+
 }
 
 // contining the no alloc tradition to mock python users
-func (s *Session) trim() {
+func (s *Sessions) trim() {
 	if len(s.history) > s.Config.MaxHistory {
 		rm := len(s.history) - s.Config.MaxHistory
 		for i := 1; i <= s.Config.MaxHistory; i++ {
@@ -73,14 +71,14 @@ func (s *Session) trim() {
 	}
 }
 
-func (s *Session) Reset() {
+func (s *Sessions) Reset() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.history = s.history[:0]
 	s.Last = time.Now()
 }
 
-func (s *Session) Reap() bool {
+func (s *Sessions) Reap() bool {
 	now := time.Now()
 	sessions.mu.Lock()
 	defer sessions.mu.Unlock()
@@ -94,7 +92,7 @@ func (s *Session) Reap() bool {
 	return false
 }
 
-func (sessions *SessionMap) Get(id string) *Session {
+func (sessions *SessionMap) Get(id string) *Sessions {
 
 	sessions.mu.Lock()
 	defer sessions.mu.Unlock()
@@ -103,11 +101,11 @@ func (sessions *SessionMap) Get(id string) *Session {
 		return v
 	}
 
-	session := &Session{
+	session := &Sessions{
 		Name:   id,
 		Last:   time.Now(),
 		Config: SessionFromViper(vip.GetViper()),
-		Stuff:  make(map[string]string),
+		Stash:  make(map[string]string),
 	}
 
 	// start session reaper, returns when the session is gone
@@ -125,7 +123,7 @@ func (sessions *SessionMap) Get(id string) *Session {
 }
 
 // show string of all msg contents
-func (s *Session) Debug() {
+func (s *Sessions) Debug() {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	for _, msg := range s.history {
