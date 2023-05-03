@@ -47,15 +47,25 @@ var DiscordCmd = &cobra.Command{
 }
 
 func main() {
-	RootCmd.AddCommand(IrcCmd)
-	RootCmd.AddCommand(DiscordCmd)
-	if err := RootCmd.Execute(); err != nil {
-		log.Fatal(err)
-	}
-}
+	cobra.OnInitialize(func() {
+		fmt.Println(GetBanner())
+		if _, err := os.Stat(vip.GetString("directory")); errors.Is(err, fs.ErrNotExist) {
+			log.Printf("? configuration directory %s does not exist", vip.GetString("directory"))
+		}
+		if vip.GetBool("list") {
+			personalities := config.List()
+			log.Printf("Available personalities: %s", strings.Join(personalities, ", "))
+			os.Exit(0)
+		}
+		vip.AddConfigPath(vip.GetString("directory"))
+		vip.SetConfigName(vip.GetString("become"))
 
-func init() {
-	cobra.OnInitialize(startup)
+		if err := vip.ReadInConfig(); err != nil {
+			log.Println("? no personality file found:", vip.GetString("become"))
+		} else {
+			log.Println("using personality file:", vip.ConfigFileUsed())
+		}
+	})
 	// irc configuration
 	IrcCmd.PersistentFlags().StringP("nick", "n", "soulshack", "bot's nickname on the irc server")
 	IrcCmd.PersistentFlags().StringP("server", "s", "localhost", "irc server address")
@@ -99,27 +109,10 @@ func init() {
 
 	vip.SetEnvPrefix("SOULSHACK")
 	vip.AutomaticEnv()
-}
-
-func startup() {
-	fmt.Println(GetBanner())
-	if _, err := os.Stat(vip.GetString("directory")); errors.Is(err, fs.ErrNotExist) {
-		log.Printf("? configuration directory %s does not exist", vip.GetString("directory"))
-	}
-
-	if vip.GetBool("list") {
-		personalities := config.List()
-		log.Printf("Available personalities: %s", strings.Join(personalities, ", "))
-		os.Exit(0)
-	}
-
-	vip.AddConfigPath(vip.GetString("directory"))
-	vip.SetConfigName(vip.GetString("become"))
-
-	if err := vip.ReadInConfig(); err != nil {
-		log.Println("? no personality file found:", vip.GetString("become"))
-	} else {
-		log.Println("using personality file:", vip.ConfigFileUsed())
+	RootCmd.AddCommand(IrcCmd)
+	RootCmd.AddCommand(DiscordCmd)
+	if err := RootCmd.Execute(); err != nil {
+		log.Fatal(err)
 	}
 }
 

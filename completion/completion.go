@@ -36,7 +36,6 @@ func ChatCompletionTask(ctx context.Context, req *CompletionRequest) (*string, e
 		Model:     req.Model,
 		Messages:  req.Messages,
 	})
-
 	if err != nil {
 		return nil, err
 	}

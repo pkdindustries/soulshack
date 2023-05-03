@@ -125,7 +125,7 @@ func (c *IrcContext) Complete(msg string) {
 	session.AddMessage(personality, ai.ChatMessageRoleUser, msg)
 
 	respch := completion.ChatCompletionStreamTask(c, &completion.CompletionRequest{
-		Client:    c.GetAI(),
+		Client:    completion.GetAI(),
 		Timeout:   session.Config.ClientTimeout,
 		Model:     personality.Model,
 		MaxTokens: session.Config.MaxTokens,

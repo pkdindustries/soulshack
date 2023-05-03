@@ -22,7 +22,6 @@ type Session interface {
 	GetSession() *Sessions
 	SetSession(*Sessions)
 	GetPersonality() *model.Personality
-	GetAI() *ai.Client
 }
 
 type SessionConfig struct {
