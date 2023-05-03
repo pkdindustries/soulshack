@@ -1,4 +1,4 @@
-package main
+package completion
 
 import (
 	"bytes"
@@ -6,9 +6,6 @@ import (
 	"math/rand"
 	"testing"
 	"time"
-
-	"github.com/lrstanley/girc"
-	vip "github.com/spf13/viper"
 )
 
 func TestChunker_ChunkFilter(t *testing.T) {
@@ -49,10 +46,10 @@ func TestChunker_ChunkFilter(t *testing.T) {
 			close(in)
 
 			c := &Chunker{
-				max:    tt.size,
-				last:   time.Now(),
-				buffer: &bytes.Buffer{},
-				delay:  timeout,
+				Max:    tt.size,
+				Last:   time.Now(),
+				Buffer: &bytes.Buffer{},
+				Delay:  timeout,
 			}
 
 			out := c.ChannelFilter(in)
@@ -71,49 +68,6 @@ func TestChunker_ChunkFilter(t *testing.T) {
 					t.Errorf("ChunkFilter() got = %v, want = %v", result, tt.expected)
 					break
 				}
-			}
-		})
-	}
-}
-
-func TestIrcContext_IsAdmin(t *testing.T) {
-
-	vip.Set("admins", []string{"admin1", "admin2"})
-
-	tests := []struct {
-		name   string
-		source string
-		admins []string
-		want   bool
-	}{
-		{
-			name:   "admin",
-			source: "admin1",
-			admins: []string{"admin1", "admin2"},
-			want:   true,
-		},
-		{
-			name:   "non-admin",
-			source: "non-admin",
-			admins: []string{"admin1", "admin2"},
-			want:   false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			c := &IrcContext{
-				config: &IrcConfig{
-					Admins: tt.admins,
-				},
-				event: &girc.Event{
-					Source: &girc.Source{
-						Name: tt.source,
-					},
-				},
-			}
-			if got := c.IsAdmin(); got != tt.want {
-				t.Errorf("IsAdmin() = %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -151,12 +105,12 @@ func TestChunker_Chunk(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := &Chunker{
-				max:    tt.size,
-				last:   time.Now(),
-				buffer: &bytes.Buffer{},
-				delay:  timeout,
+				Max:    tt.size,
+				Last:   time.Now(),
+				Buffer: &bytes.Buffer{},
+				Delay:  timeout,
 			}
-			c.buffer.WriteString(tt.input)
+			c.Buffer.WriteString(tt.input)
 
 			chunked, chunk := c.chunk()
 			if chunked && string(chunk) != string(tt.expected) {
@@ -171,12 +125,12 @@ func TestChunker_Chunk_Timeout(t *testing.T) {
 	timeout := 100 * time.Millisecond
 
 	c := &Chunker{
-		max:    50,
-		last:   time.Now(),
-		buffer: &bytes.Buffer{},
-		delay:  timeout,
+		Max:    50,
+		Last:   time.Now(),
+		Buffer: &bytes.Buffer{},
+		Delay:  timeout,
 	}
-	c.buffer.WriteString("Hello world! How are you?")
+	c.Buffer.WriteString("Hello world! How are you?")
 
 	// Wait for timeout duration
 	time.Sleep(500 * time.Millisecond)
@@ -211,12 +165,12 @@ func BenchmarkChunker_StressTest(b *testing.B) {
 		b.Run(fmt.Sprintf("StressTest_BufferSize_%d", bufSize), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				c := &Chunker{
-					max:    40,
-					last:   time.Now(),
-					buffer: &bytes.Buffer{},
-					delay:  timeout,
+					Max:    40,
+					Last:   time.Now(),
+					Buffer: &bytes.Buffer{},
+					Delay:  timeout,
 				}
-				c.buffer.WriteString(text)
+				c.Buffer.WriteString(text)
 
 				// Continuously call Chunk() until no chunks are left
 				for chunked, t := c.chunk(); chunked; chunked, t = c.chunk() {
@@ -246,10 +200,10 @@ func BenchmarkChunker_ChunkFilter(b *testing.B) {
 		b.Run(fmt.Sprintf("ChunkFilter_BufferSize_%d", bufSize), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				c := &Chunker{
-					max:    40,
-					last:   time.Now(),
-					buffer: &bytes.Buffer{},
-					delay:  timeout,
+					Max:    40,
+					Last:   time.Now(),
+					Buffer: &bytes.Buffer{},
+					Delay:  timeout,
 				}
 
 				// Create an input channel and send the text to it

@@ -1,8 +1,9 @@
-package main
+package action
 
 import (
 	"fmt"
 	"log"
+	model "pkdindustries/soulshack/model"
 	"regexp"
 	"strings"
 )
@@ -12,7 +13,7 @@ var regex = regexp.MustCompile(`(^|\n)Action:`)
 type ReactAction interface {
 	Name() string
 	Purpose() string
-	Execute(ChatContext, string) (string, error)
+	Execute(model.ChatContext, string) (string, error)
 	Spec() string
 }
 
@@ -46,10 +47,10 @@ Question:`, strings.Join(tools, "\n"))
 	return template
 }
 
-func ReactActionObservation(ctx ChatContext, msg string) {
+func ReactActionObservation(ctx model.ChatContext, msg string) {
 	if action := ReactFindActions(msg); action != "" {
 		log.Println("action found:", action)
-		r, e := React(ctx, &ReactConfig{Actions: actionRegistry}, strings.TrimSpace(action))
+		r, e := React(ctx, &ReactConfig{Actions: ActionRegistry}, strings.TrimSpace(action))
 		if e != nil {
 			log.Println(e)
 			ctx.Complete("Observation: " + e.Error())
@@ -68,7 +69,7 @@ func ReactFindActions(msg string) string {
 	return ""
 }
 
-func React(ctx ChatContext, cfg *ReactConfig, msg string) (string, error) {
+func React(ctx model.ChatContext, cfg *ReactConfig, msg string) (string, error) {
 	parts := strings.SplitN(msg, ": ", 2)
 	if len(parts) != 2 {
 		return "", fmt.Errorf("invalid input: %s", msg)
@@ -85,7 +86,7 @@ func React(ctx ChatContext, cfg *ReactConfig, msg string) (string, error) {
 	return ra.Execute(ctx, parts[1])
 }
 
-func ReactFilter(ctx ChatContext, cfg *ReactConfig, in <-chan string) <-chan string {
+func ReactFilter(ctx model.ChatContext, cfg *ReactConfig, in <-chan string) <-chan string {
 	outch := make(chan string)
 	go func() {
 		defer close(outch)

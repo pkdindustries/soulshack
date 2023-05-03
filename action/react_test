@@ -1,7 +1,9 @@
-package main
+package action
 
 import (
 	"errors"
+	"pkdindustries/soulshack/discord"
+	model "pkdindustries/soulshack/model"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -22,7 +24,7 @@ func (m *MockAction) Purpose() string {
 	return m.purpose
 }
 
-func (a *MockAction) Execute(c ChatContext, input string) (string, error) {
+func (a *MockAction) Execute(c model.ChatContext, input string) (string, error) {
 	if input == "error" {
 		return "", errors.New("an error occurred")
 	}
@@ -80,7 +82,7 @@ func TestReactor(t *testing.T) {
 		},
 	}
 	in := make(chan string)
-	out := ReactFilter(&DiscordContext{}, mockConf, in)
+	out := ReactFilter(&discord.DiscordContext{}, mockConf, in)
 	in <- "Action: mock input"
 	close(in)
 

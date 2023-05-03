@@ -1,4 +1,4 @@
-package main
+package completion
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 	"time"
 
 	ai "github.com/sashabaranov/go-openai"
+	vip "github.com/spf13/viper"
 )
 
 type CompletionRequest struct {
@@ -101,4 +102,8 @@ func completionstream(ctx context.Context, req *CompletionRequest, ch chan<- *st
 
 func strp(s string) *string {
 	return &s
+}
+
+func GetAI() *ai.Client {
+	return ai.NewClient(vip.GetString("openaikey"))
 }

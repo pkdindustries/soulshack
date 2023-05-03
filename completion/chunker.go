@@ -1,4 +1,4 @@
-package main
+package completion
 
 import (
 	"bytes"
@@ -10,11 +10,11 @@ import (
 )
 
 type Chunker struct {
-	buffer *bytes.Buffer
-	delay  time.Duration
-	max    int
-	quote  bool
-	last   time.Time
+	Buffer *bytes.Buffer
+	Delay  time.Duration
+	Max    int
+	Quote  bool
+	Last   time.Time
 }
 
 func (c *Chunker) ChannelFilter(input <-chan *string) <-chan string {
@@ -22,7 +22,7 @@ func (c *Chunker) ChannelFilter(input <-chan *string) <-chan string {
 	go func() {
 		defer close(out)
 		for val := range input {
-			c.buffer.WriteString(*val)
+			c.Buffer.WriteString(*val)
 			chunker(c, out)
 		}
 	}()
@@ -41,23 +41,24 @@ func chunker(c *Chunker, out chan<- string) {
 }
 
 func (c *Chunker) chunk() (bool, []byte) {
+
 	// if chunkdelay is -1, huck the buffer right now
-	if c.delay == -1 && c.buffer.Len() > 0 {
-		chunk := c.buffer.Next(c.buffer.Len())
-		c.last = time.Now()
+	if c.Delay == -1 && c.Buffer.Len() > 0 {
+		chunk := c.Buffer.Next(c.Buffer.Len())
+		c.Last = time.Now()
 		return true, chunk
 	}
 
 	// if chunkquoted is true, chunk a whole block quote
-	if c.quote {
-		content := c.buffer.Bytes()
+	if c.Quote {
+		content := c.Buffer.Bytes()
 		// block quotes
 		blockstart := bytes.Index(content, []byte("```"))
 		if blockstart != -1 {
 			blockend := bytes.Index(content[blockstart+3:], []byte("```"))
 			if blockend != -1 {
-				chunk := c.buffer.Next(blockstart + 3 + blockend + 3)
-				c.last = time.Now()
+				chunk := c.Buffer.Next(blockstart + 3 + blockend + 3)
+				c.Last = time.Now()
 				return true, chunk
 			}
 			// not found, don't chunk
@@ -65,33 +66,33 @@ func (c *Chunker) chunk() (bool, []byte) {
 		}
 	}
 	// chunk on a newline in first chunksize
-	end := c.max
-	if c.buffer.Len() < end {
-		end = c.buffer.Len()
+	end := c.Max
+	if c.Buffer.Len() < end {
+		end = c.Buffer.Len()
 	}
 
 	// chunk on a newline in first chunksize
-	index := bytes.IndexByte(c.buffer.Bytes()[:end], '\n')
+	index := bytes.IndexByte(c.Buffer.Bytes()[:end], '\n')
 	if index != -1 {
-		chunk := c.buffer.Next(index + 1)
-		c.last = time.Now()
+		chunk := c.Buffer.Next(index + 1)
+		c.Last = time.Now()
 		return true, chunk
 	}
 
 	// chunk if full buffer satisfies chunk size
-	if c.buffer.Len() >= c.max {
-		chunk := c.buffer.Next(c.max)
-		c.last = time.Now()
+	if c.Buffer.Len() >= c.Max {
+		chunk := c.Buffer.Next(c.Max)
+		c.Last = time.Now()
 		return true, chunk
 	}
 
 	// chunk on boundary if n seconds have passed since the last chunk
-	if time.Since(c.last) >= c.delay {
-		content := c.buffer.Bytes()
+	if time.Since(c.Last) >= c.Delay {
+		content := c.Buffer.Bytes()
 		index := dumbBoundary(&content)
 		if index != -1 {
-			chunk := c.buffer.Next(index + 1)
-			c.last = time.Now()
+			chunk := c.Buffer.Next(index + 1)
+			c.Last = time.Now()
 			return true, chunk
 		}
 	}

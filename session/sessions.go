@@ -1,8 +1,10 @@
-package main
+package session
 
 import (
 	"fmt"
 	"log"
+	"pkdindustries/soulshack/action"
+	model "pkdindustries/soulshack/model"
 	"sync"
 	"time"
 
@@ -10,9 +12,27 @@ import (
 	vip "github.com/spf13/viper"
 )
 
-var sessions = SessionMap{
+var SessionStore = SessionMap{
 	sessionMap: make(map[string]*Sessions),
 	mu:         sync.RWMutex{},
+}
+
+type Session interface {
+	ChangeName(string) error
+	GetSession() *Sessions
+	SetSession(*Sessions)
+	GetPersonality() *model.Personality
+	GetAI() *ai.Client
+}
+
+type SessionConfig struct {
+	Chunkdelay    time.Duration
+	Chunkmax      int
+	Chunkquoted   bool
+	ClientTimeout time.Duration
+	MaxHistory    int
+	MaxTokens     int
+	TTL           time.Duration
 }
 
 type SessionMap struct {
@@ -40,13 +60,13 @@ func (s *Sessions) GetHistory() []ai.ChatCompletionMessage {
 	return history
 }
 
-func (s *Sessions) AddMessage(conf *Personality, role string, message string) {
+func (s *Sessions) AddMessage(conf *model.Personality, role string, message string) {
 	s.mu.Lock()
 
 	if len(s.history) == 0 {
 		s.history = append(s.history, ai.ChatCompletionMessage{
 			Role:    ai.ChatMessageRoleSystem,
-			Content: conf.Prompt + ReactPrompt(&ReactConfig{Actions: actionRegistry})},
+			Content: conf.Prompt + action.ReactPrompt(&action.ReactConfig{Actions: action.ActionRegistry})},
 		)
 		s.Totalchars += len(conf.Prompt)
 	}
@@ -80,13 +100,13 @@ func (s *Sessions) Reset() {
 
 func (s *Sessions) Reap() bool {
 	now := time.Now()
-	sessions.mu.Lock()
-	defer sessions.mu.Unlock()
-	if sessions.sessionMap[s.Name] == nil {
+	SessionStore.mu.Lock()
+	defer SessionStore.mu.Unlock()
+	if SessionStore.sessionMap[s.Name] == nil {
 		return true
 	}
 	if now.Sub(s.Last) > s.Config.TTL {
-		delete(sessions.sessionMap, s.Name)
+		delete(SessionStore.sessionMap, s.Name)
 		return true
 	}
 	return false
@@ -120,6 +140,18 @@ func (sessions *SessionMap) Get(id string) *Sessions {
 
 	sessions.sessionMap[id] = session
 	return session
+}
+
+// sessionconfigfromviper
+func SessionFromViper(v *vip.Viper) *SessionConfig {
+	return &SessionConfig{
+		Chunkdelay:    vip.GetDuration("chunkdelay"),
+		Chunkmax:      vip.GetInt("chunkmax"),
+		ClientTimeout: vip.GetDuration("timeout"),
+		MaxHistory:    vip.GetInt("history"),
+		MaxTokens:     vip.GetInt("maxtokens"),
+		TTL:           vip.GetDuration("session"),
+	}
 }
 
 // show string of all msg contents

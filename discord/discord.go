@@ -1,4 +1,4 @@
-package main
+package discord
 
 import (
 	"bytes"
@@ -7,6 +7,11 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"pkdindustries/soulshack/action"
+	"pkdindustries/soulshack/completion"
+	handler "pkdindustries/soulshack/handler"
+	model "pkdindustries/soulshack/model"
+	session "pkdindustries/soulshack/session"
 	"strings"
 	"syscall"
 	"time"
@@ -18,31 +23,39 @@ import (
 
 type DiscordContext struct {
 	context.Context
-	ai          *ai.Client
-	personality *Personality
-	session     *Sessions
+	personality *model.Personality
+	session     *session.Sessions
 	msg         *discordgo.MessageCreate
 	discord     *discordgo.Session
 	config      *DiscordConfig
 }
 
-func NewDiscordContext(parent context.Context, ai *ai.Client, v *vip.Viper, m *discordgo.MessageCreate, s *discordgo.Session) (*DiscordContext, context.CancelFunc) {
+type DiscordConfig struct {
+	Token string
+}
+
+func DiscordFromViper(v *vip.Viper) *DiscordConfig {
+	return &DiscordConfig{
+		Token: v.GetString("discordtoken"),
+	}
+}
+
+func NewDiscordContext(parent context.Context, v *vip.Viper, m *discordgo.MessageCreate, s *discordgo.Session) (*DiscordContext, context.CancelFunc) {
 	timedctx, cancel := context.WithTimeout(parent, v.GetDuration("timeout"))
 
 	ctx := &DiscordContext{
 		Context:     timedctx,
-		ai:          ai,
-		personality: PersonalityFromViper(v),
+		personality: model.PersonalityFromViper(v),
 		msg:         m,
 		discord:     s,
-		session:     sessions.Get(m.ChannelID),
+		session:     session.SessionStore.Get(m.ChannelID),
 		config:      DiscordFromViper(v),
 	}
 
 	return ctx, cancel
 }
 
-func Discord(aiclient *ai.Client) {
+func Discord() {
 
 	dg, err := discordgo.New("Bot " + vip.GetString("discordtoken"))
 	if err != nil {
@@ -54,9 +67,9 @@ func Discord(aiclient *ai.Client) {
 		if m.Author.ID == s.State.User.ID {
 			return
 		}
-		ctx, cancel := NewDiscordContext(context.Background(), aiclient, vip.GetViper(), m, s)
+		ctx, cancel := NewDiscordContext(context.Background(), vip.GetViper(), m, s)
 		defer cancel()
-		handleMessage(ctx)
+		handler.HandleMessage(ctx)
 	})
 
 	dg.Identify.Intents = discordgo.IntentsGuildMessages
@@ -82,8 +95,8 @@ func (c *DiscordContext) Complete(msg string) {
 	c.discord.ChannelTyping(c.msg.ChannelID)
 
 	session.AddMessage(c.personality, ai.ChatMessageRoleUser, msg)
-	respch := ChatCompletionStreamTask(c, &CompletionRequest{
-		Client:    c.GetAI(),
+	respch := completion.ChatCompletionStreamTask(c, &completion.CompletionRequest{
+		Client:    completion.GetAI(),
 		Timeout:   session.Config.ClientTimeout,
 		Model:     personality.Model,
 		Temp:      personality.Temp,
@@ -91,12 +104,12 @@ func (c *DiscordContext) Complete(msg string) {
 		Messages:  session.GetHistory(),
 	})
 
-	chunker := &Chunker{
-		buffer: &bytes.Buffer{},
-		delay:  0,
-		max:    9999,
-		quote:  false,
-		last:   time.Now(),
+	chunker := &completion.Chunker{
+		Buffer: &bytes.Buffer{},
+		Delay:  0,
+		Max:    9999,
+		Quote:  false,
+		Last:   time.Now(),
 	}
 	chunkch := chunker.ChannelFilter(respch)
 
@@ -144,7 +157,7 @@ func (c *DiscordContext) Complete(msg string) {
 	}
 
 	session.AddMessage(c.personality, ai.ChatMessageRoleAssistant, all.String())
-	ReactActionObservation(c, all.String())
+	action.ReactActionObservation(c, all.String())
 }
 
 func (c *DiscordContext) initmessage(message string) (string, error) {
@@ -205,17 +218,17 @@ func (c *DiscordContext) ResetSource() {
 }
 
 // getsession
-func (c *DiscordContext) GetSession() *Sessions {
+func (c *DiscordContext) GetSession() *session.Sessions {
 	return c.session
 }
 
 // setsession
-func (c *DiscordContext) SetSession(s *Sessions) {
+func (c *DiscordContext) SetSession(s *session.Sessions) {
 	c.session = s
 }
 
 // get personality
-func (c *DiscordContext) GetPersonality() *Personality {
+func (c *DiscordContext) GetPersonality() *model.Personality {
 	return c.personality
 }
 
@@ -227,9 +240,4 @@ func (c *DiscordContext) GetArgs() []string {
 // set args
 func (c *DiscordContext) SetArgs(args []string) {
 	c.msg.Content = strings.Join(args, " ")
-}
-
-// ai
-func (c *DiscordContext) GetAI() *ai.Client {
-	return c.ai
 }

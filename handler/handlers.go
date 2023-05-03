@@ -1,38 +1,41 @@
-package main
+package handler
 
 import (
 	"fmt"
 	"log"
 	"os"
+	"pkdindustries/soulshack/action"
+	"pkdindustries/soulshack/completion"
+	"pkdindustries/soulshack/config"
+	model "pkdindustries/soulshack/model"
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	ai "github.com/sashabaranov/go-openai"
 	vip "github.com/spf13/viper"
 	"github.com/subosito/shorturl"
 )
 
-func handleMessage(ctx ChatContext) {
+func HandleMessage(ctx model.ChatContext) {
 	log.Println(ctx.GetArgs())
 	if ctx.IsValid() {
 		switch strings.ToLower(ctx.GetArgs()[0]) {
-		case "/say":
-			handleSay(ctx)
+		// case "/say":
+		// 	handleSay(ctx)
 		case "/config":
-			handleConfig(ctx)
+			Config(ctx)
 		case "/save":
-			handleSave(ctx)
+			Save(ctx)
 		case "/list":
-			handleList(ctx)
+			List(ctx)
 		case "/become":
-			handleBecome(ctx)
+			Become(ctx)
 		case "/leave":
-			handleLeave(ctx)
+			Leave(ctx)
 		case "/image":
-			handleImage(ctx)
+			Image(ctx)
 		case "/wikipedia":
-			handleWiki(ctx)
+			Wiki(ctx)
 		case "/help":
 			fallthrough
 		case "/?":
@@ -40,18 +43,18 @@ func handleMessage(ctx ChatContext) {
 		// case "/version":
 		// 	ctx.Reply(r.Version)
 		default:
-			handleDefault(ctx)
+			HandleDefault(ctx)
 		}
 	}
 }
 
-func handleConfig(ctx ChatContext) {
+func Config(ctx model.ChatContext) {
 	if !ctx.IsAdmin() {
 		ctx.Sendmessage("You don't have permission to perform this action.")
 		return
 	}
 
-	config := &ConfigAction{}
+	config := &action.ConfigAction{}
 	r, e := config.Execute(ctx, strings.Join(ctx.GetArgs(), " "))
 	if e != nil {
 		ctx.Sendmessage(e.Error())
@@ -60,8 +63,8 @@ func handleConfig(ctx ChatContext) {
 	ctx.Sendmessage(r)
 }
 
-func handleWiki(ctx ChatContext) {
-	crawl := &WikipediaAction{}
+func Wiki(ctx model.ChatContext) {
+	crawl := &action.WikipediaAction{}
 	r, e := crawl.Execute(ctx, strings.Join(ctx.GetArgs(), " "))
 	if e != nil {
 		ctx.Sendmessage(e.Error())
@@ -70,17 +73,16 @@ func handleWiki(ctx ChatContext) {
 	ctx.Sendmessage(r)
 }
 
-func handleDefault(ctx ChatContext) {
+func HandleDefault(ctx model.ChatContext) {
 	ctx.Complete(strings.Join(ctx.GetArgs(), " "))
 }
 
-func sendGreeting(ctx ChatContext) {
+func SendGreeting(ctx model.ChatContext) {
 	log.Println("sending greeting...")
 	ctx.Complete(ctx.GetPersonality().Greeting)
-	ctx.GetSession().Reset()
 }
 
-func handleSave(ctx ChatContext) {
+func Save(ctx model.ChatContext) {
 
 	tokens := ctx.GetArgs()
 	if !ctx.IsAdmin() {
@@ -110,7 +112,7 @@ func handleSave(ctx ChatContext) {
 	ctx.Sendmessage(fmt.Sprintf("Configuration saved to: %s", filename))
 }
 
-func handleBecome(ctx ChatContext) {
+func Become(ctx model.ChatContext) {
 
 	if !ctx.IsAdmin() {
 		ctx.Sendmessage("You don't have permission to perform this action.")
@@ -124,26 +126,26 @@ func handleBecome(ctx ChatContext) {
 	}
 
 	personality := tokens[1]
-	if cfg, err := LoadConfig(personality); err != nil {
+	if cfg, err := config.Load(personality); err != nil {
 		ctx.Sendmessage(fmt.Sprintf("Error loading personality: %s", err.Error()))
 		return
 	} else {
 		vip.MergeConfigMap(cfg.AllSettings())
 		ctx.GetPersonality().FromViper(cfg)
 	}
-	ctx.GetSession().Reset()
+	//SessionMap.GReset()
 
 	ctx.ChangeName(ctx.GetPersonality().Nick)
 	time.Sleep(2 * time.Second)
-	sendGreeting(ctx)
+	SendGreeting(ctx)
 }
 
-func handleList(ctx ChatContext) {
-	personalities := ListConfigs()
+func List(ctx model.ChatContext) {
+	personalities := config.List()
 	ctx.Sendmessage(fmt.Sprintf("Available personalities: %s", strings.Join(personalities, ", ")))
 }
 
-func handleLeave(ctx ChatContext) {
+func Leave(ctx model.ChatContext) {
 	if !ctx.IsAdmin() {
 		ctx.Sendmessage("You don't have permission to perform this action.")
 		return
@@ -155,45 +157,45 @@ func handleLeave(ctx ChatContext) {
 	}()
 }
 
-func handleSay(ctx ChatContext) {
+// func handleSay(ctx model.ChatContext) {
 
-	if !ctx.IsAdmin() {
-		ctx.Sendmessage("You don't have permission to perform this action.")
-		return
-	}
+// 	if !ctx.IsAdmin() {
+// 		ctx.Sendmessage("You don't have permission to perform this action.")
+// 		return
+// 	}
 
-	args := ctx.GetArgs()
-	if len(args) < 2 {
-		ctx.Sendmessage("Usage: /say [/as <personality>] <message>")
-		ctx.Sendmessage("Example: /msg chatbot /say /as marvin talk about life")
-		return
-	}
+// 	args := ctx.GetArgs()
+// 	if len(args) < 2 {
+// 		ctx.Sendmessage("Usage: /say [/as <personality>] <message>")
+// 		ctx.Sendmessage("Example: /msg chatbot /say /as marvin talk about life")
+// 		return
+// 	}
 
-	// if second token is '/as' then third token is a personality
-	// and we should play as that personality
-	as := vip.GetString("become")
-	if len(args) > 2 && args[1] == "/as" {
-		as = args[2]
-		ctx.SetArgs(args[2:])
-	}
+// 	// if second token is '/as' then third token is a personality
+// 	// and we should play as that personality
+// 	as := vip.GetString("become")
+// 	if len(args) > 2 && args[1] == "/as" {
+// 		as = args[2]
+// 		ctx.SetArgs(args[2:])
+// 	}
 
-	if cfg, err := LoadConfig(as); err != nil {
-		ctx.Sendmessage(fmt.Sprintf("Error loading personality: %s", err.Error()))
-		return
-	} else {
-		ctx.GetPersonality().FromViper(cfg)
-	}
+// 	if cfg, err := LoadConfig(as); err != nil {
+// 		ctx.Sendmessage(fmt.Sprintf("Error loading personality: %s", err.Error()))
+// 		return
+// 	} else {
+// 		ctx.GetPersonality().FromViper(cfg)
+// 	}
 
-	ctx.SetSession(sessions.Get(uuid.New().String()))
-	ctx.GetSession().Reset()
-	ctx.ResetSource()
-	ctx.SetArgs(ctx.GetArgs()[1:])
+// 	ctx.SetSession(SessionStore.Get(uuid.New().String()))
+// 	ctx.GetSession().Reset()
+// 	ctx.ResetSource()
+// 	ctx.SetArgs(ctx.GetArgs()[1:])
 
-	handleDefault(ctx)
-}
+// 	handleDefault(ctx)
+// }
 
 // handleimage
-func handleImage(ctx ChatContext) {
+func Image(ctx model.ChatContext) {
 	args := ctx.GetArgs()
 
 	validrez := map[string]bool{
@@ -222,7 +224,7 @@ func handleImage(ctx ChatContext) {
 		N:              1,
 	}
 
-	resp, err := ctx.GetAI().CreateImage(ctx, req)
+	resp, err := completion.GetAI().CreateImage(ctx, req)
 	if err != nil {
 		ctx.Sendmessage(fmt.Sprintf("image creation error: %v", err))
 		return

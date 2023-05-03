@@ -1,10 +1,15 @@
-package main
+package irc
 
 import (
 	"bytes"
 	"context"
 	"crypto/tls"
 	"log"
+	"pkdindustries/soulshack/action"
+	"pkdindustries/soulshack/completion"
+	handler "pkdindustries/soulshack/handler"
+	model "pkdindustries/soulshack/model"
+	session "pkdindustries/soulshack/session"
 	"strings"
 	"time"
 
@@ -13,27 +18,46 @@ import (
 	vip "github.com/spf13/viper"
 )
 
+type IrcConfig struct {
+	Channel   string
+	Admins    []string
+	Server    string
+	Port      int
+	SSL       bool
+	Addressed bool
+}
+
+func IrcFromViper(v *vip.Viper) *IrcConfig {
+	return &IrcConfig{
+		Channel:   v.GetString("channel"),
+		Admins:    v.GetStringSlice("admins"),
+		Server:    v.GetString("server"),
+		Port:      v.GetInt("port"),
+		SSL:       v.GetBool("ssl"),
+		Addressed: v.GetBool("addressed"),
+	}
+}
+
 type IrcContext struct {
 	context.Context
 	ai          *ai.Client
-	personality *Personality
+	personality *model.Personality
 	config      *IrcConfig
 	client      *girc.Client
 	event       *girc.Event
-	session     *Sessions
+	session     *session.Sessions
 	args        []string
 }
 
-func NewIrcContext(parent context.Context, ai *ai.Client, v *vip.Viper, c *girc.Client, e *girc.Event) (*IrcContext, context.CancelFunc) {
+func NewIrcContext(parent context.Context, v *vip.Viper, c *girc.Client, e *girc.Event) (*IrcContext, context.CancelFunc) {
 	timedctx, cancel := context.WithTimeout(parent, v.GetDuration("timeout"))
 
 	ctx := &IrcContext{
 		Context:     timedctx,
-		ai:          ai,
 		client:      c,
 		event:       e,
 		args:        strings.Fields(e.Last()),
-		personality: PersonalityFromViper(v),
+		personality: model.PersonalityFromViper(v),
 		config:      IrcFromViper(v),
 	}
 
@@ -51,11 +75,11 @@ func NewIrcContext(parent context.Context, ai *ai.Client, v *vip.Viper, c *girc.
 	if !girc.IsValidChannel(key) {
 		key = e.Source.Name
 	}
-	ctx.session = sessions.Get(key)
+	ctx.session = session.SessionStore.Get(key)
 	return ctx, cancel
 }
 
-func Irc(aiClient *ai.Client) {
+func Irc() {
 	irc := girc.New(girc.Config{
 		Server:    vip.GetString("server"),
 		Port:      vip.GetInt("port"),
@@ -67,20 +91,20 @@ func Irc(aiClient *ai.Client) {
 	})
 
 	irc.Handlers.AddBg(girc.CONNECTED, func(c *girc.Client, e girc.Event) {
-		ctx, cancel := NewIrcContext(context.Background(), aiClient, vip.GetViper(), c, &e)
+		ctx, cancel := NewIrcContext(context.Background(), vip.GetViper(), c, &e)
 		defer cancel()
 
 		log.Println("joining channel:", ctx.config.Channel)
 		c.Cmd.Join(ctx.config.Channel)
 
 		time.Sleep(1 * time.Second)
-		sendGreeting(ctx)
+		handler.SendGreeting(ctx)
 	})
 
 	irc.Handlers.AddBg(girc.PRIVMSG, func(c *girc.Client, e girc.Event) {
-		ctx, cancel := NewIrcContext(context.Background(), aiClient, vip.GetViper(), c, &e)
+		ctx, cancel := NewIrcContext(context.Background(), vip.GetViper(), c, &e)
 		defer cancel()
-		handleMessage(ctx)
+		handler.HandleMessage(ctx)
 	})
 
 	for {
@@ -100,7 +124,7 @@ func (c *IrcContext) Complete(msg string) {
 	personality := c.GetPersonality()
 	session.AddMessage(personality, ai.ChatMessageRoleUser, msg)
 
-	respch := ChatCompletionStreamTask(c, &CompletionRequest{
+	respch := completion.ChatCompletionStreamTask(c, &completion.CompletionRequest{
 		Client:    c.GetAI(),
 		Timeout:   session.Config.ClientTimeout,
 		Model:     personality.Model,
@@ -109,13 +133,14 @@ func (c *IrcContext) Complete(msg string) {
 		Temp:      personality.Temp,
 	})
 
-	chunker := &Chunker{
-		buffer: &bytes.Buffer{},
-		max:    session.Config.Chunkmax,
-		delay:  session.Config.Chunkdelay,
-		quote:  session.Config.Chunkquoted,
-		last:   time.Now(),
+	chunker := &completion.Chunker{
+		Buffer: &bytes.Buffer{},
+		Max:    session.Config.Chunkmax,
+		Delay:  session.Config.Chunkdelay,
+		Quote:  session.Config.Chunkquoted,
+		Last:   time.Now(),
 	}
+
 	chunkch := chunker.ChannelFilter(respch)
 
 	all := strings.Builder{}
@@ -125,7 +150,7 @@ func (c *IrcContext) Complete(msg string) {
 	}
 
 	session.AddMessage(c.personality, ai.ChatMessageRoleAssistant, all.String())
-	ReactActionObservation(c, all.String())
+	action.ReactActionObservation(c, all.String())
 }
 
 func (c *IrcContext) IsAdmin() bool {
@@ -204,13 +229,13 @@ func (c *IrcContext) SetNick(nick string) {
 	c.client.Cmd.Nick(c.personality.Nick)
 }
 
-func (c *IrcContext) GetSession() *Sessions {
+func (c *IrcContext) GetSession() *session.Sessions {
 	return c.session
 }
-func (c *IrcContext) SetSession(s *Sessions) {
+func (c *IrcContext) SetSession(s *session.Sessions) {
 	c.session = s
 }
 
-func (c *IrcContext) GetPersonality() *Personality {
+func (c *IrcContext) GetPersonality() *model.Personality {
 	return c.personality
 }

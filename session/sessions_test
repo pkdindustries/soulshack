@@ -1,10 +1,12 @@
-package main
+package session
 
 import (
 	"fmt"
 	"io"
 	"log"
 	"math/rand"
+	"pkdindustries/soulshack/irc"
+	model "pkdindustries/soulshack/model"
 	"sync"
 	"testing"
 	"time"
@@ -20,14 +22,14 @@ func TestChatSession(t *testing.T) {
 
 	//log.SetOutput(io.Discard)
 
-	ctx := &IrcContext{
-		personality: &Personality{
+	ctx := &irc.IrcContext{
+		personality: &model.Personality{
 			Prompt: "You are a helpful assistant.",
 		},
 	}
 
 	t.Run("Test interactions and message history", func(t *testing.T) {
-		session1 := sessions.Get("session1")
+		session1 := SessionStore.Get("session1")
 		session1.AddMessage(ctx.personality, ai.ChatMessageRoleUser, "Hello!")
 		session1.AddMessage(ctx.personality, ai.ChatMessageRoleAssistant, "Hi there!")
 
@@ -39,7 +41,7 @@ func TestChatSession(t *testing.T) {
 func TestExpiry(t *testing.T) {
 	//log.SetOutput(io.Discard)
 	ctx := &IrcContext{
-		personality: &Personality{
+		personality: &model.Personality{
 			Prompt: "You are a helpful assistant.",
 		},
 	}
@@ -47,13 +49,13 @@ func TestExpiry(t *testing.T) {
 		vip.Set("session", 500*time.Millisecond)
 		vip.Set("history", 20)
 
-		session2 := sessions.Get("session2")
+		session2 := SessionStore.Get("session2")
 		session2.AddMessage(ctx.personality, ai.ChatMessageRoleUser, "How are you?")
 		session2.AddMessage(ctx.personality, ai.ChatMessageRoleAssistant, "I'm doing great, thanks!")
 		session2.AddMessage(ctx.personality, ai.ChatMessageRoleUser, "What's your name?")
 
 		time.Sleep(2 * time.Second)
-		session3 := sessions.Get("session2")
+		session3 := SessionStore.Get("session2")
 
 		assert.NotEqual(t, session2, session3, "Expired session should not be reused")
 		assert.Len(t, session3.history, 0, "New session history should be empty")
@@ -70,7 +72,7 @@ func TestExpiry(t *testing.T) {
 func TestSessionConcurrency(t *testing.T) {
 	vip.Set("session", 1*time.Hour)
 	vip.Set("history", 10)
-	sessions.sessionMap = make(map[string]*Sessions)
+	SessionStore.sessionMap = make(map[string]*Sessions)
 	log.SetOutput(io.Discard)
 
 	t.Run("Test session concurrency", func(t *testing.T) {
@@ -78,7 +80,7 @@ func TestSessionConcurrency(t *testing.T) {
 		vip.Set("history", 500*2000)
 
 		ctx := &IrcContext{
-			personality: &Personality{
+			personality: &model.Personality{
 				Prompt: "You are a helpful assistant.",
 			},
 		}
@@ -95,7 +97,7 @@ func TestSessionConcurrency(t *testing.T) {
 			go func(userIndex int) {
 				defer wg.Done()
 				sessionID := fmt.Sprintf("usersession%d", userIndex)
-				session := sessions.Get(sessionID)
+				session := SessionStore.Get(sessionID)
 
 				for j := 0; j < messagesPerUser; j++ {
 					session.AddMessage(ctx.personality, ai.ChatMessageRoleUser, fmt.Sprintf("User %d message %d", userIndex, j))
@@ -108,7 +110,7 @@ func TestSessionConcurrency(t *testing.T) {
 
 		for i := 0; i < concurrentUsers; i++ {
 			sessionID := fmt.Sprintf("usersession%d", i)
-			session := sessions.Get(sessionID)
+			session := SessionStore.Get(sessionID)
 			assert.Len(t, session.history, messagesPerUser*2+1, "Each session should have the correct number of messages")
 		}
 		elapsedTime := time.Since(startTime)
@@ -126,7 +128,7 @@ func TestSingleSessionConcurrency(t *testing.T) {
 		vip.Set("history", 500*200)
 
 		ctx := &IrcContext{
-			personality: &Personality{
+			personality: &model.Personality{
 				Prompt: "You are a helpful assistant.",
 			},
 		}
@@ -136,7 +138,7 @@ func TestSingleSessionConcurrency(t *testing.T) {
 
 		startTime := time.Now()
 
-		session := sessions.Get("concurrentSession")
+		session := SessionStore.Get("concurrentSession")
 
 		var wg sync.WaitGroup
 		wg.Add(concurrentUsers)
@@ -167,7 +169,7 @@ func TestSessionReapStress(t *testing.T) {
 	numSessions := 2000
 	timeout := 100 * time.Millisecond
 	log.SetOutput(io.Discard)
-	sessions.sessionMap = make(map[string]*Sessions)
+	SessionStore.sessionMap = make(map[string]*Sessions)
 	vip.Set("session", timeout)
 	vip.Set("history", 10)
 	vip.Set("chunkdelay", 200*time.Millisecond)
@@ -176,16 +178,16 @@ func TestSessionReapStress(t *testing.T) {
 	// Create and store sessions
 	for i := 0; i < numSessions; i++ {
 		sessionID := fmt.Sprintf("session-%d", i)
-		sessions.Get(sessionID)
+		SessionStore.Get(sessionID)
 	}
 
 	// Verify that all sessions are created
-	if len(sessions.sessionMap) != numSessions {
-		t.Fatalf("Expected %d sessions, got %d", numSessions, len(sessions.sessionMap))
+	if len(SessionStore.sessionMap) != numSessions {
+		t.Fatalf("Expected %d sessions, got %d", numSessions, len(SessionStore.sessionMap))
 	}
 
 	// Simulate activity for some sessions
-	testPersonality := Personality{
+	testPersonality := model.Personality{
 		Prompt: "Test prompt",
 	}
 
@@ -193,14 +195,14 @@ func TestSessionReapStress(t *testing.T) {
 	// half are half aged
 	for i := 0; i < numSessions/2; i++ {
 		sessionID := fmt.Sprintf("session-%d", i)
-		session := sessions.Get(sessionID)
+		session := SessionStore.Get(sessionID)
 		session.AddMessage(&testPersonality, ai.ChatMessageRoleUser, fmt.Sprintf("message-%d", 0))
 		session.AddMessage(&testPersonality, ai.ChatMessageRoleUser, fmt.Sprintf("message-%d", 1))
 	}
 
 	// wait for the unfreshened half to time out
 	time.Sleep(55 * time.Millisecond)
-	activeSessions := len(sessions.sessionMap)
+	activeSessions := len(SessionStore.sessionMap)
 	expectedActiveSessions := numSessions / 2
 	if activeSessions != expectedActiveSessions {
 		t.Fatalf("Expected %d active sessions, got %d", expectedActiveSessions, activeSessions)
@@ -282,7 +284,7 @@ func BenchmarkSessionStress(b *testing.B) {
 	vip.Set("history", 5)             // Shorter history length to trigger more trimming
 
 	ctx := &IrcContext{
-		personality: &Personality{
+		personality: &model.Personality{
 			Prompt: "You are a helpful assistant.",
 		},
 	}
@@ -307,7 +309,7 @@ func BenchmarkSessionStress(b *testing.B) {
 
 						for k := 0; k < sessionsPerUser; k++ {
 							sessionID := fmt.Sprintf("session%d-%d", userIndex, k)
-							session := sessions.Get(sessionID)
+							session := SessionStore.Get(sessionID)
 
 							action := rand.Intn(4)
 

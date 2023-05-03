@@ -1,8 +1,11 @@
-package main
+package action
 
 import (
 	"fmt"
 	"log"
+	completion "pkdindustries/soulshack/completion"
+	context "pkdindustries/soulshack/model"
+	model "pkdindustries/soulshack/model"
 	"strings"
 
 	ai "github.com/sashabaranov/go-openai"
@@ -11,12 +14,12 @@ import (
 	gowiki "github.com/trietmn/go-wiki"
 )
 
-var actionRegistry = map[string]ReactAction{}
+var ActionRegistry = map[string]ReactAction{}
 
 func init() {
-	actionRegistry["image"] = &ImageAction{}
-	actionRegistry["config"] = &ConfigAction{}
-	actionRegistry["wikipedia"] = &WikipediaAction{}
+	ActionRegistry["image"] = &ImageAction{}
+	ActionRegistry["config"] = &ConfigAction{}
+	ActionRegistry["wikipedia"] = &WikipediaAction{}
 }
 
 type WikipediaAction struct{}
@@ -29,7 +32,7 @@ func (a *WikipediaAction) Purpose() string {
 	return "if necessary to augment an answer, find current information about people and events from wikipedia"
 }
 
-func (a *WikipediaAction) Execute(ctx ChatContext, arg string) (string, error) {
+func (a *WikipediaAction) Execute(ctx model.ChatContext, arg string) (string, error) {
 
 	args := strings.Split(arg, " ")
 	if len(args) < 2 {
@@ -58,7 +61,7 @@ func (a *ConfigAction) Purpose() string {
 	return "get or set a bot configuration variable"
 }
 
-func (a *ConfigAction) Execute(ctx ChatContext, arg string) (string, error) {
+func (a *ConfigAction) Execute(ctx model.ChatContext, arg string) (string, error) {
 
 	args := strings.Split(arg, " ")
 	_, cmd, k := args[0], args[1], args[2]
@@ -73,7 +76,7 @@ func (a *ConfigAction) Execute(ctx ChatContext, arg string) (string, error) {
 			if err := ctx.ChangeName(value); err != nil {
 				return "", err
 			} else {
-				ctx.GetSession().Reset()
+				//ctx.GetSession().Reset()
 			}
 		}
 		return fmt.Sprintf("%s set to: %s", k, vip.GetString(k)), nil
@@ -97,7 +100,7 @@ func (a *ImageAction) Purpose() string {
 	return "generates a fictional image based on a description"
 }
 
-func (a *ImageAction) Execute(ctx ChatContext, arg string) (string, error) {
+func (a *ImageAction) Execute(ctx context.ChatContext, arg string) (string, error) {
 	validrez := map[string]bool{
 		"256x256":   true,
 		"512x512":   true,
@@ -125,7 +128,7 @@ func (a *ImageAction) Execute(ctx ChatContext, arg string) (string, error) {
 		N:              1,
 	}
 
-	resp, err := ctx.GetAI().CreateImage(ctx, req)
+	resp, err := completion.GetAI().CreateImage(ctx, req)
 	if err != nil {
 		return "", err
 	}
