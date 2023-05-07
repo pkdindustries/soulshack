@@ -27,7 +27,7 @@ import (
 
 var RootCmd = &cobra.Command{
 	Use:     "soulshack",
-	Example: "soulshack irc|discord",
+	Example: "soulshack [irc|discord]",
 	Short:   GetBanner(),
 	Version: "0.50 - http://github.com/pkdindustries/soulshack",
 }
@@ -67,11 +67,11 @@ func main() {
 		}
 	})
 	// irc configuration
-	IrcCmd.PersistentFlags().StringP("nick", "n", "soulshack", "bot's nickname on the irc server")
-	IrcCmd.PersistentFlags().StringP("server", "s", "localhost", "irc server address")
-	IrcCmd.PersistentFlags().BoolP("ssl", "e", false, "enable SSL for the IRC connection")
-	IrcCmd.PersistentFlags().IntP("port", "p", 6667, "irc server port")
-	IrcCmd.PersistentFlags().StringP("channel", "c", "soulshack", "irc channel to join")
+	RootCmd.PersistentFlags().StringP("nick", "n", "soulshack", "bot's nickname on the irc server")
+	RootCmd.PersistentFlags().StringP("server", "s", "localhost", "irc server address")
+	RootCmd.PersistentFlags().BoolP("ssl", "e", false, "enable SSL for the IRC connection")
+	RootCmd.PersistentFlags().IntP("port", "p", 6667, "irc server port")
+	RootCmd.PersistentFlags().StringP("channel", "c", "soulshack", "irc channel to join")
 
 	// bot meta configuration
 	RootCmd.PersistentFlags().StringP("become", "b", "chatbot", "become the named personality")
@@ -101,11 +101,11 @@ func main() {
 	RootCmd.PersistentFlags().String("prompt", "respond in a short text:", "initial system prompt for the ai")
 
 	// discord??
-	DiscordCmd.PersistentFlags().String("discordtoken", "", "discord bot token")
+	RootCmd.PersistentFlags().String("discordtoken", "", "discord bot token")
 
 	vip.BindPFlags(RootCmd.PersistentFlags())
-	vip.BindPFlags(IrcCmd.PersistentFlags())
-	vip.BindPFlags(DiscordCmd.PersistentFlags())
+	// vip.BindPFlags(IrcCmd.PersistentFlags())
+	// vip.BindPFlags(DiscordCmd.PersistentFlags())
 
 	vip.SetEnvPrefix("SOULSHACK")
 	vip.AutomaticEnv()

@@ -7,8 +7,8 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"pkdindustries/soulshack/action"
-	"pkdindustries/soulshack/completion"
+	action "pkdindustries/soulshack/action"
+	completion "pkdindustries/soulshack/completion"
 	handler "pkdindustries/soulshack/handler"
 	model "pkdindustries/soulshack/model"
 	session "pkdindustries/soulshack/session"
@@ -123,6 +123,8 @@ func (c *DiscordContext) Complete(msg string) {
 			case <-typer.C:
 				c.discord.ChannelTyping(c.msg.ChannelID)
 			case <-donetyping:
+				return
+			case <-c.Done():
 				return
 			}
 		}

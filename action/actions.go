@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 	completion "pkdindustries/soulshack/completion"
-	context "pkdindustries/soulshack/model"
 	model "pkdindustries/soulshack/model"
 	"strings"
 
@@ -100,7 +99,7 @@ func (a *ImageAction) Purpose() string {
 	return "generates a fictional image based on a description"
 }
 
-func (a *ImageAction) Execute(ctx context.ChatContext, arg string) (string, error) {
+func (a *ImageAction) Execute(ctx model.ChatContext, arg string) (string, error) {
 	validrez := map[string]bool{
 		"256x256":   true,
 		"512x512":   true,

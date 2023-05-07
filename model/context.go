@@ -13,7 +13,6 @@ type Message interface {
 	ResetSource() // xxx
 	GetArgs() []string
 	SetArgs([]string)
-	Sendmessage(string)
 }
 
 type ChatContext interface {
@@ -22,6 +21,7 @@ type ChatContext interface {
 	GetPersonality() *Personality
 	ChangeName(string) error
 	Complete(string)
+	Sendmessage(string)
 }
 
 type Personality struct {

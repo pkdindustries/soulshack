@@ -5,6 +5,7 @@ import (
 	"log"
 	"pkdindustries/soulshack/action"
 	model "pkdindustries/soulshack/model"
+	"strings"
 	"sync"
 	"time"
 
@@ -61,12 +62,16 @@ func (s *Sessions) GetHistory() []ai.ChatCompletionMessage {
 
 func (s *Sessions) AddMessage(conf *model.Personality, role string, message string) {
 	s.mu.Lock()
-
+	defer s.mu.Unlock()
 	if len(s.history) == 0 {
+		content := conf.Prompt
+		if strings.HasPrefix(strings.TrimSpace(content), "!") {
+			content += action.ReactPrompt(&action.ReactConfig{Actions: action.ActionRegistry})
+		}
 		s.history = append(s.history, ai.ChatCompletionMessage{
 			Role:    ai.ChatMessageRoleSystem,
-			Content: conf.Prompt + action.ReactPrompt(&action.ReactConfig{Actions: action.ActionRegistry})},
-		)
+			Content: content,
+		})
 		s.Totalchars += len(conf.Prompt)
 	}
 
@@ -75,8 +80,6 @@ func (s *Sessions) AddMessage(conf *model.Personality, role string, message stri
 	s.Last = time.Now()
 
 	s.trim()
-	s.mu.Unlock()
-
 }
 
 // contining the no alloc tradition to mock python users
@@ -112,7 +115,6 @@ func (s *Sessions) Reap() bool {
 }
 
 func (sessions *SessionMap) Get(id string) *Sessions {
-
 	sessions.mu.Lock()
 	defer sessions.mu.Unlock()
 
