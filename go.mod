@@ -3,8 +3,8 @@ module pkdindustries/soulshack
 go 1.20
 
 require (
-	github.com/lrstanley/girc v0.0.0-20230303230257-fefe1cab7695
-	github.com/sashabaranov/go-openai v1.9.0
+	github.com/lrstanley/girc v0.0.0-20230507010347-3c8fa7715074
+	github.com/sashabaranov/go-openai v1.9.3
 	github.com/spf13/cobra v1.7.0
 	github.com/spf13/viper v1.15.0
 )
@@ -34,7 +34,7 @@ require (
 	github.com/subosito/gotenv v1.4.2 // indirect
 	github.com/subosito/shorturl v1.0.0
 	github.com/trietmn/go-wiki v1.0.0
-	golang.org/x/sys v0.7.0 // indirect
+	golang.org/x/sys v0.8.0 // indirect
 	golang.org/x/text v0.9.0 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
