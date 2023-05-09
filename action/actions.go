@@ -38,7 +38,7 @@ func (a *WikipediaAction) Execute(ctx model.ChatContext, arg string) (string, er
 		return "", fmt.Errorf("wikipedia requires an argument")
 	}
 
-	sum, err := gowiki.Summary(strings.Join(args[1:], " "), 0, 2000, true, true)
+	sum, err := gowiki.Summary(strings.Join(args[1:], " "), 0, 2500, true, true)
 	if err != nil {
 		return "", err
 	}
@@ -63,6 +63,10 @@ func (a *ConfigAction) Purpose() string {
 func (a *ConfigAction) Execute(ctx model.ChatContext, arg string) (string, error) {
 
 	args := strings.Split(arg, " ")
+	if len(args) < 3 {
+		return "", fmt.Errorf("config requires at least 2 arguments")
+	}
+
 	_, cmd, k := args[0], args[1], args[2]
 	log.Printf("config action: %s %s %s", cmd, k, args)
 
@@ -74,10 +78,9 @@ func (a *ConfigAction) Execute(ctx model.ChatContext, arg string) (string, error
 		if k == "nick" {
 			if err := ctx.ChangeName(value); err != nil {
 				return "", err
-			} else {
-				//ctx.GetSession().Reset()
 			}
 		}
+		ctx.ResetSession()
 		return fmt.Sprintf("%s set to: %s", k, vip.GetString(k)), nil
 	} else if cmd == "get" {
 		return fmt.Sprintf("%s is: %s", k, vip.GetString(k)), nil

@@ -1,4 +1,4 @@
-package context
+package model
 
 import (
 	"context"
@@ -18,10 +18,11 @@ type Message interface {
 type ChatContext interface {
 	context.Context
 	Message
+	ResetSession()
 	GetPersonality() *Personality
 	ChangeName(string) error
 	Complete(string)
-	Sendmessage(string)
+	Send(string)
 }
 
 type Personality struct {
@@ -47,4 +48,5 @@ func (c *Personality) FromViper(v *vip.Viper) {
 	c.Greeting = v.GetString("greeting")
 	c.Nick = v.GetString("nick")
 	c.Model = v.GetString("model")
+	c.Temp = v.GetFloat64("temperature")
 }

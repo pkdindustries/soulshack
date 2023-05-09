@@ -18,6 +18,8 @@ import (
 	vip "github.com/spf13/viper"
 )
 
+const IRC_MAX_MSG = 350
+
 type IrcConfig struct {
 	Channel   string
 	Admins    []string
@@ -45,7 +47,7 @@ type IrcContext struct {
 	config      *IrcConfig
 	client      *girc.Client
 	event       *girc.Event
-	session     *session.Sessions
+	session     *session.Session
 	args        []string
 }
 
@@ -120,24 +122,28 @@ func Irc() {
 }
 
 func (c *IrcContext) Complete(msg string) {
-	session := c.GetSession()
-	personality := c.GetPersonality()
-	session.AddMessage(personality, ai.ChatMessageRoleUser, msg)
+	s := c.session
+	p := c.GetPersonality()
+	s.AddMessage(&session.Personality{
+		Prompt: p.Prompt,
+		Model:  p.Model,
+		Temp:   p.Temp,
+	}, ai.ChatMessageRoleUser, msg)
 
 	respch := completion.ChatCompletionStreamTask(c, &completion.CompletionRequest{
 		Client:    completion.GetAI(),
-		Timeout:   session.Config.ClientTimeout,
-		Model:     personality.Model,
-		MaxTokens: session.Config.MaxTokens,
-		Messages:  session.GetHistory(),
-		Temp:      personality.Temp,
+		Timeout:   s.Config.ClientTimeout,
+		Model:     p.Model,
+		MaxTokens: s.Config.MaxTokens,
+		Messages:  s.GetHistory(),
+		Temp:      p.Temp,
 	})
 
 	chunker := &completion.Chunker{
 		Buffer: &bytes.Buffer{},
-		Max:    session.Config.Chunkmax,
-		Delay:  session.Config.Chunkdelay,
-		Quote:  session.Config.Chunkquoted,
+		Max:    s.Config.Chunkmax,
+		Delay:  s.Config.Chunkdelay,
+		Quote:  s.Config.Chunkquoted,
 		Last:   time.Now(),
 	}
 
@@ -146,11 +152,17 @@ func (c *IrcContext) Complete(msg string) {
 	all := strings.Builder{}
 	for reply := range chunkch {
 		all.WriteString(reply)
-		c.Sendmessage(reply)
+		c.Send(reply)
 	}
 
-	session.AddMessage(c.personality, ai.ChatMessageRoleAssistant, all.String())
-	action.ReactActionObservation(c, all.String())
+	s.AddMessage(&session.Personality{
+		Prompt: p.Prompt,
+		Model:  p.Model,
+		Temp:   p.Temp,
+	}, ai.ChatMessageRoleAssistant, all.String())
+	if s.Config.ReactMode {
+		action.ReactActionObservation(c, all.String())
+	}
 }
 
 func (c *IrcContext) IsAdmin() bool {
@@ -181,7 +193,7 @@ func (c *IrcContext) ChangeName(nick string) error {
 	return nil
 }
 
-func (c *IrcContext) Sendmessage(message string) {
+func (c *IrcContext) Send(message string) {
 	c.client.Cmd.Reply(*c.event, message)
 }
 
@@ -206,14 +218,6 @@ func (c *IrcContext) IsPrivate() bool {
 	return !strings.HasPrefix(c.event.Params[0], "#")
 }
 
-func (c *IrcContext) GetMessage() string {
-	return c.event.Last()
-}
-
-func (c *IrcContext) GetArgument() string {
-	return strings.Join(c.args[1:], " ")
-}
-
 func (c *IrcContext) GetArgs() []string {
 	return c.args
 }
@@ -229,13 +233,10 @@ func (c *IrcContext) SetNick(nick string) {
 	c.client.Cmd.Nick(c.personality.Nick)
 }
 
-func (c *IrcContext) GetSession() *session.Sessions {
-	return c.session
-}
-func (c *IrcContext) SetSession(s *session.Sessions) {
-	c.session = s
-}
-
 func (c *IrcContext) GetPersonality() *model.Personality {
 	return c.personality
+}
+
+func (c *IrcContext) ResetSession() {
+	c.session.Reset()
 }

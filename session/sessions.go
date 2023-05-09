@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"log"
 	"pkdindustries/soulshack/action"
-	model "pkdindustries/soulshack/model"
-	"strings"
 	"sync"
 	"time"
 
@@ -14,15 +12,14 @@ import (
 )
 
 var SessionStore = SessionMap{
-	sessionMap: make(map[string]*Sessions),
+	sessionMap: make(map[string]*Session),
 	mu:         sync.RWMutex{},
 }
 
-type Session interface {
-	ChangeName(string) error
-	GetSession() *Sessions
-	SetSession(*Sessions)
-	GetPersonality() *model.Personality
+type Personality struct {
+	Prompt string
+	Model  string
+	Temp   float64
 }
 
 type SessionConfig struct {
@@ -32,15 +29,16 @@ type SessionConfig struct {
 	ClientTimeout time.Duration
 	MaxHistory    int
 	MaxTokens     int
+	ReactMode     bool
 	TTL           time.Duration
 }
 
 type SessionMap struct {
-	sessionMap map[string]*Sessions
+	sessionMap map[string]*Session
 	mu         sync.RWMutex
 }
 
-type Sessions struct {
+type Session struct {
 	Config     *SessionConfig
 	history    []ai.ChatCompletionMessage
 	Last       time.Time
@@ -50,7 +48,7 @@ type Sessions struct {
 	Stash      map[string]string
 }
 
-func (s *Sessions) GetHistory() []ai.ChatCompletionMessage {
+func (s *Session) GetHistory() []ai.ChatCompletionMessage {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -60,30 +58,40 @@ func (s *Sessions) GetHistory() []ai.ChatCompletionMessage {
 	return history
 }
 
-func (s *Sessions) AddMessage(conf *model.Personality, role string, message string) {
+func (s *Session) AddMessage(conf *Personality, role string, message string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	if len(s.history) == 0 {
 		content := conf.Prompt
-		if strings.HasPrefix(strings.TrimSpace(content), "!") {
-			content += action.ReactPrompt(&action.ReactConfig{Actions: action.ActionRegistry})
-		}
 		s.history = append(s.history, ai.ChatCompletionMessage{
 			Role:    ai.ChatMessageRoleSystem,
 			Content: content,
 		})
-		s.Totalchars += len(conf.Prompt)
+		s.Totalchars += len(content)
+		if s.Config.ReactMode {
+			reactprompt := action.ReactPrompt(&action.ReactConfig{Actions: action.ActionRegistry})
+			s.history = append(s.history, ai.ChatCompletionMessage{
+				Role:    ai.ChatMessageRoleSystem,
+				Content: reactprompt,
+			})
+			s.Totalchars += len(reactprompt)
+		}
 	}
 
 	s.history = append(s.history, ai.ChatCompletionMessage{Role: role, Content: message})
 	s.Totalchars += len(message)
 	s.Last = time.Now()
 
+	// if vip.GetBool("verbose") {
+	// 	s.Debug()
+	// }
+
 	s.trim()
 }
 
 // contining the no alloc tradition to mock python users
-func (s *Sessions) trim() {
+func (s *Session) trim() {
 	if len(s.history) > s.Config.MaxHistory {
 		rm := len(s.history) - s.Config.MaxHistory
 		for i := 1; i <= s.Config.MaxHistory; i++ {
@@ -93,14 +101,14 @@ func (s *Sessions) trim() {
 	}
 }
 
-func (s *Sessions) Reset() {
+func (s *Session) Reset() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.history = s.history[:0]
 	s.Last = time.Now()
 }
 
-func (s *Sessions) Reap() bool {
+func (s *Session) Reap() bool {
 	now := time.Now()
 	SessionStore.mu.Lock()
 	defer SessionStore.mu.Unlock()
@@ -114,7 +122,7 @@ func (s *Sessions) Reap() bool {
 	return false
 }
 
-func (sessions *SessionMap) Get(id string) *Sessions {
+func (sessions *SessionMap) Get(id string) *Session {
 	sessions.mu.Lock()
 	defer sessions.mu.Unlock()
 
@@ -122,7 +130,7 @@ func (sessions *SessionMap) Get(id string) *Sessions {
 		return v
 	}
 
-	session := &Sessions{
+	session := &Session{
 		Name:   id,
 		Last:   time.Now(),
 		Config: SessionFromViper(vip.GetViper()),
@@ -151,12 +159,13 @@ func SessionFromViper(v *vip.Viper) *SessionConfig {
 		ClientTimeout: vip.GetDuration("timeout"),
 		MaxHistory:    vip.GetInt("history"),
 		MaxTokens:     vip.GetInt("maxtokens"),
+		ReactMode:     vip.GetBool("react"),
 		TTL:           vip.GetDuration("session"),
 	}
 }
 
 // show string of all msg contents
-func (s *Sessions) Debug() {
+func (s *Session) Debug() {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	for _, msg := range s.history {

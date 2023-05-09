@@ -21,10 +21,12 @@ import (
 	vip "github.com/spf13/viper"
 )
 
+const DISCORD_MAX_MSG = 2000
+
 type DiscordContext struct {
 	context.Context
 	personality *model.Personality
-	session     *session.Sessions
+	session     *session.Session
 	msg         *discordgo.MessageCreate
 	discord     *discordgo.Session
 	config      *DiscordConfig
@@ -89,19 +91,24 @@ func Discord() {
 
 func (c *DiscordContext) Complete(msg string) {
 	log.Println("DiscordContext.Complete", msg)
-	session := c.GetSession()
-	personality := c.GetPersonality()
+	s := c.session
+	p := c.GetPersonality()
 
 	c.discord.ChannelTyping(c.msg.ChannelID)
 
-	session.AddMessage(c.personality, ai.ChatMessageRoleUser, msg)
+	s.AddMessage(&session.Personality{
+		Prompt: p.Prompt,
+		Model:  p.Model,
+		Temp:   p.Temp,
+	}, ai.ChatMessageRoleUser, msg)
+
 	respch := completion.ChatCompletionStreamTask(c, &completion.CompletionRequest{
 		Client:    completion.GetAI(),
-		Timeout:   session.Config.ClientTimeout,
-		Model:     personality.Model,
-		Temp:      personality.Temp,
-		MaxTokens: session.Config.MaxTokens,
-		Messages:  session.GetHistory(),
+		Timeout:   s.Config.ClientTimeout,
+		Model:     p.Model,
+		Temp:      p.Temp,
+		MaxTokens: s.Config.MaxTokens,
+		Messages:  s.GetHistory(),
 	})
 
 	chunker := &completion.Chunker{
@@ -145,7 +152,7 @@ func (c *DiscordContext) Complete(msg string) {
 			if quotes%2 != 0 {
 				msg += "```"
 			}
-			if len(msg) > 2000 {
+			if len(msg) > DISCORD_MAX_MSG {
 				all.Reset()
 				all.WriteString(chunk)
 				messageID, err := c.initmessage(chunk)
@@ -158,8 +165,14 @@ func (c *DiscordContext) Complete(msg string) {
 		}
 	}
 
-	session.AddMessage(c.personality, ai.ChatMessageRoleAssistant, all.String())
-	action.ReactActionObservation(c, all.String())
+	s.AddMessage(&session.Personality{
+		Prompt: p.Prompt,
+		Model:  p.Model,
+		Temp:   p.Temp,
+	}, ai.ChatMessageRoleAssistant, all.String())
+	if s.Config.ReactMode {
+		action.ReactActionObservation(c, all.String())
+	}
 }
 
 func (c *DiscordContext) initmessage(message string) (string, error) {
@@ -186,7 +199,7 @@ func (c *DiscordContext) editmessage(messageID, content string) {
 	}
 }
 
-func (c *DiscordContext) Sendmessage(message string) {
+func (c *DiscordContext) Send(message string) {
 	if strings.TrimSpace(message) == "" {
 		return
 	}
@@ -200,6 +213,10 @@ func (c *DiscordContext) Sendmessage(message string) {
 func (c *DiscordContext) ChangeName(name string) error {
 	err := c.discord.GuildMemberNickname(c.msg.GuildID, c.discord.State.User.ID, name)
 	return err
+}
+
+func (c *DiscordContext) ResetSession() {
+	c.session.Reset()
 }
 
 func (c *DiscordContext) IsAdmin() bool {
@@ -217,16 +234,6 @@ func (c *DiscordContext) IsValid() bool {
 
 // resetsource
 func (c *DiscordContext) ResetSource() {
-}
-
-// getsession
-func (c *DiscordContext) GetSession() *session.Sessions {
-	return c.session
-}
-
-// setsession
-func (c *DiscordContext) SetSession(s *session.Sessions) {
-	c.session = s
 }
 
 // get personality

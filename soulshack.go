@@ -99,16 +99,18 @@ func main() {
 	// personality / prompting
 	RootCmd.PersistentFlags().String("greeting", "hello.", "prompt to be used when the bot joins the channel")
 	RootCmd.PersistentFlags().String("prompt", "respond in a short text:", "initial system prompt for the ai")
+	RootCmd.PersistentFlags().Bool("reactmode", false, "enable tool use and introspection")
 
 	// discord??
 	RootCmd.PersistentFlags().String("discordtoken", "", "discord bot token")
 
 	vip.BindPFlags(RootCmd.PersistentFlags())
-	// vip.BindPFlags(IrcCmd.PersistentFlags())
+	// vip.BindPFlags(RootCmd.PersistentFlags())
 	// vip.BindPFlags(DiscordCmd.PersistentFlags())
 
 	vip.SetEnvPrefix("SOULSHACK")
 	vip.AutomaticEnv()
+	//RootCmd.AddCommand(RootCmd)
 	RootCmd.AddCommand(IrcCmd)
 	RootCmd.AddCommand(DiscordCmd)
 	if err := RootCmd.Execute(); err != nil {
