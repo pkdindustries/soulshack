@@ -35,13 +35,13 @@ func List() []string {
 	if err != nil {
 		log.Fatal(err)
 	}
-	var personalities []string
+	var p []string
 	for _, file := range files {
 		if filepath.Ext(file.Name()) == ".yml" {
-			personalities = append(personalities, strings.TrimSuffix(file.Name(), filepath.Ext(file.Name())))
+			p = append(p, strings.TrimSuffix(file.Name(), filepath.Ext(file.Name())))
 		}
 	}
-	return personalities
+	return p
 }
 
 func Load(p string) (*vip.Viper, error) {

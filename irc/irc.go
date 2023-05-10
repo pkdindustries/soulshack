@@ -124,11 +124,7 @@ func Irc() {
 func (c *IrcContext) Complete(msg string) {
 	s := c.session
 	p := c.GetPersonality()
-	s.AddMessage(&session.Personality{
-		Prompt: p.Prompt,
-		Model:  p.Model,
-		Temp:   p.Temp,
-	}, ai.ChatMessageRoleUser, msg)
+	s.AddMessage(session.RoleUser, msg)
 
 	respch := completion.ChatCompletionStreamTask(c, &completion.CompletionRequest{
 		Client:    completion.GetAI(),
@@ -155,13 +151,9 @@ func (c *IrcContext) Complete(msg string) {
 		c.Send(reply)
 	}
 
-	s.AddMessage(&session.Personality{
-		Prompt: p.Prompt,
-		Model:  p.Model,
-		Temp:   p.Temp,
-	}, ai.ChatMessageRoleAssistant, all.String())
+	s.AddMessage(session.RoleAssistant, all.String())
 	if s.Config.ReactMode {
-		action.ReactActionObservation(c, all.String())
+		action.ReactObservation(c, all.String())
 	}
 }
 

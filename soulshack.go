@@ -30,12 +30,6 @@ var RootCmd = &cobra.Command{
 	Example: "soulshack [irc|discord]",
 	Short:   GetBanner(),
 	Version: "0.50 - http://github.com/pkdindustries/soulshack",
-}
-
-var IrcCmd = &cobra.Command{
-	Use:     "irc",
-	Example: "soulshack irc",
-	Short:   "run soulshack as an irc bot",
 	Run:     runIrc,
 }
 
@@ -45,6 +39,23 @@ var DiscordCmd = &cobra.Command{
 	Short:   "run soulshack as a discord bot",
 	Run:     runDiscord,
 }
+var IrcCmd = &cobra.Command{
+	Use:     "irc",
+	Example: "soulshack irc",
+	Short:   "run soulshack as an irc bot",
+	Run:     runIrc,
+}
+
+var ListCmd = &cobra.Command{
+	Use:     "list",
+	Example: "soulshack list",
+	Short:   "list all available personalities",
+	Run: func(_ *cobra.Command, _ []string) {
+		personalities := config.List()
+		log.Printf("Available personalities: %s", strings.Join(personalities, ", "))
+		os.Exit(0)
+	},
+}
 
 func main() {
 	cobra.OnInitialize(func() {
@@ -52,11 +63,7 @@ func main() {
 		if _, err := os.Stat(vip.GetString("directory")); errors.Is(err, fs.ErrNotExist) {
 			log.Printf("? configuration directory %s does not exist", vip.GetString("directory"))
 		}
-		if vip.GetBool("list") {
-			personalities := config.List()
-			log.Printf("Available personalities: %s", strings.Join(personalities, ", "))
-			os.Exit(0)
-		}
+
 		vip.AddConfigPath(vip.GetString("directory"))
 		vip.SetConfigName(vip.GetString("become"))
 
@@ -79,7 +86,6 @@ func main() {
 	RootCmd.PersistentFlags().StringSliceP("admins", "A", []string{}, "comma-separated list of allowed users to administrate the bot (e.g., user1,user2,user3)")
 
 	// informational
-	RootCmd.PersistentFlags().BoolP("list", "l", false, "list configured personalities")
 	RootCmd.PersistentFlags().BoolP("verbose", "v", false, "enable verbose logging of sessions and configuration")
 
 	// openai configuration
@@ -105,21 +111,19 @@ func main() {
 	RootCmd.PersistentFlags().String("discordtoken", "", "discord bot token")
 
 	vip.BindPFlags(RootCmd.PersistentFlags())
-	// vip.BindPFlags(RootCmd.PersistentFlags())
-	// vip.BindPFlags(DiscordCmd.PersistentFlags())
-
 	vip.SetEnvPrefix("SOULSHACK")
 	vip.AutomaticEnv()
-	//RootCmd.AddCommand(RootCmd)
 	RootCmd.AddCommand(IrcCmd)
 	RootCmd.AddCommand(DiscordCmd)
+	RootCmd.AddCommand(ListCmd)
+
 	if err := RootCmd.Execute(); err != nil {
 		log.Fatal(err)
 	}
 }
 
 func runIrc(_ *cobra.Command, _ []string) {
-	log.Println("running soulshack as an irc bot")
+	log.Println("running as irc bot")
 
 	if err := config.Verify(vip.GetViper()); err != nil {
 		log.Fatal(err)
@@ -130,7 +134,7 @@ func runIrc(_ *cobra.Command, _ []string) {
 }
 
 func runDiscord(_ *cobra.Command, _ []string) {
-	log.Println("running soulshack as a discord bot")
+	log.Println("running as discord bot")
 
 	if err := config.Verify(vip.GetViper()); err != nil {
 		log.Fatal(err)

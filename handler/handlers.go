@@ -18,7 +18,7 @@ func HandleMessage(ctx model.ChatContext) {
 	if ctx.IsValid() {
 		switch strings.ToLower(ctx.GetArgs()[0]) {
 		case "/say":
-			handleSay(ctx)
+			Say(ctx)
 		case "/config":
 			Config(ctx)
 		case "/save":
@@ -65,7 +65,7 @@ func Wiki(ctx model.ChatContext) {
 		ctx.Send(e.Error())
 		return
 	}
-	ctx.Send(r)
+	ctx.Complete("summarize: " + r)
 }
 
 func HandleDefault(ctx model.ChatContext) {
@@ -128,9 +128,9 @@ func Become(ctx model.ChatContext) {
 		vip.MergeConfigMap(cfg.AllSettings())
 		ctx.GetPersonality().FromViper(cfg)
 	}
-	//SessionMap.GReset()
 
 	ctx.ChangeName(ctx.GetPersonality().Nick)
+	ctx.ResetSession()
 	time.Sleep(2 * time.Second)
 	SendGreeting(ctx)
 }
@@ -149,7 +149,7 @@ func Leave(ctx model.ChatContext) {
 	os.Exit(0)
 }
 
-func handleSay(ctx model.ChatContext) {
+func Say(ctx model.ChatContext) {
 
 	if !ctx.IsAdmin() {
 		ctx.Send("You don't have permission to perform this action.")
@@ -178,7 +178,6 @@ func handleSay(ctx model.ChatContext) {
 		ctx.GetPersonality().FromViper(cfg)
 	}
 
-	// ctx.SetSession(SessionStore.Get(uuid.New().String()))
 	ctx.ResetSession()
 	ctx.ResetSource()
 	ctx.SetArgs(ctx.GetArgs()[1:])

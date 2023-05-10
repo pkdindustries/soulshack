@@ -32,7 +32,7 @@ func (a *WikipediaAction) Purpose() string {
 }
 
 func (a *WikipediaAction) Execute(ctx model.ChatContext, arg string) (string, error) {
-
+	log.Println("action.wikipedia: ", arg)
 	args := strings.Split(arg, " ")
 	if len(args) < 2 {
 		return "", fmt.Errorf("wikipedia requires an argument")
@@ -61,30 +61,32 @@ func (a *ConfigAction) Purpose() string {
 }
 
 func (a *ConfigAction) Execute(ctx model.ChatContext, arg string) (string, error) {
-
 	args := strings.Split(arg, " ")
+	log.Println("action.config: ", arg)
+
 	if len(args) < 3 {
 		return "", fmt.Errorf("config requires at least 2 arguments")
 	}
 
-	_, cmd, k := args[0], args[1], args[2]
-	log.Printf("config action: %s %s %s", cmd, k, args)
+	cmd, key := args[1], args[2]
 
-	// XXX
-	if cmd == "set" {
+	switch cmd {
+	case "set":
+		if len(args) < 4 {
+			return "", fmt.Errorf("config set requires a value for the variable")
+		}
 		value := strings.Join(args[3:], " ")
-		// set on global config
-		vip.Set(k, value)
-		if k == "nick" {
+		vip.Set(key, value)
+		if key == "nick" {
 			if err := ctx.ChangeName(value); err != nil {
 				return "", err
 			}
 		}
 		ctx.ResetSession()
-		return fmt.Sprintf("%s set to: %s", k, vip.GetString(k)), nil
-	} else if cmd == "get" {
-		return fmt.Sprintf("%s is: %s", k, vip.GetString(k)), nil
-	} else {
+		return fmt.Sprintf("%s set to: %s", key, vip.GetString(key)), nil
+	case "get":
+		return fmt.Sprintf("%s is: %s", key, vip.GetString(key)), nil
+	default:
 		return "", fmt.Errorf("unknown config command: %s, must be get or set", cmd)
 	}
 }
@@ -110,6 +112,7 @@ func (a *ImageAction) Execute(ctx model.ChatContext, arg string) (string, error)
 	}
 
 	args := strings.Split(arg, " ")
+	log.Println("action.image: ", arg)
 
 	if len(args) < 2 {
 		return "", fmt.Errorf("image requires a description")

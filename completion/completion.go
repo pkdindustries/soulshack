@@ -3,14 +3,17 @@ package completion
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"log"
+	"sync"
 	"time"
 
 	ai "github.com/sashabaranov/go-openai"
 	vip "github.com/spf13/viper"
 )
+
+var once sync.Once
+var aiClient *ai.Client
 
 type CompletionRequest struct {
 	Timeout   time.Duration
@@ -23,6 +26,7 @@ type CompletionRequest struct {
 
 func ChatCompletionStreamTask(ctx context.Context, req *CompletionRequest) <-chan *string {
 	ch := make(chan *string)
+	log.Printf("completion: %v messages\n", len(req.Messages))
 	go completionstream(ctx, req, ch)
 	return ch
 }
@@ -30,7 +34,7 @@ func ChatCompletionStreamTask(ctx context.Context, req *CompletionRequest) <-cha
 func ChatCompletionTask(ctx context.Context, req *CompletionRequest) (*string, error) {
 	ctx, cancel := context.WithTimeout(ctx, req.Timeout)
 	defer cancel()
-
+	log.Printf("completion: %v messages\n", len(req.Messages))
 	response, err := req.Client.CreateChatCompletion(ctx, ai.ChatCompletionRequest{
 		MaxTokens: req.MaxTokens,
 		Model:     req.Model,
@@ -64,7 +68,6 @@ func Completion(ctx context.Context, req *CompletionRequest, msg string) string 
 
 func completionstream(ctx context.Context, req *CompletionRequest, ch chan<- *string) {
 	defer close(ch)
-	log.Printf("completionstream: %v\n", len(req.Messages))
 	ctx, cancel := context.WithTimeout(ctx, req.Timeout)
 	defer cancel()
 
@@ -84,7 +87,6 @@ func completionstream(ctx context.Context, req *CompletionRequest, ch chan<- *st
 
 	for {
 		response, err := stream.Recv()
-		fmt.Printf(".")
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				ch <- strp("\n")
@@ -104,5 +106,8 @@ func strp(s string) *string {
 }
 
 func GetAI() *ai.Client {
-	return ai.NewClient(vip.GetString("openaikey"))
+	once.Do(func() {
+		aiClient = ai.NewClient(vip.GetString("openaikey"))
+	})
+	return aiClient
 }

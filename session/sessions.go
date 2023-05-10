@@ -16,11 +16,9 @@ var SessionStore = SessionMap{
 	mu:         sync.RWMutex{},
 }
 
-type Personality struct {
-	Prompt string
-	Model  string
-	Temp   float64
-}
+const RoleSystem = "system"
+const RoleUser = "user"
+const RoleAssistant = "assistant"
 
 type SessionConfig struct {
 	Chunkdelay    time.Duration
@@ -31,6 +29,10 @@ type SessionConfig struct {
 	MaxTokens     int
 	ReactMode     bool
 	TTL           time.Duration
+	Prompt        string
+	Model         string
+	Temp          float64
+	Verbose       bool
 }
 
 type SessionMap struct {
@@ -58,52 +60,54 @@ func (s *Session) GetHistory() []ai.ChatCompletionMessage {
 	return history
 }
 
-func (s *Session) AddMessage(conf *Personality, role string, message string) {
+func (s *Session) AddMessage(role string, message string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if len(s.history) == 0 {
-		content := conf.Prompt
-		s.history = append(s.history, ai.ChatCompletionMessage{
-			Role:    ai.ChatMessageRoleSystem,
-			Content: content,
-		})
-		s.Totalchars += len(content)
-		if s.Config.ReactMode {
-			reactprompt := action.ReactPrompt(&action.ReactConfig{Actions: action.ActionRegistry})
-			s.history = append(s.history, ai.ChatCompletionMessage{
-				Role:    ai.ChatMessageRoleSystem,
-				Content: reactprompt,
-			})
-			s.Totalchars += len(reactprompt)
-		}
+	s.initialMessages()
+	s.addMessage(role, message)
+	s.trimHistory()
+	if s.Config.Verbose {
+		s.Debug()
 	}
-
-	s.history = append(s.history, ai.ChatCompletionMessage{Role: role, Content: message})
-	s.Totalchars += len(message)
-	s.Last = time.Now()
-
-	// if vip.GetBool("verbose") {
-	// 	s.Debug()
-	// }
-
-	s.trim()
 }
 
-// contining the no alloc tradition to mock python users
-func (s *Session) trim() {
-	if len(s.history) > s.Config.MaxHistory {
-		rm := len(s.history) - s.Config.MaxHistory
-		for i := 1; i <= s.Config.MaxHistory; i++ {
-			s.history[i] = s.history[i+rm-1]
-		}
-		s.history = s.history[:s.Config.MaxHistory+1]
+func (s *Session) initialMessages() {
+	if len(s.history) != 0 {
+		return
 	}
+
+	s.addMessage(RoleSystem, s.Config.Prompt)
+
+	if s.Config.ReactMode {
+		reactprompt := action.ReactPrompt(&action.ReactConfig{Actions: action.ActionRegistry})
+		s.addMessage(RoleSystem, reactprompt)
+	}
+
+}
+
+func (s *Session) addMessage(role string, message string) {
+	s.history = append(s.history, ai.ChatCompletionMessage{Role: role, Content: message})
+	s.Last = time.Now()
+	s.Totalchars += len(message)
+}
+
+func (s *Session) trimHistory() {
+	if len(s.history) <= s.Config.MaxHistory {
+		return
+	}
+
+	rm := len(s.history) - s.Config.MaxHistory
+	for i := 1; i <= s.Config.MaxHistory; i++ {
+		s.history[i] = s.history[i+rm-1]
+	}
+	s.history = s.history[:s.Config.MaxHistory+1]
 }
 
 func (s *Session) Reset() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.Config = SessionFromViper(vip.GetViper())
 	s.history = s.history[:0]
 	s.Last = time.Now()
 }
@@ -159,8 +163,12 @@ func SessionFromViper(v *vip.Viper) *SessionConfig {
 		ClientTimeout: vip.GetDuration("timeout"),
 		MaxHistory:    vip.GetInt("history"),
 		MaxTokens:     vip.GetInt("maxtokens"),
-		ReactMode:     vip.GetBool("react"),
+		ReactMode:     vip.GetBool("reactmode"),
 		TTL:           vip.GetDuration("session"),
+		Prompt:        vip.GetString("prompt"),
+		Model:         vip.GetString("model"),
+		Temp:          vip.GetFloat64("temp"),
+		Verbose:       vip.GetBool("verbose"),
 	}
 }
 
@@ -170,11 +178,6 @@ func (s *Session) Debug() {
 	defer s.mu.RUnlock()
 	for _, msg := range s.history {
 		ds := ""
-		if msg.Role == ai.ChatMessageRoleAssistant {
-			ds += "< "
-		} else {
-			ds += "> "
-		}
 		ds += fmt.Sprintf("%s:%s", msg.Role, msg.Content)
 		log.Println(ds)
 	}

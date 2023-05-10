@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/bwmarrin/discordgo"
-	ai "github.com/sashabaranov/go-openai"
 	vip "github.com/spf13/viper"
 )
 
@@ -93,14 +92,8 @@ func (c *DiscordContext) Complete(msg string) {
 	log.Println("DiscordContext.Complete", msg)
 	s := c.session
 	p := c.GetPersonality()
-
 	c.discord.ChannelTyping(c.msg.ChannelID)
-
-	s.AddMessage(&session.Personality{
-		Prompt: p.Prompt,
-		Model:  p.Model,
-		Temp:   p.Temp,
-	}, ai.ChatMessageRoleUser, msg)
+	s.AddMessage(session.RoleUser, msg)
 
 	respch := completion.ChatCompletionStreamTask(c, &completion.CompletionRequest{
 		Client:    completion.GetAI(),
@@ -165,13 +158,9 @@ func (c *DiscordContext) Complete(msg string) {
 		}
 	}
 
-	s.AddMessage(&session.Personality{
-		Prompt: p.Prompt,
-		Model:  p.Model,
-		Temp:   p.Temp,
-	}, ai.ChatMessageRoleAssistant, all.String())
+	s.AddMessage(session.RoleAssistant, all.String())
 	if s.Config.ReactMode {
-		action.ReactActionObservation(c, all.String())
+		action.ReactObservation(c, all.String())
 	}
 }
 

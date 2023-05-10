@@ -47,7 +47,7 @@ Question:`, strings.Join(tools, "\n"))
 	return template
 }
 
-func ReactActionObservation(ctx model.ChatContext, msg string) {
+func ReactObservation(ctx model.ChatContext, msg string) {
 	if action := ReactFindActions(msg); action != "" {
 		log.Println("action found:", action)
 		r, e := React(ctx, &ReactConfig{Actions: ActionRegistry}, strings.TrimSpace(action))
