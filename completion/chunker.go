@@ -17,7 +17,7 @@ type Chunker struct {
 	Last   time.Time
 }
 
-func (c *Chunker) ChannelFilter(input <-chan *string) <-chan string {
+func (c *Chunker) Filter(input <-chan *string) <-chan string {
 	out := make(chan string, 10)
 	go func() {
 		defer close(out)
@@ -41,6 +41,10 @@ func chunker(c *Chunker, out chan<- string) {
 }
 
 func (c *Chunker) chunk() (bool, []byte) {
+
+	if c.Buffer.Len() == 0 {
+		return false, nil
+	}
 
 	// if chunkdelay is -1, huck the buffer right now
 	if c.Delay == -1 && c.Buffer.Len() > 0 {

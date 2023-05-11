@@ -26,7 +26,6 @@ type CompletionRequest struct {
 
 func ChatCompletionStreamTask(ctx context.Context, req *CompletionRequest) <-chan *string {
 	ch := make(chan *string)
-	log.Printf("completion: %v messages\n", len(req.Messages))
 	go completionstream(ctx, req, ch)
 	return ch
 }
@@ -34,7 +33,7 @@ func ChatCompletionStreamTask(ctx context.Context, req *CompletionRequest) <-cha
 func ChatCompletionTask(ctx context.Context, req *CompletionRequest) (*string, error) {
 	ctx, cancel := context.WithTimeout(ctx, req.Timeout)
 	defer cancel()
-	log.Printf("completion: %v messages\n", len(req.Messages))
+	log.Printf("completiontask: %v messages", len(req.Messages))
 	response, err := req.Client.CreateChatCompletion(ctx, ai.ChatCompletionRequest{
 		MaxTokens: req.MaxTokens,
 		Model:     req.Model,
@@ -51,7 +50,7 @@ func ChatCompletionTask(ctx context.Context, req *CompletionRequest) (*string, e
 	return &response.Choices[0].Message.Content, nil
 }
 
-func Completion(ctx context.Context, req *CompletionRequest, msg string) string {
+func Complete(ctx context.Context, req *CompletionRequest, msg string) string {
 	cr := ai.CompletionRequest{
 		MaxTokens: req.MaxTokens,
 		Model:     req.Model,
@@ -71,6 +70,8 @@ func completionstream(ctx context.Context, req *CompletionRequest, ch chan<- *st
 	ctx, cancel := context.WithTimeout(ctx, req.Timeout)
 	defer cancel()
 
+	log.Printf("completion: %v messages", len(req.Messages))
+
 	stream, err := req.Client.CreateChatCompletionStream(ctx, ai.ChatCompletionRequest{
 		MaxTokens: req.MaxTokens,
 		Model:     req.Model,
@@ -79,7 +80,7 @@ func completionstream(ctx context.Context, req *CompletionRequest, ch chan<- *st
 	})
 
 	if err != nil {
-		log.Printf("completionstream: %v\n", err)
+		log.Printf("completion: %v\n", err)
 		ch <- strp(err.Error())
 		return
 	}
@@ -89,6 +90,7 @@ func completionstream(ctx context.Context, req *CompletionRequest, ch chan<- *st
 		response, err := stream.Recv()
 		if err != nil {
 			if errors.Is(err, io.EOF) {
+				log.Println("completion: EOF")
 				ch <- strp("\n")
 			} else {
 				ch <- strp(err.Error())

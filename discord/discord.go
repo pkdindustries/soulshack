@@ -24,11 +24,10 @@ const DISCORD_MAX_MSG = 2000
 
 type DiscordContext struct {
 	context.Context
-	personality *model.Personality
-	session     *session.Session
-	msg         *discordgo.MessageCreate
-	discord     *discordgo.Session
-	config      *DiscordConfig
+	session *session.Session
+	msg     *discordgo.MessageCreate
+	discord *discordgo.Session
+	config  *DiscordConfig
 }
 
 type DiscordConfig struct {
@@ -45,12 +44,11 @@ func NewDiscordContext(parent context.Context, v *vip.Viper, m *discordgo.Messag
 	timedctx, cancel := context.WithTimeout(parent, v.GetDuration("timeout"))
 
 	ctx := &DiscordContext{
-		Context:     timedctx,
-		personality: model.PersonalityFromViper(v),
-		msg:         m,
-		discord:     s,
-		session:     session.SessionStore.Get(m.ChannelID),
-		config:      DiscordFromViper(v),
+		Context: timedctx,
+		msg:     m,
+		discord: s,
+		session: session.SessionStore.Get(m.ChannelID),
+		config:  DiscordFromViper(v),
 	}
 
 	return ctx, cancel
@@ -107,11 +105,11 @@ func (c *DiscordContext) Complete(msg string) {
 	chunker := &completion.Chunker{
 		Buffer: &bytes.Buffer{},
 		Delay:  0,
-		Max:    9999,
+		Max:    DISCORD_MAX_MSG,
 		Quote:  false,
 		Last:   time.Now(),
 	}
-	chunkch := chunker.ChannelFilter(respch)
+	chunkch := chunker.Filter(respch)
 
 	typer := time.NewTicker(8 * time.Second)
 	donetyping := make(chan struct{})
@@ -131,13 +129,13 @@ func (c *DiscordContext) Complete(msg string) {
 	}()
 
 	all := strings.Builder{}
-	sent := ""
+	sentmsgid := ""
 	for chunk := range chunkch {
 		all.WriteString(chunk)
-		if sent == "" {
+		if sentmsgid == "" {
 			messageID, err := c.initmessage(chunk)
 			if err == nil {
-				sent = messageID
+				sentmsgid = messageID
 			}
 		} else {
 			msg := all.String()
@@ -150,10 +148,10 @@ func (c *DiscordContext) Complete(msg string) {
 				all.WriteString(chunk)
 				messageID, err := c.initmessage(chunk)
 				if err == nil {
-					sent = messageID
+					sentmsgid = messageID
 				}
 			} else {
-				c.editmessage(sent, msg)
+				c.editmessage(sentmsgid, msg)
 			}
 		}
 	}
@@ -227,7 +225,7 @@ func (c *DiscordContext) ResetSource() {
 
 // get personality
 func (c *DiscordContext) GetPersonality() *model.Personality {
-	return c.personality
+	return &c.session.Config.Personality
 }
 
 // get args

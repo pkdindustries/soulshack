@@ -36,7 +36,7 @@ func HandleMessage(ctx model.ChatContext) {
 		case "/help":
 			fallthrough
 		case "/?":
-			ctx.Send("Supported commands: /set, /say [/as], /get, /list, /become, /leave, /help, /version, /image, /wiki")
+			ctx.Send("Supported commands: /say [/as], /config, /list, /become, /leave, /help, /version, /image, /wiki")
 		default:
 			HandleDefault(ctx)
 		}
@@ -127,12 +127,12 @@ func Become(ctx model.ChatContext) {
 	} else {
 		vip.MergeConfigMap(cfg.AllSettings())
 		ctx.GetPersonality().FromViper(cfg)
+		ctx.ChangeName(ctx.GetPersonality().Nick)
+		ctx.ResetSession()
+		time.Sleep(2 * time.Second)
+		SendGreeting(ctx)
 	}
 
-	ctx.ChangeName(ctx.GetPersonality().Nick)
-	ctx.ResetSession()
-	time.Sleep(2 * time.Second)
-	SendGreeting(ctx)
 }
 
 func List(ctx model.ChatContext) {
@@ -175,14 +175,13 @@ func Say(ctx model.ChatContext) {
 		ctx.Send(fmt.Sprintf("Error loading personality: %s", err.Error()))
 		return
 	} else {
+		vip.MergeConfigMap(cfg.AllSettings())
 		ctx.GetPersonality().FromViper(cfg)
+		ctx.ResetSession()
+		ctx.ResetSource()
+		ctx.SetArgs(ctx.GetArgs()[1:])
+		HandleDefault(ctx)
 	}
-
-	ctx.ResetSession()
-	ctx.ResetSource()
-	ctx.SetArgs(ctx.GetArgs()[1:])
-
-	HandleDefault(ctx)
 }
 
 // handleimage

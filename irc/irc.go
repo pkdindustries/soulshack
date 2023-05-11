@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/lrstanley/girc"
-	ai "github.com/sashabaranov/go-openai"
 	vip "github.com/spf13/viper"
 )
 
@@ -42,25 +41,22 @@ func IrcFromViper(v *vip.Viper) *IrcConfig {
 
 type IrcContext struct {
 	context.Context
-	ai          *ai.Client
-	personality *model.Personality
-	config      *IrcConfig
-	client      *girc.Client
-	event       *girc.Event
-	session     *session.Session
-	args        []string
+	config  *IrcConfig
+	client  *girc.Client
+	event   *girc.Event
+	session *session.Session
+	args    []string
 }
 
 func NewIrcContext(parent context.Context, v *vip.Viper, c *girc.Client, e *girc.Event) (*IrcContext, context.CancelFunc) {
 	timedctx, cancel := context.WithTimeout(parent, v.GetDuration("timeout"))
 
 	ctx := &IrcContext{
-		Context:     timedctx,
-		client:      c,
-		event:       e,
-		args:        strings.Fields(e.Last()),
-		personality: model.PersonalityFromViper(v),
-		config:      IrcFromViper(v),
+		Context: timedctx,
+		client:  c,
+		event:   e,
+		args:    strings.Fields(e.Last()),
+		config:  IrcFromViper(v),
 	}
 
 	if ctx.IsAddressed() {
@@ -96,7 +92,7 @@ func Irc() {
 		ctx, cancel := NewIrcContext(context.Background(), vip.GetViper(), c, &e)
 		defer cancel()
 
-		log.Println("joining channel:", ctx.config.Channel)
+		log.Println("joining irc channel:", ctx.config.Channel)
 		c.Cmd.Join(ctx.config.Channel)
 
 		time.Sleep(1 * time.Second)
@@ -143,7 +139,7 @@ func (c *IrcContext) Complete(msg string) {
 		Last:   time.Now(),
 	}
 
-	chunkch := chunker.ChannelFilter(respch)
+	chunkch := chunker.Filter(respch)
 
 	all := strings.Builder{}
 	for reply := range chunkch {
@@ -175,11 +171,6 @@ func (s *IrcContext) IsAddressed() bool {
 	return strings.HasPrefix(s.event.Last(), s.client.GetNick())
 }
 
-// ai
-func (c *IrcContext) GetAI() *ai.Client {
-	return c.ai
-}
-
 func (c *IrcContext) ChangeName(nick string) error {
 	c.client.Cmd.Nick(nick)
 	return nil
@@ -191,7 +182,7 @@ func (c *IrcContext) Send(message string) {
 
 func (c *IrcContext) ResetSource() {
 	c.event.Params[0] = c.config.Channel
-	c.event.Source.Name = c.personality.Nick
+	c.event.Source.Name = c.session.Config.Personality.Nick
 }
 
 func (c *IrcContext) IsValid() bool {
@@ -221,12 +212,12 @@ func (c *IrcContext) SetArgs(args []string) {
 
 func (c *IrcContext) SetNick(nick string) {
 	log.Printf("changing nick to %s", nick)
-	c.personality.Nick = nick
-	c.client.Cmd.Nick(c.personality.Nick)
+	c.session.Config.Personality.Nick = nick
+	c.client.Cmd.Nick(nick)
 }
 
 func (c *IrcContext) GetPersonality() *model.Personality {
-	return c.personality
+	return &c.session.Config.Personality
 }
 
 func (c *IrcContext) ResetSession() {

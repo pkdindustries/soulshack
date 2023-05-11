@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"pkdindustries/soulshack/action"
+	"pkdindustries/soulshack/model"
 	"sync"
 	"time"
 
@@ -21,6 +22,7 @@ const RoleUser = "user"
 const RoleAssistant = "assistant"
 
 type SessionConfig struct {
+	model.Personality
 	Chunkdelay    time.Duration
 	Chunkmax      int
 	Chunkquoted   bool
@@ -29,9 +31,6 @@ type SessionConfig struct {
 	MaxTokens     int
 	ReactMode     bool
 	TTL           time.Duration
-	Prompt        string
-	Model         string
-	Temp          float64
 	Verbose       bool
 }
 
@@ -78,18 +77,20 @@ func (s *Session) initialMessages() {
 	}
 
 	s.addMessage(RoleSystem, s.Config.Prompt)
+	s.Totalchars += len(s.Config.Prompt)
 
 	if s.Config.ReactMode {
 		reactprompt := action.ReactPrompt(&action.ReactConfig{Actions: action.ActionRegistry})
 		s.addMessage(RoleSystem, reactprompt)
+		s.Totalchars += len(reactprompt)
 	}
 
 }
 
 func (s *Session) addMessage(role string, message string) {
 	s.history = append(s.history, ai.ChatCompletionMessage{Role: role, Content: message})
-	s.Last = time.Now()
 	s.Totalchars += len(message)
+	s.Last = time.Now()
 }
 
 func (s *Session) trimHistory() {
@@ -158,17 +159,15 @@ func (sessions *SessionMap) Get(id string) *Session {
 // sessionconfigfromviper
 func SessionFromViper(v *vip.Viper) *SessionConfig {
 	return &SessionConfig{
-		Chunkdelay:    vip.GetDuration("chunkdelay"),
-		Chunkmax:      vip.GetInt("chunkmax"),
-		ClientTimeout: vip.GetDuration("timeout"),
-		MaxHistory:    vip.GetInt("history"),
-		MaxTokens:     vip.GetInt("maxtokens"),
-		ReactMode:     vip.GetBool("reactmode"),
-		TTL:           vip.GetDuration("session"),
-		Prompt:        vip.GetString("prompt"),
-		Model:         vip.GetString("model"),
-		Temp:          vip.GetFloat64("temp"),
-		Verbose:       vip.GetBool("verbose"),
+		Chunkdelay:    v.GetDuration("chunkdelay"),
+		Chunkmax:      v.GetInt("chunkmax"),
+		ClientTimeout: v.GetDuration("timeout"),
+		MaxHistory:    v.GetInt("history"),
+		MaxTokens:     v.GetInt("maxtokens"),
+		ReactMode:     v.GetBool("reactmode"),
+		TTL:           v.GetDuration("session"),
+		Personality:   *model.PersonalityFromViper(v),
+		Verbose:       v.GetBool("verbose"),
 	}
 }
 

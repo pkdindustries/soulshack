@@ -29,7 +29,7 @@ var RootCmd = &cobra.Command{
 	Use:     "soulshack",
 	Example: "soulshack [irc|discord]",
 	Short:   GetBanner(),
-	Version: "0.50 - http://github.com/pkdindustries/soulshack",
+	Version: "0.51 - http://github.com/pkdindustries/soulshack",
 	Run:     runIrc,
 }
 

@@ -62,7 +62,7 @@ func (a *ConfigAction) Purpose() string {
 
 func (a *ConfigAction) Execute(ctx model.ChatContext, arg string) (string, error) {
 	args := strings.Split(arg, " ")
-	log.Println("action.config: ", arg)
+	log.Println("action.config:", arg)
 
 	if len(args) < 3 {
 		return "", fmt.Errorf("config requires at least 2 arguments")

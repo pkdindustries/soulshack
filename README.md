@@ -11,12 +11,11 @@ soulshack is an ai-powered irc* chat bot that utilizes the openai api to generat
 
 ## features
 
-- connects to an irc server and joins a specified channel
 - utilizes the openai gpt-4 model to generate realistic and human-like responses
 - allows dynamic configuration of bot settings through commands
 - supports ssl connections for secure communication
 - can adopt various personalities by via configuration files
-
+- simple agent framework for tool use
 
 ## building
 
@@ -31,12 +30,12 @@ docker build . -t soulshack:dev
 ## usage
 
 ```bash
-soulshack --nick chatbot --server irc.freenode.net --port 6697 --channel '#soulshack' --ssl --openaikey ****************
+soulshack irc --nick chatbot --server irc.freenode.net --port 6697 --channel '#soulshack' --ssl --openaikey ****************
 ```
 
 
 ```bash
-soulshack --discordtoken **************** --openaikkey ****************
+soulshack discord --discordtoken **************** --openaikkey ****************
 ```
 
 
@@ -57,7 +56,6 @@ soulshack can be configured using command line flags, environment variables, or 
       --greeting string       prompt to be used when the bot joins the channel (default "hello.")
   -h, --help                  help for soulshack
   -H, --history int           maximum number of lines of context to keep per session (default 15)
-  -l, --list                  list configured personalities
       --maxtokens int         maximum number of tokens to generate (default 512)
       --model string          model to be used for responses e.g., gpt-4 (default "gpt-4")
   -n, --nick string           bot nickname on the irc server (default "soulshack")
@@ -94,7 +92,7 @@ prompt: "you are marvin the paranoid android. respond with a short text message:
 ```
 
 ```bash
-soulshack --server localhost --channel '#marvinshouse' --become marvin 
+soulshack irc --server localhost --channel '#marvinshouse' --become marvin 
 ```
 
 
@@ -102,8 +100,7 @@ soulshack --server localhost --channel '#marvinshouse' --become marvin
 
 ## commands
 
-- `/set`: set a configuration parameter (e.g., `/set nick newnick`)
-- `/get`: get the current value of a configuration parameter (e.g., `/get nick`)
+- `/config`: configuration parameter (e.g., `/config set nick newnick`)
 - `/save`: save the current configuration as a personality (e.g., `/save mypersonality`)
 - `/become`: adopt a new personality (e.g., `/become mypersonality`)
 - `/list`: show available personalities

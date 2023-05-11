@@ -11,20 +11,20 @@ import (
 )
 
 func Verify(v *vip.Viper) error {
-	for _, varName := range v.AllKeys() {
-		if varName == "admins" || varName == "discordtoken" {
+	for _, name := range v.AllKeys() {
+		if name == "admins" || name == "discordtoken" {
 			continue
 		}
-		value := v.GetString(varName)
+		value := v.GetString(name)
 		if value == "" {
-			return fmt.Errorf("! %s unset. use --%s flag, personality config, or SOULSHACK_%s env", varName, varName, strings.ToUpper(varName))
+			return fmt.Errorf("! %s unset. use --%s flag, personality config, or SOULSHACK_%s env", name, name, strings.ToUpper(name))
 		}
 
 		if v.GetBool("verbose") {
-			if varName == "openaikey" {
+			if name == "openaikey" || name == "discordtoken" {
 				value = strings.Repeat("*", len(value))
 			}
-			log.Printf("\t%s: '%s'", varName, value)
+			log.Printf("\t%s: '%s'", name, value)
 		}
 	}
 	return nil
@@ -45,13 +45,13 @@ func List() []string {
 }
 
 func Load(p string) (*vip.Viper, error) {
-	log.Println("loading personality:", p)
+	log.Println("loading config:", p)
 	conf := vip.New()
-	conf.SetConfigFile(vip.GetString("directory") + "/" + p + ".yml")
-
+	conf.SetConfigType("yml")
+	conf.SetConfigFile(filepath.Join(vip.GetString("directory"), p+".yml"))
 	err := conf.ReadInConfig()
 	if err != nil {
-		log.Println("Error reading personality config:", err)
+		log.Println("Error reading config:", err)
 		return nil, err
 	}
 	return conf, nil
