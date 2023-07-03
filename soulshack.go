@@ -61,6 +61,15 @@ func run(r *cobra.Command, _ []string) {
 		TLSConfig: &tls.Config{InsecureSkipVerify: true},
 	})
 
+	saslUser := vip.GetString("sasluser")
+	saslPass := vip.GetString("saslpass")
+	if saslUser != "" && saslPass != "" {
+		irc.Config.SASL = &girc.SASLPlain{
+			User: vip.GetString("saslnick"),
+			Pass: vip.GetString("saslpass"),
+		}
+	}
+
 	irc.Handlers.AddBg(girc.CONNECTED, func(c *girc.Client, e girc.Event) {
 		ctx, cancel := CreateChatContext(context.Background(), aiClient, vip.GetViper(), c, &e)
 		defer cancel()
