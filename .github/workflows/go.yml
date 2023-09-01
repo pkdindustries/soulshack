@@ -1,175 +1,151 @@
 ---
 name: Go
-
-on:
+on:  # yamllint disable-line rule:truthy
   push:
-    branches: [ "main" ]
+    branches: [main]
     tags:
       - '*'
   pull_request:
-    branches: [ "main" ]
+    branches: [main]
     paths-ignore:
       - '**/*.md'
       - .github/dependabot.yml
   workflow_dispatch:
-
 concurrency:
   # yamllint disable-line rule:line-length
   group: ${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.head_ref || github.ref }}
   cancel-in-progress: true
-
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3.6.0
-
-    - name: Set up Go
-      uses: actions/setup-go@v4.1.0
-      with:
-        go-version: 'stable'
-
-    - name: Build
-      run: go build -v ./...
-
-    - name: Test
-      run: go test -v ./...
+      - uses: actions/checkout@v3.6.0
+      - name: Set up Go
+        uses: actions/setup-go@v4.1.0
+        with:
+          go-version: stable
+      - name: Build
+        run: go build -v ./...
+      - name: Test
+        run: go test -v ./...
   release:
     needs: build
     # Only run release job on tags
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3.6.0
-
-    - name: Set up Go
-      uses: actions/setup-go@v4.1.0
-      with:
-        go-version: 'stable'
-
-    - name: Build release - Linux amd64
-      env:
-        GOOS: linux
-        GOARCH: amd64
-      run: go build -o ${{ github.event.repository.name }}-linux-amd64 ./...
-
-    - name: Build release - Linux arm64
-      env:
-        GOOS: linux
-        GOARCH: arm64
-      run: go build -o ${{ github.event.repository.name }}-linux-arm64 ./...
-
-    - name: Build release - macOS arm64
-      env:
-        GOOS: darwin
-        GOARCH: arm64
-      run: go build -o ${{ github.event.repository.name }}-darwin-arm64 ./...
-
-    - name: Build release - Windows amd64
-      env:
-        GOOS: windows
-        GOARCH: amd64
-      run: go build -o ${{ github.event.repository.name }}-windows-amd64.exe ./...
-
-    - name: Upload linux amd64 binary
-      uses: actions/upload-artifact@v3.1.2
-      with:
-        name: ${{ github.event.repository.name }}-linux-amd64
-        path: ${{ github.event.repository.name }}-linux-amd64
-
-    - name: Upload Linux arm64 binary
-      uses: actions/upload-artifact@v3.1.2
-      with:
-        name: ${{ github.event.repository.name }}-linux-arm64
-        path: ${{ github.event.repository.name }}-linux-arm64
-
-    - name: Upload macOS arm64 binary
-      uses: actions/upload-artifact@v3.1.2
-      with:
-        name: ${{ github.event.repository.name }}-darwin-arm64
-        path: ${{ github.event.repository.name }}-darwin-arm64
-    
-    - name: Upload Windows amd64 binary
-      uses: actions/upload-artifact@v3.1.2
-      with:
-        name: ${{ github.event.repository.name }}-windows-amd64.exe
-        path: ${{ github.event.repository.name }}-windows-amd64.exe
-
-    - name: Package personalities directory
-      run: tar czf personalities.tar.gz personalities/
-    
-    - name: Upload personalities tarball
-      uses: actions/upload-artifact@v3.1.2
-      with:
-        name: personalities.tar.gz
-        path: personalities.tar.gz
-
-    - name: Create Release
-      id: create_release
-      uses: actions/create-release@v1.1.4
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        tag_name:  ${{  github.ref_name }}
-        release_name: ${{ github.event.repository.name }}-${{  github.ref_name }}
-        draft: false
-        prerelease: false
-
-    - name: Upload Artifacts
-      uses: actions/upload-artifact@v3.1.2
-      with:
-        name: binaries
-        path: |
-          ${{ github.event.repository.name }}-linux-amd64
-          ${{ github.event.repository.name }}-linux-arm64
-          ${{ github.event.repository.name }}-darwin-arm64
-
-    - name: Attach Artifacts to Release
-      uses: actions/upload-release-asset@v1.0.2
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ${{ github.event.repository.name }}-linux-amd64
-        asset_name: ${{ github.event.repository.name }}-linux-amd64
-        asset_content_type: application/octet-stream
-
-    - name: Attach Artifacts to Release
-      uses: actions/upload-release-asset@v1.0.2
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ${{ github.event.repository.name }}-linux-arm64
-        asset_name: ${{ github.event.repository.name }}-linux-arm64
-        asset_content_type: application/octet-stream
-
-    - name: Attach Artifacts to Release
-      uses: actions/upload-release-asset@v1.0.2
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ${{ github.event.repository.name }}-darwin-arm64
-        asset_name: ${{ github.event.repository.name }}-darwin-arm64
-        asset_content_type: application/octet-stream
-
-    - name: Attach Artifacts to Release
-      uses: actions/upload-release-asset@v1.0.2
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ${{ github.event.repository.name }}-windows-amd64.exe
-        asset_name: ${{ github.event.repository.name }}-windows-amd64.exe
-        asset_content_type: application/octet-stream
-
-    - name: Attach personalities tarball to Release
-      uses: actions/upload-release-asset@v1.0.2
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: personalities.tar.gz
-        asset_name: personalities.tar.gz
-        asset_content_type: application/gzip
+      - uses: actions/checkout@v3.6.0
+      - name: Set up Go
+        uses: actions/setup-go@v4.1.0
+        with:
+          go-version: stable
+      - name: Build release - Linux amd64
+        env:
+          GOOS: linux
+          GOARCH: amd64
+        run: go build -o ${{ github.event.repository.name }}-linux-amd64 ./...
+      - name: Build release - Linux arm64
+        env:
+          GOOS: linux
+          GOARCH: arm64
+        run: go build -o ${{ github.event.repository.name }}-linux-arm64 ./...
+      - name: Build release - macOS arm64
+        env:
+          GOOS: darwin
+          GOARCH: arm64
+        run: go build -o ${{ github.event.repository.name }}-darwin-arm64 ./...
+      - name: Build release - Windows amd64
+        env:
+          GOOS: windows
+          GOARCH: amd64
+        run: go build -o ${{ github.event.repository.name }}-windows-amd64.exe ./...
+      - name: Upload linux amd64 binary
+        uses: actions/upload-artifact@v3.1.2
+        with:
+          name: ${{ github.event.repository.name }}-linux-amd64
+          path: ${{ github.event.repository.name }}-linux-amd64
+      - name: Upload Linux arm64 binary
+        uses: actions/upload-artifact@v3.1.2
+        with:
+          name: ${{ github.event.repository.name }}-linux-arm64
+          path: ${{ github.event.repository.name }}-linux-arm64
+      - name: Upload macOS arm64 binary
+        uses: actions/upload-artifact@v3.1.2
+        with:
+          name: ${{ github.event.repository.name }}-darwin-arm64
+          path: ${{ github.event.repository.name }}-darwin-arm64
+      - name: Upload Windows amd64 binary
+        uses: actions/upload-artifact@v3.1.2
+        with:
+          name: ${{ github.event.repository.name }}-windows-amd64.exe
+          path: ${{ github.event.repository.name }}-windows-amd64.exe
+      - name: Package personalities directory
+        run: tar czf personalities.tar.gz personalities/
+      - name: Upload personalities tarball
+        uses: actions/upload-artifact@v3.1.2
+        with:
+          name: personalities.tar.gz
+          path: personalities.tar.gz
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1.1.4
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{  github.ref_name }}
+          release_name: ${{ github.event.repository.name }}-${{  github.ref_name }}
+          draft: false
+          prerelease: false
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v3.1.2
+        with:
+          name: binaries
+          path: |
+            ${{ github.event.repository.name }}-linux-amd64
+            ${{ github.event.repository.name }}-linux-arm64
+            ${{ github.event.repository.name }}-darwin-arm64
+      - name: Attach Artifacts to Release
+        uses: actions/upload-release-asset@v1.0.2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ${{ github.event.repository.name }}-linux-amd64
+          asset_name: ${{ github.event.repository.name }}-linux-amd64
+          asset_content_type: application/octet-stream
+      - name: Attach Artifacts to Release
+        uses: actions/upload-release-asset@v1.0.2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ${{ github.event.repository.name }}-linux-arm64
+          asset_name: ${{ github.event.repository.name }}-linux-arm64
+          asset_content_type: application/octet-stream
+      - name: Attach Artifacts to Release
+        uses: actions/upload-release-asset@v1.0.2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ${{ github.event.repository.name }}-darwin-arm64
+          asset_name: ${{ github.event.repository.name }}-darwin-arm64
+          asset_content_type: application/octet-stream
+      - name: Attach Artifacts to Release
+        uses: actions/upload-release-asset@v1.0.2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ${{ github.event.repository.name }}-windows-amd64.exe
+          asset_name: ${{ github.event.repository.name }}-windows-amd64.exe
+          asset_content_type: application/octet-stream
+      - name: Attach personalities tarball to Release
+        uses: actions/upload-release-asset@v1.0.2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: personalities.tar.gz
+          asset_name: personalities.tar.gz
+          asset_content_type: application/gzip
