@@ -60,29 +60,29 @@ jobs:
           GOARCH: amd64
         run: go build -o ${{ github.event.repository.name }}-windows-amd64.exe ./...
       - name: Upload linux amd64 binary
-        uses: actions/upload-artifact@v3.1.3
+        uses: actions/upload-artifact@v4.1.0
         with:
           name: ${{ github.event.repository.name }}-linux-amd64
           path: ${{ github.event.repository.name }}-linux-amd64
       - name: Upload Linux arm64 binary
-        uses: actions/upload-artifact@v3.1.3
+        uses: actions/upload-artifact@v4.1.0
         with:
           name: ${{ github.event.repository.name }}-linux-arm64
           path: ${{ github.event.repository.name }}-linux-arm64
       - name: Upload macOS arm64 binary
-        uses: actions/upload-artifact@v3.1.3
+        uses: actions/upload-artifact@v4.1.0
         with:
           name: ${{ github.event.repository.name }}-darwin-arm64
           path: ${{ github.event.repository.name }}-darwin-arm64
       - name: Upload Windows amd64 binary
-        uses: actions/upload-artifact@v3.1.3
+        uses: actions/upload-artifact@v4.1.0
         with:
           name: ${{ github.event.repository.name }}-windows-amd64.exe
           path: ${{ github.event.repository.name }}-windows-amd64.exe
       - name: Package personalities directory
         run: tar czf personalities.tar.gz personalities/
       - name: Upload personalities tarball
-        uses: actions/upload-artifact@v3.1.3
+        uses: actions/upload-artifact@v4.1.0
         with:
           name: personalities.tar.gz
           path: personalities.tar.gz
@@ -97,7 +97,7 @@ jobs:
           draft: false
           prerelease: false
       - name: Upload Artifacts
-        uses: actions/upload-artifact@v3.1.3
+        uses: actions/upload-artifact@v4.1.0
         with:
           name: binaries
           path: |
