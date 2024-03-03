@@ -61,6 +61,7 @@ Flags:
       --model string          model to be used for responses e.g., gpt-4 (default "gpt-4")
   -n, --nick string           bot's nickname on the irc server (default "soulshack")
       --openaikey string      openai api key
+      --openaiurl string      alternative base url to use instead of openai
   -p, --port int              irc server port (default 6667)
       --prompt string         initial system prompt for the ai (default "respond in a short text:")
   -s, --server string         irc server address (default "localhost")

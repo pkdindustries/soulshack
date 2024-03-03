@@ -41,6 +41,7 @@ func init() {
 	root.PersistentFlags().String("openaikey", "", "openai api key")
 	root.PersistentFlags().Int("maxtokens", 512, "maximum number of tokens to generate")
 	root.PersistentFlags().String("model", ai.GPT4, "model to be used for responses (e.g., gpt-4)")
+	root.PersistentFlags().String("openaiurl", "", "alternative base url to use instead of openai")
 
 	// timeouts and behavior
 	root.PersistentFlags().BoolP("addressed", "a", true, "require bot be addressed by nick for response")
@@ -87,7 +88,7 @@ func initConfig() {
 
 func verifyConfig(v *vip.Viper) error {
 	for _, varName := range v.AllKeys() {
-		if varName == "admins" || varName == "saslnick" || varName == "saslpass" {
+		if varName == "admins" || varName == "openaiurl" || varName == "saslnick" || varName == "saslpass" {
 			continue
 		}
 		value := v.GetString(varName)
