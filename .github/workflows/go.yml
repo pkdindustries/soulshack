@@ -34,6 +34,10 @@ jobs:
     # Only run release job on tags
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: write
+      attestations: write
     steps:
       - uses: actions/checkout@v4
       - name: Set up Go
@@ -78,6 +82,18 @@ jobs:
             ${{ github.event.repository.name }}-linux-arm64
             ${{ github.event.repository.name }}-darwin-arm64
             ${{ github.event.repository.name }}-windows-amd64.exe
+      - name: Attestations
+        uses: actions/attest@v1
+        with:
+          predicate-type: 'https://in-toto.io/attestation/release/v0.1'
+          predicate:
+            '{"purl":"pkg:github/${{ github.repository }}@${{ github.sha }}"}'
+          subject-path: |
+            personalities.tar.gz
+            ${{ github.event.repository.name }}-linux-amd64
+            ${{ github.event.repository.name }}-linux-arm64
+            ${{ github.event.repository.name }}-darwin-arm64
+            ${{ github.event.repository.name }}-windows-amd64.exe
       - name: Create Release
         id: create_release
         run: >-
@@ -86,3 +102,5 @@ jobs:
           --generate-notes
           ${{ github.event.repository.name }}-*
           personalities.tar.gz
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
