@@ -85,11 +85,11 @@ func completionstream(ctx context.Context, req *CompletionRequest, ch chan<- Str
 	log.Printf("completionstream: %v messages", len(req.Messages))
 
 	stream, err := req.Client.CreateChatCompletionStream(ctx, ai.ChatCompletionRequest{
-		MaxTokens:   req.MaxTokens,
-		Model:       req.Model,
-		Messages:    req.Messages,
-		Temperature: req.Tempurature,
-		Stream:      true,
+		MaxCompletionsTokens: req.MaxTokens,
+		Model:                req.Model,
+		Messages:             req.Messages,
+		Temperature:          req.Tempurature,
+		Stream:               true,
 	})
 
 	if err != nil {
