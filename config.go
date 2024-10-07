@@ -51,8 +51,6 @@ func loadConfig() {
 		} else {
 			log.Println("using config file:", vip.ConfigFileUsed())
 		}
-	} else {
-		log.Println("no config file specified")
 	}
 
 	BotConfig = &Configuration{
@@ -91,7 +89,7 @@ func loadConfig() {
 
 	// Verify required configuration settings
 	if err := verifyConfig(); err != nil {
-		log.Fatalf("Invalid configuration: %v", err)
+		log.Fatalf("invalid configuration: %v", err)
 	}
 }
 

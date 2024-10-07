@@ -47,7 +47,7 @@ soulshack --nick chatbot --server irc.freenode.net --port 6697 --channel '#souls
 Flags:
   -a, --addressed             require bot be addressed by nick for response (default true)
   -A, --admins strings        comma-separated list of allowed users to administrate the bot (e.g., user1,user2,user3)
-  -b, --config string         use the named configuration (default "chatbot")
+  -b, --config string         use configuration file at specified path
   -c, --channel string        irc channel to join
   -C, --chunkdelay duration   after this delay, bot will look to split the incoming buffer on sentence boundaries (default 7s)
   -m, --chunkmax int          maximum number of characters to send as a single message (default 350)
