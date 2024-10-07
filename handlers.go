@@ -72,6 +72,18 @@ func slashSet(ctx *ChatContext) {
 		}
 		BotConfig.Temperature = float32(temperature)
 		ctx.Reply(fmt.Sprintf("%s set to: %f", param, BotConfig.Temperature))
+	case "top_p":
+		topP, err := strconv.ParseFloat(value, 32)
+		if err != nil {
+			ctx.Reply("Invalid value for top_p. Please provide a valid float.")
+			return
+		}
+		if topP < 0 || topP > 1 {
+			ctx.Reply("Invalid value for top_p. Please provide a float between 0 and 1.")
+			return
+		}
+		BotConfig.TopP = float32(topP)
+		ctx.Reply(fmt.Sprintf("%s set to: %f", param, BotConfig.TopP))
 	case "admins":
 		admins := strings.Split(value, ",")
 		for _, admin := range admins {
@@ -115,6 +127,8 @@ func slashGet(ctx *ChatContext) {
 		ctx.Reply(fmt.Sprintf("%s: %d", param, BotConfig.MaxTokens))
 	case "temperature":
 		ctx.Reply(fmt.Sprintf("%s: %f", param, BotConfig.Temperature))
+	case "top_p":
+		ctx.Reply(fmt.Sprintf("%s: %f", param, BotConfig.TopP))
 	case "admins":
 		if len(BotConfig.Admins) == 0 {
 			ctx.Reply("empty admin list, all nicks are permitted to use admin commands")

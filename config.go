@@ -10,7 +10,7 @@ import (
 	vip "github.com/spf13/viper"
 )
 
-var ModifiableConfigKeys = []string{"nick", "channel", "model", "addressed", "prompt", "maxtokens", "temperature", "admins"}
+var ModifiableConfigKeys = []string{"nick", "channel", "model", "addressed", "prompt", "maxtokens", "temperature", "top_p", "admins"}
 var BotConfig *Configuration
 
 type Configuration struct {
@@ -36,6 +36,7 @@ type Configuration struct {
 	APIKey        string
 	Model         string
 	Temperature   float32
+	TopP          float32
 	URL           string
 	Prompt        string
 	Greeting      string
@@ -76,6 +77,7 @@ func loadConfig() {
 		APIKey:        vip.GetString("openaikey"),
 		Model:         vip.GetString("model"),
 		Temperature:   float32(vip.GetFloat64("temperature")),
+		TopP:          float32(vip.GetFloat64("top_p")),
 		URL:           vip.GetString("openaiurl"),
 		Prompt:        vip.GetString("prompt"),
 		Greeting:      vip.GetString("greeting"),
@@ -119,8 +121,9 @@ func InitializeConfig() {
 	root.PersistentFlags().Int("maxtokens", 512, "maximum number of tokens to generate")
 	root.PersistentFlags().String("model", openai.GPT4o, "model to be used for responses")
 	root.PersistentFlags().String("openaiurl", "", "alternative base url to use instead of openai")
-	root.PersistentFlags().DurationP("apitimeout", "t", time.Minute*5, "timeout for each completion request to openai")
+	root.PersistentFlags().DurationP("apitimeout", "t", time.Minute*5, "timeout for each completion request")
 	root.PersistentFlags().Float32("temperature", 0.7, "temperature for the completion")
+	root.PersistentFlags().Float32("top_p", 1, "top P value for the completion")
 
 	// timeouts and behavior
 	root.PersistentFlags().BoolP("addressed", "a", true, "require bot be addressed by nick for response")
