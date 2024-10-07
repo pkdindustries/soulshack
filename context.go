@@ -11,8 +11,7 @@ import (
 
 type ChatContext struct {
 	context.Context
-	AI *ai.Client
-	//	Config  *Config
+	AI      *ai.Client
 	Client  *girc.Client
 	Event   *girc.Event
 	Session *Session
@@ -54,11 +53,6 @@ func (c *ChatContext) Valid() bool {
 	// check if the message is addressed to the bot or if being addressed is not required
 	addressed := c.IsAddressed() || !c.Session.Config.Addressed
 	hasArguments := len(c.Args) > 0
-
-	// valid if:
-	// - the message is either addressed to the bot or being addressed is not required
-	// - or the message is private
-	// - and at least one argument
 	return (addressed || c.IsPrivate()) && hasArguments
 }
 

@@ -102,7 +102,6 @@ soulshack --server localhost --channel '#marvinshouse' --config marvin
 
 - `/set`: set a configuration parameter (e.g., `/set nick newnick`)
 - `/get`: get the current value of a configuration parameter (e.g., `/get nick`)
-- `/save`: save the current configuration as a personality (e.g., `/save mypersonality`)
 - `/leave`: make the bot leave the channel and exit
 - `/help`: display help for available commands
 

@@ -14,6 +14,8 @@ import (
 	vip "github.com/spf13/viper"
 )
 
+var Modifiables = []string{"nick", "channel", "model", "addressed", "prompt", "maxtokens", "tempurature", "admins"}
+
 type Config struct {
 	Nick          string
 	Server        string
@@ -41,7 +43,6 @@ type Config struct {
 	URL           string
 	Prompt        string
 	Greeting      string
-	Goodbye       string
 	OpenAI        openai.ClientConfig
 }
 
@@ -69,10 +70,12 @@ func LoadConfig() *Config {
 		TTL:           vip.GetDuration("sessionduration"),
 		APIKey:        vip.GetString("openaikey"),
 		Model:         vip.GetString("model"),
+		Tempurature:   float32(vip.GetFloat64("tempurature")),
 		URL:           vip.GetString("openaiurl"),
 		Prompt:        vip.GetString("prompt"),
-		Greeting:      vip.GetString("greeting"),
-		OpenAI:        openai.DefaultConfig(vip.GetString("openaikey")),
+
+		Greeting: vip.GetString("greeting"),
+		OpenAI:   openai.DefaultConfig(vip.GetString("openaikey")),
 	}
 
 	if vip.GetString("openaiurl") != "" {
@@ -138,7 +141,6 @@ func init() {
 	root.PersistentFlags().IntP("chunkmax", "m", 350, "maximum number of characters to send as a single message")
 
 	// personality / prompting
-	root.PersistentFlags().String("goodbye", "goodbye.", "prompt to be used when the bot leaves the channel")
 	root.PersistentFlags().String("greeting", "hello.", "prompt to be used when the bot joins the channel")
 	root.PersistentFlags().String("prompt", "respond in a short text:", "initial system prompt for the ai")
 

@@ -74,7 +74,7 @@ func run(r *cobra.Command, _ []string) {
 		irc.Cmd.Join(ctx.Session.Config.Channel)
 
 		time.Sleep(1 * time.Second)
-		sendGreeting(ctx)
+		greeting(ctx)
 	})
 
 	irc.Handlers.AddBg(girc.PRIVMSG, func(irc *girc.Client, e girc.Event) {
@@ -86,13 +86,11 @@ func run(r *cobra.Command, _ []string) {
 			log.Println(">>", strings.Join(e.Params[1:], " "))
 			switch ctx.GetCommand() {
 			case "/set":
-				handleSet(ctx)
+				slashSet(ctx)
 			case "/get":
-				handleGet(ctx)
-			case "/save":
-				handleSave(ctx)
+				slashGet(ctx)
 			case "/leave":
-				handleLeave(ctx)
+				slashLeave(ctx)
 			case "/help":
 				fallthrough
 			case "/?":
@@ -100,7 +98,7 @@ func run(r *cobra.Command, _ []string) {
 			case "/version":
 				ctx.Reply(r.Version)
 			default:
-				handleDefault(ctx)
+				completionResponse(ctx)
 			}
 		}
 	})
