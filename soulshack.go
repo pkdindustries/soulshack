@@ -66,20 +66,20 @@ func run(r *cobra.Command, _ []string) {
 		}
 	}
 
-	irc.Handlers.AddBg(girc.CONNECTED, func(c *girc.Client, e girc.Event) {
-		ctx, cancel := NewChatContext(context.Background(), config, c, &e)
+	irc.Handlers.AddBg(girc.CONNECTED, func(irc *girc.Client, e girc.Event) {
+		ctx, cancel := NewChatContext(context.Background(), config, irc, &e)
 		defer cancel()
 
 		log.Println("joining channel:", ctx.Session.Config.Channel)
-		c.Cmd.Join(ctx.Session.Config.Channel)
+		irc.Cmd.Join(ctx.Session.Config.Channel)
 
 		time.Sleep(1 * time.Second)
 		sendGreeting(ctx)
 	})
 
-	irc.Handlers.AddBg(girc.PRIVMSG, func(c *girc.Client, e girc.Event) {
+	irc.Handlers.AddBg(girc.PRIVMSG, func(irc *girc.Client, e girc.Event) {
 
-		ctx, cancel := NewChatContext(context.Background(), config, c, &e)
+		ctx, cancel := NewChatContext(context.Background(), config, irc, &e)
 		defer cancel()
 
 		if ctx.Valid() {
