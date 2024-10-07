@@ -10,10 +10,9 @@ soulshack is an ai-powered irc chat bot that utilizes the openai api to generate
 ## features
 
 - connects to an irc server and joins a specified channel
-- utilizes the openai gpt-4 model to generate realistic and human-like responses
+- utilizes the openai api and compatible endpoints like ollama
 - allows dynamic configuration of bot settings through commands
 - supports ssl connections for secure communication
-- can adopt various personalities by via configuration files
 
 
 ## building
@@ -56,7 +55,7 @@ Flags:
   -h, --help                  help for soulshack
   -H, --history int           maximum number of lines of context to keep per session (default 15)
       --maxtokens int         maximum number of tokens to generate (default 512)
-      --model string          model to be used for responses e.g., gpt-4 (default "gpt-4")
+      --model string          model to be used for responses (default "gpt-4o")
   -n, --nick string           bot's nickname on the irc server (default "soulshack")
       --openaikey string      openai api key
       --openaiurl string      alternative base url to use instead of openai

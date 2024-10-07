@@ -117,7 +117,7 @@ func InitializeConfig() {
 	// openai configuration
 	root.PersistentFlags().String("openaikey", "", "openai api key")
 	root.PersistentFlags().Int("maxtokens", 512, "maximum number of tokens to generate")
-	root.PersistentFlags().String("model", openai.GPT4o, "model to be used for responses (e.g., gpt-4)")
+	root.PersistentFlags().String("model", openai.GPT4o, "model to be used for responses")
 	root.PersistentFlags().String("openaiurl", "", "alternative base url to use instead of openai")
 	root.PersistentFlags().DurationP("apitimeout", "t", time.Minute*5, "timeout for each completion request to openai")
 	root.PersistentFlags().Float32("tempurature", 0.7, "temperature for the completion")
