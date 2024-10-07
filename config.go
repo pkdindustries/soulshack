@@ -126,7 +126,7 @@ func init() {
 	root.PersistentFlags().Int("maxtokens", 512, "maximum number of tokens to generate")
 	root.PersistentFlags().String("model", openai.GPT4o, "model to be used for responses (e.g., gpt-4)")
 	root.PersistentFlags().String("openaiurl", "", "alternative base url to use instead of openai")
-	root.PersistentFlags().DurationP("apitimeout", "t", time.Second*60, "timeout for each completion request to openai")
+	root.PersistentFlags().DurationP("apitimeout", "t", time.Minute*5, "timeout for each completion request to openai")
 	root.PersistentFlags().Float32("tempurature", 0.7, "temperature for the completion")
 
 	// timeouts and behavior
