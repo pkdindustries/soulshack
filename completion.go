@@ -28,7 +28,7 @@ func Complete(ctx *ChatContext, role string, msg string) {
 		Model:       BotConfig.Model,
 		MaxTokens:   BotConfig.MaxTokens,
 		Messages:    ctx.Session.GetHistory(),
-		Tempurature: BotConfig.Tempurature,
+		Temperature: BotConfig.Temperature,
 	})
 
 	chunker := &Chunker{
@@ -57,7 +57,7 @@ func Complete(ctx *ChatContext, role string, msg string) {
 // CompletionRequest holds all the necessary fields to make a completion request
 type CompletionRequest struct {
 	Timeout     time.Duration
-	Tempurature float32
+	Temperature float32
 	Model       string
 	MaxTokens   int
 	Client      *ai.Client
@@ -88,7 +88,7 @@ func completionstream(ctx context.Context, req *CompletionRequest, ch chan<- Str
 		MaxCompletionsTokens: req.MaxTokens,
 		Model:                req.Model,
 		Messages:             req.Messages,
-		Temperature:          req.Tempurature,
+		Temperature:          req.Temperature,
 		Stream:               true,
 	})
 

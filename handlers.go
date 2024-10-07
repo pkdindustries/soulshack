@@ -64,14 +64,14 @@ func slashSet(ctx *ChatContext) {
 		}
 		BotConfig.MaxTokens = maxTokens
 		ctx.Reply(fmt.Sprintf("%s set to: %d", param, BotConfig.MaxTokens))
-	case "tempurature":
-		tempurature, err := strconv.ParseFloat(value, 32)
+	case "temperature":
+		temperature, err := strconv.ParseFloat(value, 32)
 		if err != nil {
-			ctx.Reply("Invalid value for tempurature. Please provide a valid float.")
+			ctx.Reply("Invalid value for temperature. Please provide a valid float.")
 			return
 		}
-		BotConfig.Tempurature = float32(tempurature)
-		ctx.Reply(fmt.Sprintf("%s set to: %f", param, BotConfig.Tempurature))
+		BotConfig.Temperature = float32(temperature)
+		ctx.Reply(fmt.Sprintf("%s set to: %f", param, BotConfig.Temperature))
 	case "admins":
 		admins := strings.Split(value, ",")
 		for _, admin := range admins {
@@ -113,8 +113,8 @@ func slashGet(ctx *ChatContext) {
 		ctx.Reply(fmt.Sprintf("%s: %s", param, BotConfig.Channel))
 	case "maxtokens":
 		ctx.Reply(fmt.Sprintf("%s: %d", param, BotConfig.MaxTokens))
-	case "tempurature":
-		ctx.Reply(fmt.Sprintf("%s: %f", param, BotConfig.Tempurature))
+	case "temperature":
+		ctx.Reply(fmt.Sprintf("%s: %f", param, BotConfig.Temperature))
 	case "admins":
 		if len(BotConfig.Admins) == 0 {
 			ctx.Reply("empty admin list, all nicks are permitted to use admin commands")
