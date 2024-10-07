@@ -34,7 +34,7 @@ soulshack --nick chatbot --server irc.freenode.net --port 6697 --channel '#souls
 
 ## configuration
 
-soulshack can be configured using command line flags, environment variables, or personality configuration files. it uses viper to manage configuration settings.
+soulshack can be configured using command line flags, environment variables, or configuration files. it uses viper to manage configuration settings.
 
 ### flags
 ```
@@ -45,13 +45,13 @@ Examples:
 soulshack --nick chatbot --server irc.freenode.net --port 6697 --channel '#soulshack' --ssl --openaikey ****************
 
 Flags:
+  -d, --directory string      configurations directory (default "./config")
   -a, --addressed             require bot be addressed by nick for response (default true)
   -A, --admins strings        comma-separated list of allowed users to administrate the bot (e.g., user1,user2,user3)
-  -b, --become string         become the named personality (default "chatbot")
+  -b, --config string         use the named configuration (default "configs/chatbot")
   -c, --channel string        irc channel to join
   -C, --chunkdelay duration   after this delay, bot will look to split the incoming buffer on sentence boundaries (default 7s)
   -m, --chunkmax int          maximum number of characters to send as a single message (default 350)
-  -d, --directory string      personalities configuration directory (default "./personalities")
       --goodbye string        prompt to be used when the bot leaves the channel (default "goodbye.")
       --greeting string       prompt to be used when the bot joins the channel (default "hello.")
   -h, --help                  help for soulshack
@@ -78,13 +78,13 @@ all flags can also be set via environment variables with the prefix `soulshack_`
 
 ### personality configuration files
 
-personality configuration files are stored in the `personalities` directory and use the yaml format. they can be loaded using the `--become` flag. a personality file can contain any of the settings that can be set via flags.
+configuration files are stored in the `config` directory and use the yaml format. they can be loaded using the `--become` flag. a personality file can contain any of the settings that can be set via flags.
 
-# adding a personality
+# adding a config
 
-to add a new personality to soulshack, follow these steps:
+to add a new config to soulshack, follow these steps:
 
-1. create a new yml file in the `personalities` directory with the desired name (e.g., `marvin.yml`).
+1. create a new yml file in the `config` directory with the desired name (e.g., `marvin.yml`).
 2. add your desired settings to the yml file. for example:
 
 ```yml
@@ -95,7 +95,7 @@ prompt: "you are marvin the paranoid android. respond with a short text message:
 ```
 
 ```bash
-soulshack --server localhost --channel '#marvinshouse' --become marvin 
+soulshack --server localhost --channel '#marvinshouse' --config marvin 
 ```
 
 ## commands

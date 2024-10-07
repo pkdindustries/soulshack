@@ -96,11 +96,14 @@ func init() {
 		vip.SetConfigName(vip.GetString("config"))
 
 		if err := vip.ReadInConfig(); err != nil {
-			log.Println("? no config file found:", vip.GetString("config"))
+			log.Println("no config file found:", vip.GetString("config"))
+			log.Println("using environment variables and default values")
 		} else {
 			log.Println("using config file:", vip.ConfigFileUsed())
 		}
 	})
+
+	root.PersistentFlags().StringP("directory", "d", "./config", "directory containing the configurations")
 
 	// irc client configuration
 	root.PersistentFlags().StringP("nick", "n", "soulshack", "bot's nickname on the irc server")
@@ -113,8 +116,7 @@ func init() {
 	root.PersistentFlags().StringP("saslpass", "", "", "password for SASL plain")
 
 	// bot configuration
-	root.PersistentFlags().StringP("config", "b", "chatbot", "become the named configuration")
-	root.PersistentFlags().StringP("directory", "d", "./config", "configuration directory")
+	root.PersistentFlags().StringP("config", "b", "chatbot", "use the named configuration file")
 	root.PersistentFlags().StringSliceP("admins", "A", []string{}, "comma-separated list of allowed users to administrate the bot (e.g., user1,user2,user3)")
 
 	// informational
