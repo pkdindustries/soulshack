@@ -25,11 +25,12 @@ var root = &cobra.Command{
 	Use:     "soulshack",
 	Example: "soulshack --nick chatbot --server irc.freenode.net --port 6697 --channel '#soulshack' --tls --openaikey ****************",
 	Short:   getBanner(),
-	Run:     run,
+	Run:     runBot,
 	Version: "0.6 - http://github.com/pkdindustries/soulshack",
 }
 
 func main() {
+	InitializeConfig()
 	if err := root.Execute(); err != nil {
 		log.Fatal(err)
 	}
@@ -41,37 +42,31 @@ func getBanner() string {
 		figure.NewColorFigure(" . . . because real people are overrated", "term", "green", true).ColorString())
 }
 
-func run(r *cobra.Command, _ []string) {
-
-	config := LoadConfig()
-
-	if err := config.VerifyConfig(); err != nil {
-		log.Fatal(err)
-	}
+func runBot(r *cobra.Command, _ []string) {
 
 	irc := girc.New(girc.Config{
-		Server:    config.Server,
-		Port:      config.Port,
-		Nick:      config.Nick,
+		Server:    BotConfig.Server,
+		Port:      BotConfig.Port,
+		Nick:      BotConfig.Nick,
 		User:      "soulshack",
 		Name:      "soulshack",
-		SSL:       config.SSL,
-		TLSConfig: &tls.Config{InsecureSkipVerify: config.TLSInsecure},
+		SSL:       BotConfig.SSL,
+		TLSConfig: &tls.Config{InsecureSkipVerify: BotConfig.TLSInsecure},
 	})
 
-	if config.SASLNick != "" && config.SASLPass != "" {
+	if BotConfig.SASLNick != "" && BotConfig.SASLPass != "" {
 		irc.Config.SASL = &girc.SASLPlain{
-			User: config.SASLNick,
-			Pass: config.SASLPass,
+			User: BotConfig.SASLNick,
+			Pass: BotConfig.SASLPass,
 		}
 	}
 
 	irc.Handlers.AddBg(girc.CONNECTED, func(irc *girc.Client, e girc.Event) {
-		ctx, cancel := NewChatContext(context.Background(), config, irc, &e)
+		ctx, cancel := NewChatContext(context.Background(), irc, &e)
 		defer cancel()
 
-		log.Println("joining channel:", ctx.Session.Config.Channel)
-		irc.Cmd.Join(ctx.Session.Config.Channel)
+		log.Println("joining channel:", BotConfig.Channel)
+		irc.Cmd.Join(BotConfig.Channel)
 
 		time.Sleep(1 * time.Second)
 		greeting(ctx)
@@ -79,7 +74,7 @@ func run(r *cobra.Command, _ []string) {
 
 	irc.Handlers.AddBg(girc.PRIVMSG, func(irc *girc.Client, e girc.Event) {
 
-		ctx, cancel := NewChatContext(context.Background(), config, irc, &e)
+		ctx, cancel := NewChatContext(context.Background(), irc, &e)
 		defer cancel()
 
 		if ctx.Valid() {

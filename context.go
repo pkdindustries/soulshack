@@ -23,7 +23,7 @@ func (s *ChatContext) IsAddressed() bool {
 }
 
 func (c *ChatContext) IsAdmin() bool {
-	admins := c.Session.Config.Admins
+	admins := BotConfig.Admins
 	nick := c.Event.Source.Name
 	if len(admins) == 0 {
 		return true
@@ -40,8 +40,8 @@ func (c *ChatContext) Stats() {
 	log.Printf("session: messages %d, bytes %d, maxtokens %d, model %s",
 		len(c.Session.GetHistory()),
 		c.Session.Totalchars,
-		c.Session.Config.MaxTokens,
-		c.Session.Config.Model)
+		BotConfig.MaxTokens,
+		BotConfig.Model)
 }
 
 func (c *ChatContext) Reply(message string) *ChatContext {
@@ -49,11 +49,9 @@ func (c *ChatContext) Reply(message string) *ChatContext {
 	return c
 }
 
+// checks if the message is valid for processing
 func (c *ChatContext) Valid() bool {
-	// check if the message is addressed to the bot or if being addressed is not required
-	addressed := c.IsAddressed() || !c.Session.Config.Addressed
-	hasArguments := len(c.Args) > 0
-	return (addressed || c.IsPrivate()) && hasArguments
+	return (c.IsAddressed() || !BotConfig.Addressed || c.IsPrivate()) && len(c.Args) > 0
 }
 
 func (c *ChatContext) IsPrivate() bool {
@@ -64,12 +62,12 @@ func (c *ChatContext) GetCommand() string {
 	return strings.ToLower(c.Args[0])
 }
 
-func NewChatContext(parentctx context.Context, config *Config, ircclient *girc.Client, e *girc.Event) (*ChatContext, context.CancelFunc) {
-	timedctx, cancel := context.WithTimeout(parentctx, config.ClientTimeout)
+func NewChatContext(parentctx context.Context, ircclient *girc.Client, e *girc.Event) (*ChatContext, context.CancelFunc) {
+	timedctx, cancel := context.WithTimeout(parentctx, BotConfig.ClientTimeout)
 
 	ctx := &ChatContext{
 		Context: timedctx,
-		AI:      NewAI(&config.OpenAI),
+		AI:      GetAIClient(&BotConfig.OpenAI),
 		Client:  ircclient,
 		Event:   e,
 		Args:    strings.Fields(e.Last()),
@@ -81,7 +79,7 @@ func NewChatContext(parentctx context.Context, config *Config, ircclient *girc.C
 
 	if e.Source == nil {
 		e.Source = &girc.Source{
-			Name: config.Channel,
+			Name: BotConfig.Channel,
 		}
 	}
 
@@ -89,6 +87,6 @@ func NewChatContext(parentctx context.Context, config *Config, ircclient *girc.C
 	if !girc.IsValidChannel(key) {
 		key = e.Source.Name
 	}
-	ctx.Session = Sessions.Get(key, config)
+	ctx.Session = Sessions.Get(key)
 	return ctx, cancel
 }

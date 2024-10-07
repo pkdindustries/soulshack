@@ -11,7 +11,7 @@ import (
 
 func greeting(ctx *ChatContext) {
 	log.Println("sending greeting...")
-	Complete(ctx, RoleAssistant, ctx.Session.Config.Greeting)
+	Complete(ctx, RoleAssistant, BotConfig.Greeting)
 	ctx.Session.Reset()
 }
 
@@ -22,15 +22,15 @@ func slashSet(ctx *ChatContext) {
 	}
 
 	if len(ctx.Args) != 3 {
-		ctx.Reply(fmt.Sprintf("Usage: /set <key> <value>. Available keys: %s", strings.Join(Modifiables, ", ")))
+		ctx.Reply(fmt.Sprintf("Usage: /set <key> <value>. Available keys: %s", strings.Join(ModifiableConfigKeys, ", ")))
 		return
 	}
 
 	param, v := ctx.Args[1], ctx.Args[2:]
 	value := strings.Join(v, " ")
 
-	if !contains(Modifiables, param) {
-		ctx.Reply(fmt.Sprintf("Available keys: %s", strings.Join(Modifiables, " ")))
+	if !contains(ModifiableConfigKeys, param) {
+		ctx.Reply(fmt.Sprintf("Available keys: %s", strings.Join(ModifiableConfigKeys, " ")))
 		return
 	}
 
@@ -41,20 +41,20 @@ func slashSet(ctx *ChatContext) {
 			ctx.Reply("Invalid value for addressed. Please provide 'true' or 'false'.")
 			return
 		}
-		ctx.Session.Config.Addressed = addressed
-		ctx.Reply(fmt.Sprintf("%s set to: %t", param, ctx.Session.Config.Addressed))
+		BotConfig.Addressed = addressed
+		ctx.Reply(fmt.Sprintf("%s set to: %t", param, BotConfig.Addressed))
 	case "prompt":
-		ctx.Session.Config.Prompt = value
-		ctx.Reply(fmt.Sprintf("%s set to: %s", param, ctx.Session.Config.Prompt))
+		BotConfig.Prompt = value
+		ctx.Reply(fmt.Sprintf("%s set to: %s", param, BotConfig.Prompt))
 	case "model":
-		ctx.Session.Config.Model = value
-		ctx.Reply(fmt.Sprintf("%s set to: %s", param, ctx.Session.Config.Model))
+		BotConfig.Model = value
+		ctx.Reply(fmt.Sprintf("%s set to: %s", param, BotConfig.Model))
 	case "nick":
-		ctx.Session.Config.Nick = value
+		BotConfig.Nick = value
 		ctx.Client.Cmd.Nick(value)
 	case "channel":
-		ctx.Session.Config.Channel = value
-		ctx.Client.Cmd.Part(ctx.Session.Config.Channel)
+		BotConfig.Channel = value
+		ctx.Client.Cmd.Part(BotConfig.Channel)
 		ctx.Client.Cmd.Join(value)
 	case "maxtokens":
 		maxTokens, err := strconv.Atoi(value)
@@ -62,16 +62,16 @@ func slashSet(ctx *ChatContext) {
 			ctx.Reply("Invalid value for maxtokens. Please provide a valid integer.")
 			return
 		}
-		ctx.Session.Config.MaxTokens = maxTokens
-		ctx.Reply(fmt.Sprintf("%s set to: %d", param, ctx.Session.Config.MaxTokens))
+		BotConfig.MaxTokens = maxTokens
+		ctx.Reply(fmt.Sprintf("%s set to: %d", param, BotConfig.MaxTokens))
 	case "tempurature":
 		tempurature, err := strconv.ParseFloat(value, 32)
 		if err != nil {
 			ctx.Reply("Invalid value for tempurature. Please provide a valid float.")
 			return
 		}
-		ctx.Session.Config.Tempurature = float32(tempurature)
-		ctx.Reply(fmt.Sprintf("%s set to: %f", param, ctx.Session.Config.Tempurature))
+		BotConfig.Tempurature = float32(tempurature)
+		ctx.Reply(fmt.Sprintf("%s set to: %f", param, BotConfig.Tempurature))
 	case "admins":
 		admins := strings.Split(value, ",")
 		for _, admin := range admins {
@@ -80,8 +80,8 @@ func slashSet(ctx *ChatContext) {
 				return
 			}
 		}
-		ctx.Session.Config.Admins = admins
-		ctx.Reply(fmt.Sprintf("%s set to: %s", param, strings.Join(ctx.Session.Config.Admins, ", ")))
+		BotConfig.Admins = admins
+		ctx.Reply(fmt.Sprintf("%s set to: %s", param, strings.Join(BotConfig.Admins, ", ")))
 	}
 
 	ctx.Session.Reset()
@@ -90,37 +90,37 @@ func slashSet(ctx *ChatContext) {
 func slashGet(ctx *ChatContext) {
 
 	if len(ctx.Args) < 2 {
-		ctx.Reply(fmt.Sprintf("Usage: /get <key>. Available keys: %s", strings.Join(Modifiables, ", ")))
+		ctx.Reply(fmt.Sprintf("Usage: /get <key>. Available keys: %s", strings.Join(ModifiableConfigKeys, ", ")))
 		return
 	}
 
 	param := ctx.Args[1]
-	if !contains(Modifiables, param) {
-		ctx.Reply(fmt.Sprintf("Unknown key %s. Available keys: %s", param, strings.Join(Modifiables, ", ")))
+	if !contains(ModifiableConfigKeys, param) {
+		ctx.Reply(fmt.Sprintf("Unknown key %s. Available keys: %s", param, strings.Join(ModifiableConfigKeys, ", ")))
 		return
 	}
 
 	switch param {
 	case "addressed":
-		ctx.Reply(fmt.Sprintf("%s: %t", param, ctx.Session.Config.Addressed))
+		ctx.Reply(fmt.Sprintf("%s: %t", param, BotConfig.Addressed))
 	case "prompt":
-		ctx.Reply(fmt.Sprintf("%s: %s", param, ctx.Session.Config.Prompt))
+		ctx.Reply(fmt.Sprintf("%s: %s", param, BotConfig.Prompt))
 	case "model":
-		ctx.Reply(fmt.Sprintf("%s: %s", param, ctx.Session.Config.Model))
+		ctx.Reply(fmt.Sprintf("%s: %s", param, BotConfig.Model))
 	case "nick":
-		ctx.Reply(fmt.Sprintf("%s: %s", param, ctx.Session.Config.Nick))
+		ctx.Reply(fmt.Sprintf("%s: %s", param, BotConfig.Nick))
 	case "channel":
-		ctx.Reply(fmt.Sprintf("%s: %s", param, ctx.Session.Config.Channel))
+		ctx.Reply(fmt.Sprintf("%s: %s", param, BotConfig.Channel))
 	case "maxtokens":
-		ctx.Reply(fmt.Sprintf("%s: %d", param, ctx.Session.Config.MaxTokens))
+		ctx.Reply(fmt.Sprintf("%s: %d", param, BotConfig.MaxTokens))
 	case "tempurature":
-		ctx.Reply(fmt.Sprintf("%s: %f", param, ctx.Session.Config.Tempurature))
+		ctx.Reply(fmt.Sprintf("%s: %f", param, BotConfig.Tempurature))
 	case "admins":
-		if len(ctx.Session.Config.Admins) == 0 {
+		if len(BotConfig.Admins) == 0 {
 			ctx.Reply("empty admin list, all nicks are permitted to use admin commands")
 			return
 		}
-		ctx.Reply(fmt.Sprintf("%s: %s", param, strings.Join(ctx.Session.Config.Admins, ", ")))
+		ctx.Reply(fmt.Sprintf("%s: %s", param, strings.Join(BotConfig.Admins, ", ")))
 	}
 }
 

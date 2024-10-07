@@ -1,12 +1,8 @@
 package main
 
 import (
-	"errors"
 	"fmt"
-	"io/fs"
 	"log"
-	"os"
-	"strings"
 	"time"
 
 	"github.com/sashabaranov/go-openai"
@@ -14,9 +10,10 @@ import (
 	vip "github.com/spf13/viper"
 )
 
-var Modifiables = []string{"nick", "channel", "model", "addressed", "prompt", "maxtokens", "tempurature", "admins"}
+var ModifiableConfigKeys = []string{"nick", "channel", "model", "addressed", "prompt", "maxtokens", "tempurature", "admins"}
+var BotConfig *Configuration
 
-type Config struct {
+type Configuration struct {
 	Nick          string
 	Server        string
 	Port          int
@@ -26,7 +23,6 @@ type Config struct {
 	SASLNick      string
 	SASLPass      string
 	Admins        []string
-	Directory     string
 	Verbose       bool
 	Addressed     bool
 	ChunkDelay    time.Duration
@@ -46,8 +42,20 @@ type Config struct {
 	OpenAI        openai.ClientConfig
 }
 
-func LoadConfig() *Config {
-	config := &Config{
+func loadConfig() {
+	configfile := vip.GetString("config")
+	if configfile != "" {
+		vip.SetConfigFile(configfile)
+		if err := vip.ReadInConfig(); err != nil {
+			log.Printf("config file %s not found", configfile)
+		} else {
+			log.Println("using config file:", vip.ConfigFileUsed())
+		}
+	} else {
+		log.Println("no config file specified")
+	}
+
+	BotConfig = &Configuration{
 		Nick:          vip.GetString("nick"),
 		Server:        vip.GetString("server"),
 		Port:          vip.GetInt("port"),
@@ -57,7 +65,6 @@ func LoadConfig() *Config {
 		SASLNick:      vip.GetString("saslnick"),
 		SASLPass:      vip.GetString("saslpass"),
 		Admins:        vip.GetStringSlice("admins"),
-		Directory:     vip.GetString("directory"),
 		Verbose:       vip.GetBool("verbose"),
 		Addressed:     vip.GetBool("addressed"),
 		ChunkDelay:    vip.GetDuration("chunkdelay"),
@@ -73,40 +80,24 @@ func LoadConfig() *Config {
 		Tempurature:   float32(vip.GetFloat64("tempurature")),
 		URL:           vip.GetString("openaiurl"),
 		Prompt:        vip.GetString("prompt"),
-
-		Greeting: vip.GetString("greeting"),
-		OpenAI:   openai.DefaultConfig(vip.GetString("openaikey")),
+		Greeting:      vip.GetString("greeting"),
+		OpenAI:        openai.DefaultConfig(vip.GetString("openaikey")),
 	}
 
 	if vip.GetString("openaiurl") != "" {
 		log.Println("using alternate OpenAI API URL:", vip.GetString("openaiurl"))
-		config.OpenAI.BaseURL = vip.GetString("openaiurl")
+		BotConfig.OpenAI.BaseURL = vip.GetString("openaiurl")
 	}
 
-	return config
+	// Verify required configuration settings
+	if err := verifyConfig(); err != nil {
+		log.Fatalf("Invalid configuration: %v", err)
+	}
 }
 
-func init() {
+func InitializeConfig() {
 
-	cobra.OnInitialize(func() {
-		fmt.Println(getBanner())
-
-		if _, err := os.Stat(vip.GetString("directory")); errors.Is(err, fs.ErrNotExist) {
-			log.Printf("? configuration directory %s does not exist", vip.GetString("directory"))
-		}
-
-		vip.AddConfigPath(vip.GetString("directory"))
-		vip.SetConfigName(vip.GetString("config"))
-
-		if err := vip.ReadInConfig(); err != nil {
-			log.Println("no config file found:", vip.GetString("config"))
-			log.Println("using environment variables and default values")
-		} else {
-			log.Println("using config file:", vip.ConfigFileUsed())
-		}
-	})
-
-	root.PersistentFlags().StringP("directory", "d", "./config", "directory containing the configurations")
+	cobra.OnInitialize(loadConfig)
 
 	// irc client configuration
 	root.PersistentFlags().StringP("nick", "n", "soulshack", "bot's nickname on the irc server")
@@ -119,7 +110,7 @@ func init() {
 	root.PersistentFlags().StringP("saslpass", "", "", "password for SASL plain")
 
 	// bot configuration
-	root.PersistentFlags().StringP("config", "b", "chatbot", "use the named configuration file")
+	root.PersistentFlags().StringP("config", "b", "", "use the named configuration file")
 	root.PersistentFlags().StringSliceP("admins", "A", []string{}, "comma-separated list of allowed users to administrate the bot (e.g., user1,user2,user3)")
 
 	// informational
@@ -142,29 +133,20 @@ func init() {
 
 	// personality / prompting
 	root.PersistentFlags().String("greeting", "hello.", "prompt to be used when the bot joins the channel")
-	root.PersistentFlags().String("prompt", "you are a helpful chatbot. do not use caps. do not use emoji.", "initial system prompt for the ai")
+	root.PersistentFlags().String("prompt", "you are a helpful chatbot. do not use caps. do not use emoji.", "initial system prompt")
 
 	vip.BindPFlags(root.PersistentFlags())
 
 	vip.SetEnvPrefix("SOULSHACK")
 	vip.AutomaticEnv()
+
 }
 
-func (c *Config) VerifyConfig() error {
-	for _, varName := range vip.AllKeys() {
-		if varName == "admins" || varName == "openaiurl" || varName == "saslnick" || varName == "saslpass" {
-			continue
-		}
-		value := vip.GetString(varName)
-		if value == "" {
-			return fmt.Errorf("! %s unset. use --%s flag, personality config, or SOULSHACK_%s env", varName, varName, strings.ToUpper(varName))
-		}
-
-		if c.Verbose {
-			if varName == "openaikey" {
-				value = strings.Repeat("*", len(value))
-			}
-			log.Printf("\t%s: '%s'", varName, value)
+func verifyConfig() error {
+	required := []string{"nick", "server", "channel", "openaikey"}
+	for _, key := range required {
+		if vip.GetString(key) == "" {
+			return fmt.Errorf("missing required config: %s", key)
 		}
 	}
 	return nil

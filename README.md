@@ -45,7 +45,6 @@ Examples:
 soulshack --nick chatbot --server irc.freenode.net --port 6697 --channel '#soulshack' --ssl --openaikey ****************
 
 Flags:
-  -d, --directory string      configurations directory (default "./config")
   -a, --addressed             require bot be addressed by nick for response (default true)
   -A, --admins strings        comma-separated list of allowed users to administrate the bot (e.g., user1,user2,user3)
   -b, --config string         use the named configuration (default "chatbot")
@@ -78,13 +77,13 @@ all flags can also be set via environment variables with the prefix `soulshack_`
 
 ### personality configuration files
 
-configuration files are stored in the `config` directory and use the yaml format. they can be loaded using the `--become` flag. a personality file can contain any of the settings that can be set via flags.
+configuration files use the yaml format. they can be loaded using the `--config` flag. a configuration file can contain any of the settings that can be set via flags.
 
 # adding a config
 
 to add a new config to soulshack, follow these steps:
 
-1. create a new yml file in the `config` directory with the desired name (e.g., `marvin.yml`).
+1. create a new yml file with the desired name (e.g., `marvin.yml`).
 2. add your desired settings to the yml file. for example:
 
 ```yml
@@ -95,7 +94,7 @@ prompt: "you are marvin the paranoid android. respond with a short text message:
 ```
 
 ```bash
-soulshack --server localhost --channel '#marvinshouse' --config marvin 
+soulshack --server localhost --channel '#marvinshouse' --config /path/to/marvin.yml 
 ```
 
 ## commands
@@ -105,6 +104,6 @@ soulshack --server localhost --channel '#marvinshouse' --config marvin
 - `/leave`: make the bot leave the channel and exit
 - `/help`: display help for available commands
 
-[jacob, high five me](https://i.redd.it/8y2blwiyvira1.png)
+[jacob, high five me](https://i.imgur.com/0HDlc5z.png)
 
 ## named as tribute to my old friend dayv, sp0t, who i think of often

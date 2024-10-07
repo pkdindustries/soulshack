@@ -16,14 +16,14 @@ import (
 
 func TestChatSession(t *testing.T) {
 
-	config := &Config{
+	BotConfig = &Configuration{
 		MaxHistory: 10,
 		TTL:        1 * time.Hour,
 	}
 	//log.SetOutput(io.Discard)
 
 	t.Run("Test interactions and message history", func(t *testing.T) {
-		session1 := Sessions.Get("session1", config)
+		session1 := Sessions.Get("session1")
 		session1.AddMessage(ai.ChatMessageRoleUser, "Hello!")
 		session1.AddMessage(ai.ChatMessageRoleAssistant, "Hi there!")
 
@@ -37,18 +37,18 @@ func TestExpiry(t *testing.T) {
 
 	t.Run("Test session expiration and trimming", func(t *testing.T) {
 
-		config := &Config{
+		BotConfig = &Configuration{
 			MaxHistory: 20,
 			TTL:        500 * time.Millisecond,
 		}
 
-		session2 := Sessions.Get("session2", config)
+		session2 := Sessions.Get("session2")
 		session2.AddMessage(ai.ChatMessageRoleUser, "How are you?")
 		session2.AddMessage(ai.ChatMessageRoleAssistant, "I'm doing great, thanks!")
 		session2.AddMessage(ai.ChatMessageRoleUser, "What's your name?")
 
 		time.Sleep(2 * time.Second)
-		session3 := Sessions.Get("session2", config)
+		session3 := Sessions.Get("session2")
 
 		assert.NotEqual(t, session2, session3, "Expired session should not be reused")
 		assert.Len(t, session3.GetHistory(), 0, "New session history should be empty")
@@ -69,7 +69,7 @@ func TestSessionConcurrency(t *testing.T) {
 	log.SetOutput(io.Discard)
 
 	t.Run("Test session concurrency", func(t *testing.T) {
-		config := &Config{
+		BotConfig = &Configuration{
 			MaxHistory: 500 * 2000,
 			TTL:        1 * time.Hour,
 		}
@@ -88,7 +88,7 @@ func TestSessionConcurrency(t *testing.T) {
 			go func(userIndex int) {
 				defer wg.Done()
 				sessionID := fmt.Sprintf("usersession%d", userIndex)
-				session := Sessions.Get(sessionID, config)
+				session := Sessions.Get(sessionID)
 
 				for j := 0; j < messagesPerUser; j++ {
 					session.AddMessage(ai.ChatMessageRoleUser, fmt.Sprintf("User %d message %d", userIndex, j))
@@ -101,7 +101,7 @@ func TestSessionConcurrency(t *testing.T) {
 
 		for i := 0; i < concurrentUsers; i++ {
 			sessionID := fmt.Sprintf("usersession%d", i)
-			session := Sessions.Get(sessionID, config)
+			session := Sessions.Get(sessionID)
 			assert.Len(t, session.GetHistory(), messagesPerUser*2+1, "Each session should have the correct number of messages")
 		}
 		elapsedTime := time.Since(startTime)
@@ -115,7 +115,7 @@ func TestSingleSessionConcurrency(t *testing.T) {
 	log.SetOutput(io.Discard)
 
 	t.Run("Test single session concurrency", func(t *testing.T) {
-		config := &Config{
+		BotConfig = &Configuration{
 			MaxHistory: 500 * 200,
 			TTL:        1 * time.Hour,
 		}
@@ -125,7 +125,7 @@ func TestSingleSessionConcurrency(t *testing.T) {
 
 		startTime := time.Now()
 
-		session := Sessions.Get("concurrentSession", config)
+		session := Sessions.Get("concurrentSession")
 
 		var wg sync.WaitGroup
 		wg.Add(concurrentUsers)
@@ -156,7 +156,7 @@ func countActiveSessions() int {
 	defer Sessions.mu.Unlock()
 
 	for _, session := range Sessions.sessionMap {
-		if time.Since(session.Last) <= session.Config.TTL {
+		if time.Since(session.Last) <= BotConfig.TTL {
 			activeSessions++
 		}
 	}
@@ -171,7 +171,7 @@ func TestSessionReapStress(t *testing.T) {
 	log.SetOutput(io.Discard)
 	Sessions.sessionMap = make(map[string]*Session)
 
-	config := &Config{
+	BotConfig = &Configuration{
 		TTL:        timeout,
 		MaxHistory: 10,
 		ChunkDelay: 200 * time.Millisecond,
@@ -181,7 +181,7 @@ func TestSessionReapStress(t *testing.T) {
 	// Create and store sessions
 	for i := 0; i < numSessions; i++ {
 		sessionID := fmt.Sprintf("session-%d", i)
-		Sessions.Get(sessionID, config)
+		Sessions.Get(sessionID)
 	}
 
 	// Verify that all sessions are created
@@ -193,7 +193,7 @@ func TestSessionReapStress(t *testing.T) {
 	// half are half aged
 	for i := 0; i < numSessions/2; i++ {
 		sessionID := fmt.Sprintf("session-%d", i)
-		session := Sessions.Get(sessionID, config)
+		session := Sessions.Get(sessionID)
 		session.AddMessage(ai.ChatMessageRoleUser, fmt.Sprintf("message-%d", 0))
 		session.AddMessage(ai.ChatMessageRoleUser, fmt.Sprintf("message-%d", 1))
 	}
@@ -237,9 +237,11 @@ func TestSessionWindow(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			BotConfig = &Configuration{
+				MaxHistory: tc.maxHistory,
+			}
 			session := Session{
 				History: tc.history,
-				Config:  &Config{MaxHistory: tc.maxHistory},
 			}
 
 			session.trimHistory()
@@ -264,9 +266,11 @@ func BenchmarkTrim(b *testing.B) {
 			messages[i] = ai.ChatCompletionMessage{Role: ai.ChatMessageRoleUser, Content: fmt.Sprintf("Message %d", i)}
 		}
 		b.Run(fmt.Sprintf("MsgCount_%d", msgCount), func(b *testing.B) {
+			BotConfig = &Configuration{
+				MaxHistory: msgCount / 2,
+			}
 			session := Session{
 				History: messages,
-				Config:  &Config{MaxHistory: msgCount / 2},
 			}
 
 			b.ResetTimer()
@@ -279,7 +283,7 @@ func BenchmarkTrim(b *testing.B) {
 }
 
 func BenchmarkSessionStress(b *testing.B) {
-	config := &Config{
+	BotConfig = &Configuration{
 		TTL:        1 * time.Second, // Short session duration to trigger more expirations
 		MaxHistory: 5,               // Shorter history length to trigger more trimming
 	}
@@ -305,7 +309,7 @@ func BenchmarkSessionStress(b *testing.B) {
 
 						for k := 0; k < sessionsPerUser; k++ {
 							sessionID := fmt.Sprintf("session%d-%d", userIndex, k)
-							session := Sessions.Get(sessionID, config)
+							session := Sessions.Get(sessionID)
 
 							action := rand.Intn(3)
 

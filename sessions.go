@@ -25,7 +25,6 @@ type SessionMap struct {
 }
 
 type Session struct {
-	Config     *Config
 	History    []ai.ChatCompletionMessage
 	Last       time.Time
 	mu         sync.RWMutex
@@ -49,13 +48,13 @@ func (s *Session) AddMessage(role string, message string) {
 	defer s.mu.Unlock()
 
 	if len(s.History) == 0 {
-		s.addMessage(RoleSystem, s.Config.Prompt)
-		s.Totalchars += len(s.Config.Prompt)
+		s.addMessage(RoleSystem, BotConfig.Prompt)
+		s.Totalchars += len(BotConfig.Prompt)
 	}
 
 	s.addMessage(role, message)
 	s.trimHistory()
-	if s.Config.Verbose {
+	if BotConfig.Verbose {
 		s.Debug()
 	}
 }
@@ -67,10 +66,10 @@ func (s *Session) addMessage(role string, message string) {
 }
 
 func (s *Session) trimHistory() {
-	if len(s.History) <= s.Config.MaxHistory {
+	if len(s.History) <= BotConfig.MaxHistory {
 		return
 	}
-	s.History = append(s.History[:1], s.History[len(s.History)-s.Config.MaxHistory:]...)
+	s.History = append(s.History[:1], s.History[len(s.History)-BotConfig.MaxHistory:]...)
 }
 
 func (s *Session) Reset() {
@@ -80,7 +79,7 @@ func (s *Session) Reset() {
 	s.Last = time.Now()
 }
 
-func (sessions *SessionMap) Get(id string, config *Config) *Session {
+func (sessions *SessionMap) Get(id string) *Session {
 	sessions.mu.Lock()
 	defer sessions.mu.Unlock()
 
@@ -89,16 +88,15 @@ func (sessions *SessionMap) Get(id string, config *Config) *Session {
 	}
 
 	session := &Session{
-		Name:   id,
-		Last:   time.Now(),
-		Config: config,
-		Stash:  make(map[string]any),
+		Name:  id,
+		Last:  time.Now(),
+		Stash: make(map[string]any),
 	}
 
 	// start session reaper, returns when the session is gone
 	go func() {
 		for {
-			time.Sleep(session.Config.TTL)
+			time.Sleep(BotConfig.TTL)
 			if session.Reap() {
 				return
 			}
@@ -116,7 +114,7 @@ func (s *Session) Reap() bool {
 	if Sessions.sessionMap[s.Name] == nil {
 		return true
 	}
-	if now.Sub(s.Last) > s.Config.TTL {
+	if now.Sub(s.Last) > BotConfig.TTL {
 		delete(Sessions.sessionMap, s.Name)
 		return true
 	}

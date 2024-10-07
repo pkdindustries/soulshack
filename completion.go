@@ -24,18 +24,18 @@ func Complete(ctx *ChatContext, role string, msg string) {
 
 	respch := ChatCompletionStreamTask(ctx, &CompletionRequest{
 		Client:      ctx.AI,
-		Timeout:     ctx.Session.Config.ClientTimeout,
-		Model:       ctx.Session.Config.Model,
-		MaxTokens:   ctx.Session.Config.MaxTokens,
+		Timeout:     BotConfig.ClientTimeout,
+		Model:       BotConfig.Model,
+		MaxTokens:   BotConfig.MaxTokens,
 		Messages:    ctx.Session.GetHistory(),
-		Tempurature: ctx.Session.Config.Tempurature,
+		Tempurature: BotConfig.Tempurature,
 	})
 
 	chunker := &Chunker{
 		Buffer: &bytes.Buffer{},
-		Length: ctx.Session.Config.ChunkMax,
-		Delay:  ctx.Session.Config.ChunkDelay,
-		Quote:  ctx.Session.Config.ChunkQuoted,
+		Length: BotConfig.ChunkMax,
+		Delay:  BotConfig.ChunkDelay,
+		Quote:  BotConfig.ChunkQuoted,
 		Last:   time.Now(),
 	}
 
@@ -122,7 +122,7 @@ func completionstream(ctx context.Context, req *CompletionRequest, ch chan<- Str
 	}
 }
 
-func NewAI(config *ai.ClientConfig) *ai.Client {
+func GetAIClient(config *ai.ClientConfig) *ai.Client {
 	once.Do(func() {
 		client = ai.NewClientWithConfig(*config)
 	})
