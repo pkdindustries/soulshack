@@ -2,4 +2,3 @@
 nick: ollamabot
 model: llama3.2:3b
 openaiurl: "http://localhost:11434/v1/"
-prompt: "you are a helpful chatbot."

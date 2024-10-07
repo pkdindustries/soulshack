@@ -142,7 +142,7 @@ func init() {
 
 	// personality / prompting
 	root.PersistentFlags().String("greeting", "hello.", "prompt to be used when the bot joins the channel")
-	root.PersistentFlags().String("prompt", "respond in a short text:", "initial system prompt for the ai")
+	root.PersistentFlags().String("prompt", "you are a helpful chatbot. do not use caps. do not use emoji.", "initial system prompt for the ai")
 
 	vip.BindPFlags(root.PersistentFlags())
 
