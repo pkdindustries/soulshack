@@ -42,7 +42,7 @@ type Config struct {
 	Prompt        string
 	Greeting      string
 	Goodbye       string
-	OpenAi        openai.ClientConfig
+	OpenAI        openai.ClientConfig
 }
 
 func LoadConfig() *Config {
@@ -72,12 +72,12 @@ func LoadConfig() *Config {
 		URL:           vip.GetString("openaiurl"),
 		Prompt:        vip.GetString("prompt"),
 		Greeting:      vip.GetString("greeting"),
-		OpenAi:        openai.DefaultConfig(vip.GetString("openaikey")),
+		OpenAI:        openai.DefaultConfig(vip.GetString("openaikey")),
 	}
 
 	if vip.GetString("openaiurl") != "" {
 		log.Println("using alternate OpenAI API URL:", vip.GetString("openaiurl"))
-		config.OpenAi.BaseURL = vip.GetString("openaiurl")
+		config.OpenAI.BaseURL = vip.GetString("openaiurl")
 	}
 
 	return config

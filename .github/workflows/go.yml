@@ -66,13 +66,13 @@ jobs:
         run: >-
           go build -o
           ${{ github.event.repository.name }}-windows-amd64.exe ./...
-      - name: Package personalities directory
-        run: tar czf personalities.tar.gz personalities/
-      - name: Upload personalities tarball
+      - name: Package config directory
+        run: tar czf config.tar.gz config/
+      - name: Upload config tarball
         uses: actions/upload-artifact@v4
         with:
-          name: personalities.tar.gz
-          path: personalities.tar.gz
+          name: config.tar.gz
+          path: config.tar.gz
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -89,7 +89,7 @@ jobs:
           predicate:
             '{"purl":"pkg:github/${{ github.repository }}@${{ github.sha }}"}'
           subject-path: |
-            personalities.tar.gz
+            config.tar.gz
             ${{ github.event.repository.name }}-linux-amd64
             ${{ github.event.repository.name }}-linux-arm64
             ${{ github.event.repository.name }}-darwin-arm64
@@ -102,6 +102,6 @@ jobs:
           --generate-notes
           --prerelease
           ${{ github.event.repository.name }}-*
-          personalities.tar.gz
+          config.tar.gz
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

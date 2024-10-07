@@ -75,7 +75,7 @@ func NewChatContext(parentctx context.Context, config *Config, ircclient *girc.C
 
 	ctx := &ChatContext{
 		Context: timedctx,
-		AI:      NewAI(&config.OpenAi),
+		AI:      NewAI(&config.OpenAI),
 		Client:  ircclient,
 		Event:   e,
 		Args:    strings.Fields(e.Last()),

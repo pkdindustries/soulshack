@@ -48,7 +48,7 @@ Flags:
   -d, --directory string      configurations directory (default "./config")
   -a, --addressed             require bot be addressed by nick for response (default true)
   -A, --admins strings        comma-separated list of allowed users to administrate the bot (e.g., user1,user2,user3)
-  -b, --config string         use the named configuration (default "configs/chatbot")
+  -b, --config string         use the named configuration (default "chatbot")
   -c, --channel string        irc channel to join
   -C, --chunkdelay duration   after this delay, bot will look to split the incoming buffer on sentence boundaries (default 7s)
   -m, --chunkmax int          maximum number of characters to send as a single message (default 350)
@@ -67,7 +67,7 @@ Flags:
   -S, --session duration      duration for the chat session; message context will be cleared after this time (default 3m0s)
   -e, --tls                   enable SSL for the IRC connection
       --tlsinsecure           disable certificate validation
-  -t, --timeout duration      timeout for each completion request to openai (default 1m0s)
+  -t, --timeout duration      timeout for each completion request to openai (default 5m0s)
   -v, --verbose               enable verbose logging of sessions and configuration
       --version               version for soulshack
 ```
