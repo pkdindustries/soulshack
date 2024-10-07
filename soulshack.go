@@ -55,7 +55,7 @@ func run(r *cobra.Command, _ []string) {
 		Nick:      config.Nick,
 		User:      "soulshack",
 		Name:      "soulshack",
-		SSL:       true,
+		SSL:       config.SSL,
 		TLSConfig: &tls.Config{InsecureSkipVerify: config.TLSInsecure},
 	})
 
