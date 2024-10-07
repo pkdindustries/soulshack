@@ -6,4 +6,3 @@ prompt: "3 sentences or less in a boston accent:
 nick: cartalk
 greeting: say hello to the chat group, mention various obscure boston landmarks
 goodbye: say goodbye to the group chat and sign off 
-model: gpt-4o
