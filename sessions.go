@@ -76,23 +76,8 @@ func (s *Session) trimHistory() {
 func (s *Session) Reset() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.Config = LoadConfig()
 	s.History = s.History[:0]
 	s.Last = time.Now()
-}
-
-func (s *Session) Reap() bool {
-	now := time.Now()
-	Sessions.mu.Lock()
-	defer Sessions.mu.Unlock()
-	if Sessions.sessionMap[s.Name] == nil {
-		return true
-	}
-	if now.Sub(s.Last) > s.Config.TTL {
-		delete(Sessions.sessionMap, s.Name)
-		return true
-	}
-	return false
 }
 
 func (sessions *SessionMap) Get(id string, config *Config) *Session {
@@ -122,6 +107,20 @@ func (sessions *SessionMap) Get(id string, config *Config) *Session {
 
 	sessions.sessionMap[id] = session
 	return session
+}
+
+func (s *Session) Reap() bool {
+	now := time.Now()
+	Sessions.mu.Lock()
+	defer Sessions.mu.Unlock()
+	if Sessions.sessionMap[s.Name] == nil {
+		return true
+	}
+	if now.Sub(s.Last) > s.Config.TTL {
+		delete(Sessions.sessionMap, s.Name)
+		return true
+	}
+	return false
 }
 
 // show string of all msg contents

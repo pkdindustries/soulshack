@@ -23,19 +23,19 @@ func Complete(ctx *ChatContext, role string, msg string) {
 	ctx.Session.AddMessage(role, msg)
 
 	respch := ChatCompletionStreamTask(ctx, &CompletionRequest{
-		Client:    ctx.AI,
-		Timeout:   ctx.Session.Config.ClientTimeout,
-		Model:     ctx.Session.Config.Model,
-		MaxTokens: ctx.Session.Config.MaxTokens,
-		Messages:  ctx.Session.GetHistory(),
-		Temp:      ctx.Session.Config.Tempurature,
+		Client:      ctx.AI,
+		Timeout:     ctx.Session.Config.ClientTimeout,
+		Model:       ctx.Session.Config.Model,
+		MaxTokens:   ctx.Session.Config.MaxTokens,
+		Messages:    ctx.Session.GetHistory(),
+		Tempurature: ctx.Session.Config.Tempurature,
 	})
 
 	chunker := &Chunker{
 		Buffer: &bytes.Buffer{},
-		Length: ctx.Session.Config.Chunkmax,
-		Delay:  ctx.Session.Config.Chunkdelay,
-		Quote:  ctx.Session.Config.Chunkquoted,
+		Length: ctx.Session.Config.ChunkMax,
+		Delay:  ctx.Session.Config.ChunkDelay,
+		Quote:  ctx.Session.Config.ChunkQuoted,
 		Last:   time.Now(),
 	}
 
@@ -56,12 +56,12 @@ func Complete(ctx *ChatContext, role string, msg string) {
 
 // CompletionRequest holds all the necessary fields to make a completion request
 type CompletionRequest struct {
-	Timeout   time.Duration
-	Temp      float32
-	Model     string
-	MaxTokens int
-	Client    *ai.Client
-	Messages  []ai.ChatCompletionMessage
+	Timeout     time.Duration
+	Tempurature float32
+	Model       string
+	MaxTokens   int
+	Client      *ai.Client
+	Messages    []ai.ChatCompletionMessage
 }
 
 // StreamResponse is used to handle both content and error in the streaming response
@@ -77,30 +77,6 @@ func ChatCompletionStreamTask(ctx context.Context, req *CompletionRequest) <-cha
 	return ch
 }
 
-// ChatCompletionTask handles synchronous completions
-func ChatCompletionTask(ctx context.Context, req *CompletionRequest) (*string, error) {
-	ctx, cancel := context.WithTimeout(ctx, req.Timeout)
-	defer cancel()
-	log.Printf("completiontask: %v messages", len(req.Messages))
-
-	response, err := req.Client.CreateChatCompletion(ctx, ai.ChatCompletionRequest{
-		MaxTokens:   req.MaxTokens,
-		Model:       req.Model,
-		Messages:    req.Messages,
-		Temperature: req.Temp,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to create chat completion: %w", err)
-	}
-
-	if len(response.Choices) == 0 {
-		return nil, errors.New("no choices returned by the API")
-	}
-
-	log.Printf("completiontask: %v bytes", len(response.Choices[0].Message.Content))
-	return &response.Choices[0].Message.Content, nil
-}
-
 func completionstream(ctx context.Context, req *CompletionRequest, ch chan<- StreamResponse) {
 	defer close(ch)
 	ctx, cancel := context.WithTimeout(ctx, req.Timeout)
@@ -109,10 +85,11 @@ func completionstream(ctx context.Context, req *CompletionRequest, ch chan<- Str
 	log.Printf("completionstream: %v messages", len(req.Messages))
 
 	stream, err := req.Client.CreateChatCompletionStream(ctx, ai.ChatCompletionRequest{
-		MaxTokens: req.MaxTokens,
-		Model:     req.Model,
-		Messages:  req.Messages,
-		Stream:    true,
+		MaxTokens:   req.MaxTokens,
+		Model:       req.Model,
+		Messages:    req.Messages,
+		Temperature: req.Tempurature,
+		Stream:      true,
 	})
 
 	if err != nil {

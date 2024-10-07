@@ -27,9 +27,9 @@ type Config struct {
 	Directory     string
 	Verbose       bool
 	Addressed     bool
-	Chunkdelay    time.Duration
-	Chunkmax      int
-	Chunkquoted   bool
+	ChunkDelay    time.Duration
+	ChunkMax      int
+	ChunkQuoted   bool
 	ClientTimeout time.Duration
 	MaxHistory    int
 	MaxTokens     int
@@ -59,9 +59,9 @@ func LoadConfig() *Config {
 		Directory:     vip.GetString("directory"),
 		Verbose:       vip.GetBool("verbose"),
 		Addressed:     vip.GetBool("addressed"),
-		Chunkdelay:    vip.GetDuration("chunkdelay"),
-		Chunkmax:      vip.GetInt("chunkmax"),
-		Chunkquoted:   vip.GetBool("chunkquoted"),
+		ChunkDelay:    vip.GetDuration("chunkdelay"),
+		ChunkMax:      vip.GetInt("chunkmax"),
+		ChunkQuoted:   vip.GetBool("chunkquoted"),
 		ClientTimeout: vip.GetDuration("apitimeout"),
 		MaxHistory:    vip.GetInt("sessionhistory"),
 		MaxTokens:     vip.GetInt("maxtokens"),
@@ -72,7 +72,6 @@ func LoadConfig() *Config {
 		URL:           vip.GetString("openaiurl"),
 		Prompt:        vip.GetString("prompt"),
 		Greeting:      vip.GetString("greeting"),
-		Goodbye:       vip.GetString("goodbye"),
 		OpenAi:        openai.DefaultConfig(vip.GetString("openaikey")),
 	}
 

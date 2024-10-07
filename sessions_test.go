@@ -174,8 +174,8 @@ func TestSessionReapStress(t *testing.T) {
 	config := &Config{
 		TTL:        timeout,
 		MaxHistory: 10,
-		Chunkdelay: 200 * time.Millisecond,
-		Chunkmax:   5,
+		ChunkDelay: 200 * time.Millisecond,
+		ChunkMax:   5,
 	}
 
 	// Create and store sessions
