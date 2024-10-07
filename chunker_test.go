@@ -9,8 +9,6 @@ import (
 )
 
 func TestChunker_Chunk(t *testing.T) {
-	timeout := 1000 * time.Millisecond
-
 	tests := []struct {
 		name     string
 		input    string
@@ -40,39 +38,39 @@ func TestChunker_Chunk(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := &Chunker{
-				Size:    tt.size,
-				Last:    time.Now(),
-				Buffer:  &bytes.Buffer{},
-				Timeout: timeout,
+				Length: tt.size,
+				Last:   time.Now(),
+				Buffer: &bytes.Buffer{},
+				Delay:  1000 * time.Millisecond,
 			}
 			c.Buffer.WriteString(tt.input)
 
-			chunked, chunk := c.Chunk()
-			if chunked && string(*chunk) != string(tt.expected) {
+			chunk, chunked := c.chunk()
+			if chunked && string(chunk) != string(tt.expected) {
 				t.Errorf("Chunk() got = %v, want = %v", chunk, tt.expected)
 			}
 		})
 	}
 }
 
-// Test for chunking based on timeout
+// // Test for chunking based on timeout
 func TestChunker_Chunk_Timeout(t *testing.T) {
 	timeout := 100 * time.Millisecond
 
 	c := &Chunker{
-		Size:    50,
-		Last:    time.Now(),
-		Buffer:  &bytes.Buffer{},
-		Timeout: timeout,
+		Length: 50,
+		Last:   time.Now(),
+		Buffer: &bytes.Buffer{},
+		Delay:  timeout,
 	}
 	c.Buffer.WriteString("Hello world! How are you?")
 
 	// Wait for timeout duration
 	time.Sleep(500 * time.Millisecond)
 
-	chunked, chunk := c.Chunk()
+	chunk, chunked := c.chunk()
 	expected := []byte("Hello world! ")
-	if chunked && string(*chunk) != string(expected) {
+	if chunked && string(chunk) != string(expected) {
 		t.Errorf("Chunk() got = %v, want = %v", chunk, expected)
 	}
 }
@@ -98,15 +96,15 @@ func BenchmarkChunker_StressTest(b *testing.B) {
 		b.Run(fmt.Sprintf("StressTest_BufferSize_%d", bufSize), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				c := &Chunker{
-					Size:    40,
-					Last:    time.Now(),
-					Buffer:  &bytes.Buffer{},
-					Timeout: timeout,
+					Length: 40,
+					Last:   time.Now(),
+					Buffer: &bytes.Buffer{},
+					Delay:  timeout,
 				}
 				c.Buffer.WriteString(text)
 
 				// Continuously call Chunk() until no chunks are left
-				for chunked, _ := c.Chunk(); chunked; chunked, _ = c.Chunk() {
+				for _, chunked := c.chunk(); chunked; _, chunked = c.chunk() {
 				}
 			}
 		})

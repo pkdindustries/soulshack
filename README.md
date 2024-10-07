@@ -56,7 +56,6 @@ Flags:
       --greeting string       prompt to be used when the bot joins the channel (default "hello.")
   -h, --help                  help for soulshack
   -H, --history int           maximum number of lines of context to keep per session (default 15)
-  -l, --list                  list configured personalities
       --maxtokens int         maximum number of tokens to generate (default 512)
       --model string          model to be used for responses e.g., gpt-4 (default "gpt-4")
   -n, --nick string           bot's nickname on the irc server (default "soulshack")
@@ -66,7 +65,8 @@ Flags:
       --prompt string         initial system prompt for the ai (default "respond in a short text:")
   -s, --server string         irc server address (default "localhost")
   -S, --session duration      duration for the chat session; message context will be cleared after this time (default 3m0s)
-  -e, --ssl                   enable SSL for the IRC connection
+  -e, --tls                   enable SSL for the IRC connection
+      --tlsinsecure           disable certificate validation
   -t, --timeout duration      timeout for each completion request to openai (default 1m0s)
   -v, --verbose               enable verbose logging of sessions and configuration
       --version               version for soulshack
@@ -103,11 +103,8 @@ soulshack --server localhost --channel '#marvinshouse' --become marvin
 - `/set`: set a configuration parameter (e.g., `/set nick newnick`)
 - `/get`: get the current value of a configuration parameter (e.g., `/get nick`)
 - `/save`: save the current configuration as a personality (e.g., `/save mypersonality`)
-- `/become`: adopt a new personality (e.g., `/become mypersonality`)
-- `/list`: show available personalities
 - `/leave`: make the bot leave the channel and exit
 - `/help`: display help for available commands
-- `/say [/as <personality>]`: privately message the bot and have it reply in public
 
 [jacob, high five me](https://i.redd.it/8y2blwiyvira1.png)
 

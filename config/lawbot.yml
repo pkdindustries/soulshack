@@ -12,4 +12,4 @@ greeting: say hello to the group chat
           say that you are willing to help with all legal issues
           apologize about the thing with the hookers
 goodbye: show billable hours for today, they should be way over 560
-model: gpt-4
+model: gpt-4o

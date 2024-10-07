@@ -4,127 +4,149 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
+	"log"
+	"strings"
+	"sync"
 	"time"
 
 	ai "github.com/sashabaranov/go-openai"
 )
 
-func ChatCompletionTask(ctx *ChatContext) <-chan *string {
-	ch := make(chan *string)
-	go chatCompletionStream(ctx, ch)
+var (
+	once   sync.Once
+	client *ai.Client
+)
+
+func Complete(ctx *ChatContext, role string, msg string) {
+	ctx.Session.AddMessage(role, msg)
+
+	respch := ChatCompletionStreamTask(ctx, &CompletionRequest{
+		Client:    ctx.AI,
+		Timeout:   ctx.Session.Config.ClientTimeout,
+		Model:     ctx.Session.Config.Model,
+		MaxTokens: ctx.Session.Config.MaxTokens,
+		Messages:  ctx.Session.GetHistory(),
+		Temp:      ctx.Session.Config.Tempurature,
+	})
+
+	chunker := &Chunker{
+		Buffer: &bytes.Buffer{},
+		Length: ctx.Session.Config.Chunkmax,
+		Delay:  ctx.Session.Config.Chunkdelay,
+		Quote:  ctx.Session.Config.Chunkquoted,
+		Last:   time.Now(),
+	}
+
+	chunkch := chunker.ChunkingFilter(respch)
+
+	all := strings.Builder{}
+	for reply := range chunkch {
+		if reply.Err != nil {
+			ctx.Client.Cmd.Reply(*ctx.Event, "error: "+reply.Err.Error())
+			continue
+		}
+		all.WriteString(reply.Content)
+		ctx.Client.Cmd.Reply(*ctx.Event, reply.Content)
+	}
+
+	ctx.Session.AddMessage(RoleAssistant, all.String())
+}
+
+// CompletionRequest holds all the necessary fields to make a completion request
+type CompletionRequest struct {
+	Timeout   time.Duration
+	Temp      float32
+	Model     string
+	MaxTokens int
+	Client    *ai.Client
+	Messages  []ai.ChatCompletionMessage
+}
+
+// StreamResponse is used to handle both content and error in the streaming response
+type StreamResponse struct {
+	Content string
+	Err     error
+}
+
+// ChatCompletionStreamTask handles streaming completions asynchronously
+func ChatCompletionStreamTask(ctx context.Context, req *CompletionRequest) <-chan StreamResponse {
+	ch := make(chan StreamResponse, 10)
+	go completionstream(ctx, req, ch)
 	return ch
 }
 
-func chatCompletionStream(cc *ChatContext, channel chan<- *string) {
+// ChatCompletionTask handles synchronous completions
+func ChatCompletionTask(ctx context.Context, req *CompletionRequest) (*string, error) {
+	ctx, cancel := context.WithTimeout(ctx, req.Timeout)
+	defer cancel()
+	log.Printf("completiontask: %v messages", len(req.Messages))
 
-	defer close(channel)
-	cc.Stats()
+	response, err := req.Client.CreateChatCompletion(ctx, ai.ChatCompletionRequest{
+		MaxTokens:   req.MaxTokens,
+		Model:       req.Model,
+		Messages:    req.Messages,
+		Temperature: req.Temp,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create chat completion: %w", err)
+	}
 
-	ctx, cancel := context.WithTimeout(cc, cc.Session.Config.ClientTimeout)
+	if len(response.Choices) == 0 {
+		return nil, errors.New("no choices returned by the API")
+	}
+
+	log.Printf("completiontask: %v bytes", len(response.Choices[0].Message.Content))
+	return &response.Choices[0].Message.Content, nil
+}
+
+func completionstream(ctx context.Context, req *CompletionRequest, ch chan<- StreamResponse) {
+	defer close(ch)
+	ctx, cancel := context.WithTimeout(ctx, req.Timeout)
 	defer cancel()
 
-	stream, err := cc.AI.CreateChatCompletionStream(ctx, ai.ChatCompletionRequest{
-		MaxTokens: cc.Session.Config.MaxTokens,
-		Model:     cc.Personality.Model,
-		Messages:  cc.Session.GetHistory(),
+	log.Printf("completionstream: %v messages", len(req.Messages))
+
+	stream, err := req.Client.CreateChatCompletionStream(ctx, ai.ChatCompletionRequest{
+		MaxTokens: req.MaxTokens,
+		Model:     req.Model,
+		Messages:  req.Messages,
 		Stream:    true,
 	})
 
 	if err != nil {
-		senderror(err, channel)
+		ch <- StreamResponse{Err: fmt.Errorf("failed to create chat completion stream: %w", err)}
 		return
 	}
-
 	defer stream.Close()
-	chunker := &Chunker{
-		Size:    cc.Session.Config.Chunkmax,
-		Last:    time.Now(),
-		Timeout: cc.Session.Config.Chunkdelay,
-		Buffer:  &bytes.Buffer{},
-	}
 
 	for {
-		response, err := stream.Recv()
-		if err != nil {
-			send(chunker.Buffer.String(), channel)
-			if !errors.Is(err, io.EOF) {
-				senderror(err, channel)
-			}
+		select {
+		case <-ctx.Done():
+			log.Println("completionstream: context canceled")
 			return
-		}
-		if len(response.Choices) != 0 {
-			chunker.Buffer.WriteString(response.Choices[0].Delta.Content)
-		}
-		for {
-			if ready, chunk := chunker.Chunk(); ready {
-				send(string(*chunk), channel)
-			} else {
-				break
+		default:
+			response, err := stream.Recv()
+			if err != nil {
+				if errors.Is(err, io.EOF) {
+					log.Println("completionstream: EOF")
+					ch <- StreamResponse{Content: "\n"}
+				} else {
+					ch <- StreamResponse{Err: fmt.Errorf("stream receive error: %w", err)}
+				}
+				return
+			}
+			if len(response.Choices) > 0 {
+				ch <- StreamResponse{Content: response.Choices[0].Delta.Content}
 			}
 		}
 	}
 }
 
-func senderror(err error, channel chan<- *string) {
-	e := err.Error()
-	channel <- &e
-}
-
-func send(chunk string, channel chan<- *string) {
-	channel <- &chunk
-}
-
-type Chunker struct {
-	Size    int
-	Last    time.Time
-	Buffer  *bytes.Buffer
-	Timeout time.Duration
-}
-
-func (c *Chunker) Chunk() (bool, *[]byte) {
-
-	end := c.Size
-	if c.Buffer.Len() < end {
-		end = c.Buffer.Len()
-	}
-
-	// chunk on a newline in first chunksize
-	index := bytes.IndexByte(c.Buffer.Bytes()[:end], '\n')
-	if index != -1 {
-		chunk := c.Buffer.Next(index + 1)
-		c.Last = time.Now()
-		return true, &chunk
-	}
-
-	// chunk if full buffer satisfies chunk size
-	if c.Buffer.Len() >= c.Size {
-		chunk := c.Buffer.Next(c.Size)
-		c.Last = time.Now()
-		return true, &chunk
-	}
-
-	// chunk on boundary if n seconds have passed since the last chunk
-	if time.Since(c.Last) >= c.Timeout {
-		content := c.Buffer.Bytes()
-		index := c.Boundary(&content)
-		if index != -1 {
-			chunk := c.Buffer.Next(index + 1)
-			c.Last = time.Now()
-			return true, &chunk
-		}
-	}
-
-	// no chunk
-	return false, nil
-}
-
-// other languages are a thing, but for now...
-func (c *Chunker) Boundary(s *[]byte) int {
-	for i := 0; i < len(*s)-1; i++ {
-		if ((*s)[i] == '.' || (*s)[i] == ':' || (*s)[i] == '!' || (*s)[i] == '?') && ((*s)[i+1] == ' ' || (*s)[i+1] == '\t') {
-			return i + 1
-		}
-	}
-	return -1
+func NewAI(config *ai.ClientConfig) *ai.Client {
+	once.Do(func() {
+		client = ai.NewClientWithConfig(*config)
+	})
+	return client
 }

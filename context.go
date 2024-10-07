@@ -7,67 +7,16 @@ import (
 
 	"github.com/lrstanley/girc"
 	ai "github.com/sashabaranov/go-openai"
-	vip "github.com/spf13/viper"
 )
-
-type Personality struct {
-	Prompt   string
-	Greeting string
-	Nick     string
-	Model    string
-	Goodbye  string
-}
-
-type Config struct {
-	Channel   string
-	Nick      string
-	Admins    []string
-	Directory string
-	Verbose   bool
-	Server    string
-	Port      int
-	SSL       bool
-	Addressed bool
-}
 
 type ChatContext struct {
 	context.Context
-	AI          *ai.Client
-	Personality *Personality
-	Config      *Config
-	Client      *girc.Client
-	Event       *girc.Event
-	Session     *ChatSession
-	Args        []string
-}
-
-func PersonalityFromViper(v *vip.Viper) *Personality {
-	return &Personality{
-		Prompt:   v.GetString("prompt"),
-		Greeting: v.GetString("greeting"),
-		Nick:     v.GetString("nick"),
-		Model:    v.GetString("model"),
-		Goodbye:  v.GetString("goodbye"),
-	}
-}
-
-func IrcFromViper(v *vip.Viper) *Config {
-	return &Config{
-		Channel:   v.GetString("channel"),
-		Nick:      v.GetString("nick"),
-		Admins:    v.GetStringSlice("admins"),
-		Directory: v.GetString("directory"),
-		Verbose:   v.GetBool("verbose"),
-		Server:    v.GetString("server"),
-		Port:      v.GetInt("port"),
-		SSL:       v.GetBool("ssl"),
-		Addressed: v.GetBool("addressed"),
-	}
-}
-
-// merge in the viper config
-func (c *ChatContext) SetConfig(v *vip.Viper) {
-	c.Personality = PersonalityFromViper(v)
+	AI *ai.Client
+	//	Config  *Config
+	Client  *girc.Client
+	Event   *girc.Event
+	Session *Session
+	Args    []string
 }
 
 func (s *ChatContext) IsAddressed() bool {
@@ -75,7 +24,7 @@ func (s *ChatContext) IsAddressed() bool {
 }
 
 func (c *ChatContext) IsAdmin() bool {
-	admins := vip.GetStringSlice("admins")
+	admins := c.Session.Config.Admins
 	nick := c.Event.Source.Name
 	if len(admins) == 0 {
 		return true
@@ -93,7 +42,7 @@ func (c *ChatContext) Stats() {
 		len(c.Session.GetHistory()),
 		c.Session.Totalchars,
 		c.Session.Config.MaxTokens,
-		c.Personality.Model)
+		c.Session.Config.Model)
 }
 
 func (c *ChatContext) Reply(message string) *ChatContext {
@@ -103,7 +52,7 @@ func (c *ChatContext) Reply(message string) *ChatContext {
 
 func (c *ChatContext) Valid() bool {
 	// check if the message is addressed to the bot or if being addressed is not required
-	addressed := c.IsAddressed() || !c.Config.Addressed
+	addressed := c.IsAddressed() || !c.Session.Config.Addressed
 	hasArguments := len(c.Args) > 0
 
 	// valid if:
@@ -121,17 +70,15 @@ func (c *ChatContext) GetCommand() string {
 	return strings.ToLower(c.Args[0])
 }
 
-func CreateChatContext(parent context.Context, ai *ai.Client, v *vip.Viper, c *girc.Client, e *girc.Event) (*ChatContext, context.CancelFunc) {
-	timedctx, cancel := context.WithTimeout(parent, v.GetDuration("timeout"))
+func NewChatContext(parentctx context.Context, config *Config, ircclient *girc.Client, e *girc.Event) (*ChatContext, context.CancelFunc) {
+	timedctx, cancel := context.WithTimeout(parentctx, config.ClientTimeout)
 
 	ctx := &ChatContext{
-		Context:     timedctx,
-		AI:          ai,
-		Client:      c,
-		Event:       e,
-		Args:        strings.Fields(e.Last()),
-		Personality: PersonalityFromViper(v),
-		Config:      IrcFromViper(v),
+		Context: timedctx,
+		AI:      NewAI(&config.OpenAi),
+		Client:  ircclient,
+		Event:   e,
+		Args:    strings.Fields(e.Last()),
 	}
 
 	if ctx.IsAddressed() {
@@ -140,7 +87,7 @@ func CreateChatContext(parent context.Context, ai *ai.Client, v *vip.Viper, c *g
 
 	if e.Source == nil {
 		e.Source = &girc.Source{
-			Name: vip.GetString("channel"),
+			Name: config.Channel,
 		}
 	}
 
@@ -148,6 +95,6 @@ func CreateChatContext(parent context.Context, ai *ai.Client, v *vip.Viper, c *g
 	if !girc.IsValidChannel(key) {
 		key = e.Source.Name
 	}
-	ctx.Session = sessions.Get(key)
+	ctx.Session = Sessions.Get(key, config)
 	return ctx, cancel
 }
