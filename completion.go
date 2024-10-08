@@ -105,7 +105,7 @@ func completionstream(ctx context.Context, req *CompletionRequest, ch chan<- Str
 		select {
 		case <-ctx.Done():
 			log.Println("completionstream: context canceled")
-			ch <- StreamResponse{Err: fmt.Errorf("api time exceeded: %w", ctx.Err())}
+			ch <- StreamResponse{Err: fmt.Errorf("api timeout of %s exceeded: %w", req.Timeout.String(), ctx.Err())}
 			return
 		default:
 			response, err := stream.Recv()

@@ -17,8 +17,8 @@ import (
 func TestChatSession(t *testing.T) {
 
 	BotConfig = &Configuration{
-		MaxHistory: 10,
-		TTL:        1 * time.Hour,
+		MaxHistory:      10,
+		SessionDuration: 1 * time.Hour,
 	}
 	//log.SetOutput(io.Discard)
 
@@ -38,8 +38,8 @@ func TestExpiry(t *testing.T) {
 	t.Run("Test session expiration and trimming", func(t *testing.T) {
 
 		BotConfig = &Configuration{
-			MaxHistory: 20,
-			TTL:        500 * time.Millisecond,
+			MaxHistory:      20,
+			SessionDuration: 500 * time.Millisecond,
 		}
 
 		session2 := Sessions.Get("session2")
@@ -70,8 +70,8 @@ func TestSessionConcurrency(t *testing.T) {
 
 	t.Run("Test session concurrency", func(t *testing.T) {
 		BotConfig = &Configuration{
-			MaxHistory: 500 * 2000,
-			TTL:        1 * time.Hour,
+			MaxHistory:      500 * 2000,
+			SessionDuration: 1 * time.Hour,
 		}
 		vip.Set("session", 1*time.Hour)
 		vip.Set("history", 500*2000)
@@ -116,8 +116,8 @@ func TestSingleSessionConcurrency(t *testing.T) {
 
 	t.Run("Test single session concurrency", func(t *testing.T) {
 		BotConfig = &Configuration{
-			MaxHistory: 500 * 200,
-			TTL:        1 * time.Hour,
+			MaxHistory:      500 * 200,
+			SessionDuration: 1 * time.Hour,
 		}
 
 		const concurrentUsers = 500
@@ -156,7 +156,7 @@ func countActiveSessions() int {
 	defer Sessions.mu.Unlock()
 
 	for _, session := range Sessions.sessionMap {
-		if time.Since(session.Last) <= BotConfig.TTL {
+		if time.Since(session.Last) <= BotConfig.SessionDuration {
 			activeSessions++
 		}
 	}
@@ -172,10 +172,10 @@ func TestSessionReapStress(t *testing.T) {
 	Sessions.sessionMap = make(map[string]*Session)
 
 	BotConfig = &Configuration{
-		TTL:        timeout,
-		MaxHistory: 10,
-		ChunkDelay: 200 * time.Millisecond,
-		ChunkMax:   5,
+		SessionDuration: timeout,
+		MaxHistory:      10,
+		ChunkDelay:      200 * time.Millisecond,
+		ChunkMax:        5,
 	}
 
 	// Create and store sessions
@@ -207,6 +207,7 @@ func TestSessionReapStress(t *testing.T) {
 		t.Fatalf("Expected %d active sessions, got %d", expectedActiveSessions, activeSessions)
 	}
 
+	t.Logf("Reaped %d sessions", numSessions-expectedActiveSessions)
 }
 
 func TestSessionWindow(t *testing.T) {
@@ -284,8 +285,8 @@ func BenchmarkTrim(b *testing.B) {
 
 func BenchmarkSessionStress(b *testing.B) {
 	BotConfig = &Configuration{
-		TTL:        1 * time.Second, // Short session duration to trigger more expirations
-		MaxHistory: 5,               // Shorter history length to trigger more trimming
+		SessionDuration: 1 * time.Second, // Short session duration to trigger more expirations
+		MaxHistory:      5,               // Shorter history length to trigger more trimming
 	}
 
 	log.SetOutput(io.Discard)

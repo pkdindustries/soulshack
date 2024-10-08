@@ -96,7 +96,7 @@ func (sessions *SessionMap) Get(id string) *Session {
 	// start session reaper, returns when the session is gone
 	go func() {
 		for {
-			time.Sleep(BotConfig.TTL)
+			time.Sleep(BotConfig.SessionDuration)
 			if session.Reap() {
 				return
 			}
@@ -114,7 +114,7 @@ func (s *Session) Reap() bool {
 	if Sessions.sessionMap[s.Name] == nil {
 		return true
 	}
-	if now.Sub(s.Last) > BotConfig.TTL {
+	if now.Sub(s.Last) > BotConfig.SessionDuration {
 		delete(Sessions.sessionMap, s.Name)
 		return true
 	}

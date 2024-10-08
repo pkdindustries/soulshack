@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"log"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/sashabaranov/go-openai"
@@ -14,33 +16,68 @@ var ModifiableConfigKeys = []string{"nick", "channel", "model", "addressed", "pr
 var BotConfig *Configuration
 
 type Configuration struct {
-	Nick          string
-	Server        string
-	Port          int
-	Channel       string
-	SSL           bool
-	TLSInsecure   bool
-	SASLNick      string
-	SASLPass      string
-	Admins        []string
-	Verbose       bool
-	Addressed     bool
-	ChunkDelay    time.Duration
-	ChunkMax      int
-	ChunkQuoted   bool
-	ClientTimeout time.Duration
-	MaxHistory    int
-	MaxTokens     int
-	ReactMode     bool
-	TTL           time.Duration
-	APIKey        string
-	Model         string
-	Temperature   float32
-	TopP          float32
-	URL           string
-	Prompt        string
-	Greeting      string
-	OpenAI        openai.ClientConfig
+	Nick            string
+	Server          string
+	Port            int
+	Channel         string
+	SSL             bool
+	TLSInsecure     bool
+	SASLNick        string
+	SASLPass        string
+	Admins          []string
+	Verbose         bool
+	Addressed       bool
+	ChunkDelay      time.Duration
+	ChunkMax        int
+	ChunkQuoted     bool
+	ClientTimeout   time.Duration
+	MaxHistory      int
+	MaxTokens       int
+	ReactMode       bool
+	SessionDuration time.Duration
+	APIKey          string
+	Model           string
+	Temperature     float32
+	TopP            float32
+	URL             string
+	Prompt          string
+	Greeting        string
+	OpenAI          openai.ClientConfig
+}
+
+func (c *Configuration) PrintConfig() {
+	fmt.Printf("[configuration]\n")
+	fmt.Printf("nick: %s\n", c.Nick)
+	fmt.Printf("server: %s\n", c.Server)
+	fmt.Printf("port: %d\n", c.Port)
+	fmt.Printf("channel: %s\n", c.Channel)
+	fmt.Printf("tls: %t\n", c.SSL)
+	fmt.Printf("tlsinsecure: %t\n", c.TLSInsecure)
+	fmt.Printf("saslnick: %s\n", c.SASLNick)
+	fmt.Printf("saslpass: %s\n", c.SASLPass)
+	fmt.Printf("admins: %v\n", c.Admins)
+	fmt.Printf("verbose: %t\n", c.Verbose)
+	fmt.Printf("addressed: %t\n", c.Addressed)
+	fmt.Printf("chunkdelay: %s\n", c.ChunkDelay)
+	fmt.Printf("chunkmax: %d\n", c.ChunkMax)
+	fmt.Printf("chunkquoted: %t\n", c.ChunkQuoted)
+	fmt.Printf("clienttimeout: %s\n", c.ClientTimeout)
+	fmt.Printf("maxhistory: %d\n", c.MaxHistory)
+	fmt.Printf("maxtokens: %d\n", c.MaxTokens)
+	fmt.Printf("reactmode: %t\n", c.ReactMode)
+	fmt.Printf("sessionduration: %s\n", c.SessionDuration)
+	if len(c.APIKey) > 3 && c.APIKey != "" {
+		fmt.Printf("openapikey: %s\n", strings.Repeat("*", len(c.APIKey)-3)+c.APIKey[len(c.APIKey)-3:])
+	} else {
+		fmt.Printf("openapikey: %s\n", c.APIKey)
+	}
+	fmt.Printf("openaiurl: %s\n", c.OpenAI.BaseURL)
+
+	fmt.Printf("model: %s\n", c.Model)
+	fmt.Printf("temperature: %f\n", c.Temperature)
+	fmt.Printf("topp: %f\n", c.TopP)
+	fmt.Printf("prompt: %s\n", c.Prompt)
+	fmt.Printf("greeting: %s\n", c.Greeting)
 }
 
 func loadConfig() {
@@ -55,43 +92,46 @@ func loadConfig() {
 	}
 
 	BotConfig = &Configuration{
-		Nick:          vip.GetString("nick"),
-		Server:        vip.GetString("server"),
-		Port:          vip.GetInt("port"),
-		Channel:       vip.GetString("channel"),
-		SSL:           vip.GetBool("tls"),
-		TLSInsecure:   vip.GetBool("tlsinsecure"),
-		SASLNick:      vip.GetString("saslnick"),
-		SASLPass:      vip.GetString("saslpass"),
-		Admins:        vip.GetStringSlice("admins"),
-		Verbose:       vip.GetBool("verbose"),
-		Addressed:     vip.GetBool("addressed"),
-		ChunkDelay:    vip.GetDuration("chunkdelay"),
-		ChunkMax:      vip.GetInt("chunkmax"),
-		ChunkQuoted:   vip.GetBool("chunkquoted"),
-		ClientTimeout: vip.GetDuration("apitimeout"),
-		MaxHistory:    vip.GetInt("sessionhistory"),
-		MaxTokens:     vip.GetInt("maxtokens"),
-		ReactMode:     vip.GetBool("reactmode"),
-		TTL:           vip.GetDuration("sessionduration"),
-		APIKey:        vip.GetString("openaikey"),
-		Model:         vip.GetString("model"),
-		Temperature:   float32(vip.GetFloat64("temperature")),
-		TopP:          float32(vip.GetFloat64("top_p")),
-		URL:           vip.GetString("openaiurl"),
-		Prompt:        vip.GetString("prompt"),
-		Greeting:      vip.GetString("greeting"),
-		OpenAI:        openai.DefaultConfig(vip.GetString("openaikey")),
+		Nick:            vip.GetString("nick"),
+		Server:          vip.GetString("server"),
+		Port:            vip.GetInt("port"),
+		Channel:         vip.GetString("channel"),
+		SSL:             vip.GetBool("tls"),
+		TLSInsecure:     vip.GetBool("tlsinsecure"),
+		SASLNick:        vip.GetString("saslnick"),
+		SASLPass:        vip.GetString("saslpass"),
+		Admins:          vip.GetStringSlice("admins"),
+		Verbose:         vip.GetBool("verbose"),
+		Addressed:       vip.GetBool("addressed"),
+		ChunkDelay:      vip.GetDuration("chunkdelay"),
+		ChunkMax:        vip.GetInt("chunkmax"),
+		ChunkQuoted:     vip.GetBool("chunkquoted"),
+		ClientTimeout:   vip.GetDuration("apitimeout"),
+		MaxHistory:      vip.GetInt("sessionhistory"),
+		MaxTokens:       vip.GetInt("maxtokens"),
+		ReactMode:       vip.GetBool("reactmode"),
+		SessionDuration: vip.GetDuration("sessionduration"),
+		APIKey:          vip.GetString("openaikey"),
+		Model:           vip.GetString("model"),
+		Temperature:     float32(vip.GetFloat64("temperature")),
+		TopP:            float32(vip.GetFloat64("top_p")),
+		Prompt:          vip.GetString("prompt"),
+		Greeting:        vip.GetString("greeting"),
+		OpenAI:          openai.DefaultConfig(vip.GetString("openaikey")),
 	}
 
-	if vip.GetString("openaiurl") != "" {
-		log.Println("using alternate OpenAI API URL:", vip.GetString("openaiurl"))
-		BotConfig.OpenAI.BaseURL = vip.GetString("openaiurl")
+	baseurl := vip.GetString("openaiurl")
+	if baseurl != "" {
+		log.Println("using alternate OpenAI API URL:", baseurl)
+		BotConfig.OpenAI.BaseURL = baseurl
 	}
 
 	// Verify required configuration settings
 	if err := verifyConfig(); err != nil {
-		log.Fatalf("invalid configuration: %v", err)
+		fmt.Println("")
+		fmt.Println("invalid configuration,", err)
+		fmt.Println("use soulshack --help for more information")
+		os.Exit(-1)
 	}
 }
 
@@ -129,7 +169,7 @@ func InitializeConfig() {
 	// timeouts and behavior
 	root.PersistentFlags().BoolP("addressed", "a", true, "require bot be addressed by nick for response")
 	root.PersistentFlags().DurationP("sessionduration", "S", time.Minute*3, "duration for the chat session; message context will be cleared after this time")
-	root.PersistentFlags().IntP("sessionhistory", "H", 15, "maximum number of lines of context to keep per session")
+	root.PersistentFlags().IntP("sessionhistory", "H", 50, "maximum number of lines of context to keep per session")
 	root.PersistentFlags().DurationP("chunkdelay", "C", time.Second*15, "after this delay, bot will look to split the incoming buffer on sentence boundaries")
 	root.PersistentFlags().IntP("chunkmax", "m", 350, "maximum number of characters to send as a single message")
 
@@ -145,16 +185,19 @@ func InitializeConfig() {
 }
 
 func verifyConfig() error {
-	required := []string{"nick", "server", "channel"}
+	if BotConfig.Verbose {
+		BotConfig.PrintConfig()
+	}
 
 	if BotConfig.OpenAI.BaseURL == "https://api.openai.com/v1" {
-		required = append(required, "openaikey")
-	}
-
-	for _, key := range required {
-		if vip.GetString(key) == "" {
-			return fmt.Errorf("missing required config: %s", key)
+		if vip.GetString("openaikey") == "" {
+			return fmt.Errorf("missing required configuration key: %s", "openaikey")
 		}
 	}
+
+	if BotConfig.Channel == "" {
+		return fmt.Errorf("missing required config: %s", "channel")
+	}
+
 	return nil
 }
