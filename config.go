@@ -124,6 +124,7 @@ func InitializeConfig() {
 	root.PersistentFlags().DurationP("apitimeout", "t", time.Minute*5, "timeout for each completion request")
 	root.PersistentFlags().Float32("temperature", 0.7, "temperature for the completion")
 	root.PersistentFlags().Float32("top_p", 1, "top P value for the completion")
+	root.PersistentFlags().Bool("reactmode", false, "enable ReAct mode for the bot")
 
 	// timeouts and behavior
 	root.PersistentFlags().BoolP("addressed", "a", true, "require bot be addressed by nick for response")
@@ -144,7 +145,12 @@ func InitializeConfig() {
 }
 
 func verifyConfig() error {
-	required := []string{"nick", "server", "channel", "openaikey"}
+	required := []string{"nick", "server", "channel"}
+
+	if BotConfig.OpenAI.BaseURL == "https://api.openai.com/v1" {
+		required = append(required, "openaikey")
+	}
+
 	for _, key := range required {
 		if vip.GetString(key) == "" {
 			return fmt.Errorf("missing required config: %s", key)

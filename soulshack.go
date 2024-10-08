@@ -24,13 +24,14 @@ import (
 var root = &cobra.Command{
 	Use:     "soulshack",
 	Example: "soulshack --nick chatbot --server irc.freenode.net --port 6697 --channel '#soulshack' --tls --openaikey ****************",
-	Short:   getBanner(),
 	Run:     runBot,
 	Version: "0.6 - http://github.com/pkdindustries/soulshack",
 }
 
 func main() {
+	fmt.Printf("%s\n", getBanner())
 	InitializeConfig()
+
 	if err := root.Execute(); err != nil {
 		log.Fatal(err)
 	}
@@ -99,7 +100,7 @@ func runBot(r *cobra.Command, _ []string) {
 	})
 
 	for {
-		log.Println("connecting to server:", irc.Config.Server, "port:", irc.Config.Port, "tls:", irc.Config.SSL)
+		log.Printf("connecting to server:%s, port:%d, tls:%t, sasl:%t, api:%s", irc.Config.Server, irc.Config.Port, irc.Config.SSL, irc.Config.SASL != nil, BotConfig.OpenAI.BaseURL)
 		if err := irc.Connect(); err != nil {
 			log.Println(err)
 			log.Println("reconnecting in 5 seconds...")
