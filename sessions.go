@@ -49,7 +49,6 @@ func (s *Session) AddMessage(role string, message string) {
 
 	if len(s.History) == 0 {
 		s.addMessage(RoleSystem, BotConfig.Prompt)
-		s.Totalchars += len(BotConfig.Prompt)
 	}
 
 	s.addMessage(role, message)
@@ -130,4 +129,5 @@ func (s *Session) Debug() {
 		ds += fmt.Sprintf("%s:%s", msg.Role, msg.Content)
 		log.Println(ds)
 	}
+	log.Println("Total chars:", s.Totalchars)
 }

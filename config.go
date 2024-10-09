@@ -33,7 +33,7 @@ type Configuration struct {
 	ClientTimeout   time.Duration
 	MaxHistory      int
 	MaxTokens       int
-	ReactMode       bool
+	Functions       bool
 	SessionDuration time.Duration
 	APIKey          string
 	Model           string
@@ -64,7 +64,7 @@ func (c *Configuration) PrintConfig() {
 	fmt.Printf("clienttimeout: %s\n", c.ClientTimeout)
 	fmt.Printf("maxhistory: %d\n", c.MaxHistory)
 	fmt.Printf("maxtokens: %d\n", c.MaxTokens)
-	fmt.Printf("reactmode: %t\n", c.ReactMode)
+	fmt.Printf("functions: %t\n", c.Functions)
 	fmt.Printf("sessionduration: %s\n", c.SessionDuration)
 	if len(c.APIKey) > 3 && c.APIKey != "" {
 		fmt.Printf("openapikey: %s\n", strings.Repeat("*", len(c.APIKey)-3)+c.APIKey[len(c.APIKey)-3:])
@@ -109,7 +109,7 @@ func loadConfig() {
 		ClientTimeout:   vip.GetDuration("apitimeout"),
 		MaxHistory:      vip.GetInt("sessionhistory"),
 		MaxTokens:       vip.GetInt("maxtokens"),
-		ReactMode:       vip.GetBool("reactmode"),
+		Functions:       vip.GetBool("functions"),
 		SessionDuration: vip.GetDuration("sessionduration"),
 		APIKey:          vip.GetString("openaikey"),
 		Model:           vip.GetString("model"),
@@ -164,7 +164,7 @@ func InitializeConfig() {
 	root.PersistentFlags().DurationP("apitimeout", "t", time.Minute*5, "timeout for each completion request")
 	root.PersistentFlags().Float32("temperature", 0.7, "temperature for the completion")
 	root.PersistentFlags().Float32("top_p", 1, "top P value for the completion")
-	root.PersistentFlags().Bool("reactmode", false, "enable ReAct mode for the bot")
+	root.PersistentFlags().Bool("functions", false, "enable function calls")
 
 	// timeouts and behavior
 	root.PersistentFlags().BoolP("addressed", "a", true, "require bot be addressed by nick for response")
