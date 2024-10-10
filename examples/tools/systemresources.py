@@ -84,13 +84,15 @@ def execute(resource_json):
                             stat_info = f.readline().split()
                             process_name = stat_info[1].strip("()")
                             process_state = stat_info[2]
-                            processes.append((pid, process_name, process_state))
+                            user_time = int(stat_info[13]) / os.sysconf(os.sysconf_names['SC_CLK_TCK'])
+                            system_time = int(stat_info[14]) / os.sysconf(os.sysconf_names['SC_CLK_TCK'])
+                            processes.append((pid, process_name, process_state, user_time, system_time))
                     except FileNotFoundError:
                         # Process might have ended before we could read it
                         continue
-            print("PID	NAME	STATE")
-            for pid, name, state in processes:
-                print(f"{pid}	{name}	{state}")
+            print("PID	NAME	STATE	USER_TIME	SYSTEM_TIME")
+            for pid, name, state, u_time, s_time in processes:
+                print(f"{pid}	{name}	{state}	{u_time:.2f}s	{s_time:.2f}s")
         elif resource_type == "docker":
             # Get Docker container information using the docker command line
             try:
