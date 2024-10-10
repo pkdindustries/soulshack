@@ -25,7 +25,7 @@ var root = &cobra.Command{
 	Use:     "soulshack --channel <channel> [--nick <nickname>] [--server <server>] [--port <port>] [--tls] [--openaikey <key>]",
 	Example: "soulshack --nick chatbot --server irc.freenode.net --port 6697 --channel '#soulshack' --tls --openaikey ****************",
 	Run:     runBot,
-	Version: "0.6 - http://github.com/pkdindustries/soulshack",
+	Version: "0.7 - http://github.com/pkdindustries/soulshack",
 }
 
 func main() {

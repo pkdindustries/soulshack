@@ -12,7 +12,19 @@ import (
 	vip "github.com/spf13/viper"
 )
 
-var ModifiableConfigKeys = []string{"nick", "channel", "model", "addressed", "prompt", "maxtokens", "temperature", "top_p", "admins"}
+var ModifiableConfigKeys = []string{
+	"nick",
+	"channel",
+	"model",
+	"addressed",
+	"prompt",
+	"maxtokens",
+	"temperature",
+	"top_p",
+	"admins",
+	"tools",
+}
+
 var BotConfig *Configuration
 
 type Configuration struct {
@@ -33,7 +45,6 @@ type Configuration struct {
 	ClientTimeout   time.Duration
 	MaxHistory      int
 	MaxTokens       int
-	Functions       bool
 	SessionDuration time.Duration
 	APIKey          string
 	Model           string
@@ -43,6 +54,9 @@ type Configuration struct {
 	Prompt          string
 	Greeting        string
 	OpenAI          openai.ClientConfig
+	ToolRegistry    *ToolRegistry
+	ToolsDir        string
+	Tools           bool
 }
 
 func (c *Configuration) PrintConfig() {
@@ -64,7 +78,8 @@ func (c *Configuration) PrintConfig() {
 	fmt.Printf("clienttimeout: %s\n", c.ClientTimeout)
 	fmt.Printf("maxhistory: %d\n", c.MaxHistory)
 	fmt.Printf("maxtokens: %d\n", c.MaxTokens)
-	fmt.Printf("functions: %t\n", c.Functions)
+	fmt.Printf("tools: %t\n", c.Tools)
+	fmt.Printf("toolsdir: %s\n", c.ToolsDir)
 	fmt.Printf("sessionduration: %s\n", c.SessionDuration)
 	if len(c.APIKey) > 3 && c.APIKey != "" {
 		fmt.Printf("openapikey: %s\n", strings.Repeat("*", len(c.APIKey)-3)+c.APIKey[len(c.APIKey)-3:])
@@ -109,7 +124,8 @@ func loadConfig() {
 		ClientTimeout:   vip.GetDuration("apitimeout"),
 		MaxHistory:      vip.GetInt("sessionhistory"),
 		MaxTokens:       vip.GetInt("maxtokens"),
-		Functions:       vip.GetBool("functions"),
+		Tools:           vip.GetBool("tools"),
+		ToolsDir:        vip.GetString("toolsdir"),
 		SessionDuration: vip.GetDuration("sessionduration"),
 		APIKey:          vip.GetString("openaikey"),
 		Model:           vip.GetString("model"),
@@ -126,8 +142,17 @@ func loadConfig() {
 		BotConfig.OpenAI.BaseURL = baseurl
 	}
 
-	// Verify required configuration settings
-	if err := verifyConfig(); err != nil {
+	if BotConfig.Tools {
+		toolsDir := vip.GetString("toolsdir")
+		registry, err := NewToolRegistry(toolsDir)
+		if err != nil {
+			log.Println("failed to load tools:", err)
+		} else {
+			BotConfig.ToolRegistry = registry
+		}
+	}
+
+	if err := VerifyConfig(); err != nil {
 		fmt.Println("")
 		fmt.Println("invalid configuration,", err)
 		fmt.Println("use soulshack --help for more information")
@@ -164,7 +189,8 @@ func InitializeConfig() {
 	root.PersistentFlags().DurationP("apitimeout", "t", time.Minute*5, "timeout for each completion request")
 	root.PersistentFlags().Float32("temperature", 0.7, "temperature for the completion")
 	root.PersistentFlags().Float32("top_p", 1, "top P value for the completion")
-	root.PersistentFlags().Bool("functions", false, "enable function calls")
+	root.PersistentFlags().Bool("tools", false, "enable tool use")
+	root.PersistentFlags().String("toolsdir", "examples/tools", "directory to load tools from")
 
 	// timeouts and behavior
 	root.PersistentFlags().BoolP("addressed", "a", true, "require bot be addressed by nick for response")
@@ -184,7 +210,7 @@ func InitializeConfig() {
 
 }
 
-func verifyConfig() error {
+func VerifyConfig() error {
 	if BotConfig.Verbose {
 		BotConfig.PrintConfig()
 	}

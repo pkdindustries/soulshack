@@ -7,6 +7,7 @@ import (
 
 	"github.com/neurosnap/sentences"
 	"github.com/neurosnap/sentences/english"
+	ai "github.com/sashabaranov/go-openai"
 )
 
 // Chunker handles splitting a stream of text into smaller chunks.
@@ -19,32 +20,27 @@ type Chunker struct {
 }
 
 // ChunkingFilter reads from the input channel and returns a channel with chunked responses.
-func (c *Chunker) ChunkingFilter(input <-chan StreamResponse) <-chan StreamResponse {
-	out := make(chan StreamResponse, 10)
-	go c.processChunks(input, out)
-	return out
+func (c *Chunker) ChunkingFilter(messageChan <-chan StreamResponse) <-chan StreamResponse {
+	chunkedChan := make(chan StreamResponse, 10)
+	go c.processChunks(messageChan, chunkedChan)
+	return chunkedChan
 }
 
 // processChunks reads data from the input channel, writes it to the buffer, and triggers chunking.
-func (c *Chunker) processChunks(input <-chan StreamResponse, out chan<- StreamResponse) {
-	defer close(out)
-	for val := range input {
+func (c *Chunker) processChunks(messageChan <-chan StreamResponse, chunkedChan chan<- StreamResponse) {
+	defer close(chunkedChan)
+	for val := range messageChan {
 		if val.Err != nil {
-			out <- StreamResponse{Err: val.Err}
-			continue
-		}
-		c.Buffer.WriteString(val.Content)
-		c.chunker(out)
-	}
-}
-
-// chunker repeatedly checks the buffer for chunks to send out.'
-func (c *Chunker) chunker(out chan<- StreamResponse) {
-	for {
-		if chunk, chunked := c.chunk(); chunked {
-			out <- StreamResponse{Content: string(chunk)}
-		} else {
+			chunkedChan <- StreamResponse{Err: val.Err}
 			break
+		}
+		c.Buffer.WriteString(val.Message.Content)
+		for {
+			if chunk, chunked := c.chunk(); chunked {
+				chunkedChan <- StreamResponse{Message: ai.ChatCompletionMessage{Role: ai.ChatMessageRoleAssistant, Content: string(chunk)}}
+			} else {
+				break
+			}
 		}
 	}
 }

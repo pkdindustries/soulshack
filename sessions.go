@@ -15,10 +15,6 @@ var Sessions = SessionMap{
 	mu:         sync.RWMutex{},
 }
 
-const RoleSystem = "system"
-const RoleUser = "user"
-const RoleAssistant = "assistant"
-
 type SessionMap struct {
 	sessionMap map[string]*Session
 	mu         sync.RWMutex
@@ -29,7 +25,7 @@ type Session struct {
 	Last       time.Time
 	mu         sync.RWMutex
 	Name       string
-	Totalchars int
+	TotalChars int
 	Stash      map[string]any
 }
 
@@ -43,24 +39,24 @@ func (s *Session) GetHistory() []ai.ChatCompletionMessage {
 	return history
 }
 
-func (s *Session) AddMessage(role string, message string) {
+func (s *Session) AddMessage(msg ai.ChatCompletionMessage) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	if len(s.History) == 0 {
-		s.addMessage(RoleSystem, BotConfig.Prompt)
+		s.addMessage(ai.ChatCompletionMessage{Role: ai.ChatMessageRoleSystem, Content: BotConfig.Prompt})
 	}
 
-	s.addMessage(role, message)
+	s.addMessage(msg)
 	s.trimHistory()
 	if BotConfig.Verbose {
 		s.Debug()
 	}
 }
 
-func (s *Session) addMessage(role string, message string) {
-	s.History = append(s.History, ai.ChatCompletionMessage{Role: role, Content: message})
-	s.Totalchars += len(message)
+func (s *Session) addMessage(msg ai.ChatCompletionMessage) {
+	s.History = append(s.History, msg)
+	s.TotalChars += len(msg.Content)
 	s.Last = time.Now()
 }
 
@@ -129,5 +125,5 @@ func (s *Session) Debug() {
 		ds += fmt.Sprintf("%s:%s", msg.Role, msg.Content)
 		log.Println(ds)
 	}
-	log.Println("Total chars:", s.Totalchars)
+	log.Println("Total chars:", s.TotalChars)
 }

@@ -7,11 +7,16 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	ai "github.com/sashabaranov/go-openai"
 )
 
 func greeting(ctx *ChatContext) {
 	log.Println("sending greeting...")
-	Complete(ctx, RoleAssistant, BotConfig.Greeting)
+	Complete(ctx, ai.ChatCompletionMessage{
+		Role:    ai.ChatMessageRoleAssistant,
+		Content: BotConfig.Greeting,
+	})
 	ctx.Session.Reset()
 }
 
@@ -94,6 +99,14 @@ func slashSet(ctx *ChatContext) {
 		}
 		BotConfig.Admins = admins
 		ctx.Reply(fmt.Sprintf("%s set to: %s", param, strings.Join(BotConfig.Admins, ", ")))
+	case "tools":
+		toolUse, err := strconv.ParseBool(value)
+		if err != nil {
+			ctx.Reply("Invalid value for tooluse. Please provide 'true' or 'false'.")
+			return
+		}
+		BotConfig.Tools = toolUse
+		ctx.Reply(fmt.Sprintf("%s set to: %t", param, BotConfig.Tools))
 	}
 
 	ctx.Session.Reset()
@@ -163,5 +176,8 @@ func slashLeave(ctx *ChatContext) {
 
 func completionResponse(ctx *ChatContext) {
 	msg := strings.Join(ctx.Args, " ")
-	Complete(ctx, RoleUser, msg)
+	Complete(ctx, ai.ChatCompletionMessage{
+		Role:    ai.ChatMessageRoleUser,
+		Content: msg,
+	})
 }

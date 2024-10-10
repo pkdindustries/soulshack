@@ -39,7 +39,7 @@ func (c *ChatContext) IsAdmin() bool {
 func (c *ChatContext) Stats() {
 	log.Printf("session: messages %d, bytes %d, maxtokens %d, model %s",
 		len(c.Session.GetHistory()),
-		c.Session.Totalchars,
+		c.Session.TotalChars,
 		BotConfig.MaxTokens,
 		BotConfig.Model)
 }

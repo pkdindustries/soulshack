@@ -19,10 +19,27 @@ var (
 	client *ai.Client
 )
 
-func Complete(ctx *ChatContext, role string, msg string) {
-	ctx.Session.AddMessage(role, msg)
+type CompletionRequest struct {
+	Timeout     time.Duration
+	Temperature float32
+	TopP        float32
+	Model       string
+	MaxTokens   int
+	Client      *ai.Client
+	Messages    []ai.ChatCompletionMessage
+	Tools       bool
+}
 
-	respch := ChatCompletionStreamTask(ctx, &CompletionRequest{
+type StreamResponse struct {
+	Message ai.ChatCompletionMessage
+	Err     error
+}
+
+func Complete(ctx *ChatContext, msg ai.ChatCompletionMessage) {
+
+	ctx.Session.AddMessage(msg)
+
+	messageChan, toolCallChan := ChatCompletionStreamTask(ctx, &CompletionRequest{
 		Client:      ctx.AI,
 		Timeout:     BotConfig.ClientTimeout,
 		Model:       BotConfig.Model,
@@ -30,6 +47,7 @@ func Complete(ctx *ChatContext, role string, msg string) {
 		Messages:    ctx.Session.GetHistory(),
 		Temperature: BotConfig.Temperature,
 		TopP:        BotConfig.TopP,
+		Tools:       true,
 	})
 
 	chunker := &Chunker{
@@ -40,86 +58,129 @@ func Complete(ctx *ChatContext, role string, msg string) {
 		Last:   time.Now(),
 	}
 
-	chunkch := chunker.ChunkingFilter(respch)
+	chunkChan := chunker.ChunkingFilter(messageChan)
 
-	all := strings.Builder{}
-	for reply := range chunkch {
-		if reply.Err != nil {
-			ctx.Client.Cmd.Reply(*ctx.Event, "error: "+reply.Err.Error())
-			continue
+	for {
+		select {
+		case reply, ok := <-chunkChan:
+			if !ok {
+				chunkChan = nil
+				continue
+			}
+			if reply.Err != nil {
+				log.Println("error:", reply.Err)
+				ctx.Client.Cmd.Reply(*ctx.Event, "error:"+reply.Err.Error())
+				continue
+			}
+			ctx.Client.Cmd.Reply(*ctx.Event, reply.Message.Content)
+			ctx.Session.AddMessage(reply.Message)
+		case toolCall, ok := <-toolCallChan:
+			if !ok {
+				toolCallChan = nil
+				continue
+			}
+			log.Printf("Function Call Received: %v", toolCall)
+
+			soultool, err := BotConfig.ToolRegistry.GetToolByName(toolCall.Function.Name)
+			if err != nil {
+				ctx.Client.Cmd.Reply(*ctx.Event, "error: "+err.Error())
+				continue
+			}
+			toolmsg, err := soultool.Execute(*ctx, toolCall)
+
+			if err != nil {
+				log.Printf("Error executing function: %v", err)
+				ctx.Client.Cmd.Reply(*ctx.Event, "error: "+err.Error())
+				continue
+			}
+			// wtf
+			ctx.Session.AddMessage(ai.ChatCompletionMessage{Role: ai.ChatMessageRoleAssistant, ToolCalls: []ai.ToolCall{toolCall}})
+			log.Println("tool result:", toolmsg.Content)
+			Complete(ctx, toolmsg)
 		}
-		all.WriteString(reply.Content)
-		ctx.Client.Cmd.Reply(*ctx.Event, reply.Content)
+
+		if chunkChan == nil && toolCallChan == nil {
+			break
+		}
 	}
-
-	ctx.Session.AddMessage(RoleAssistant, all.String())
-}
-
-// CompletionRequest holds all the necessary fields to make a completion request
-type CompletionRequest struct {
-	Timeout     time.Duration
-	Temperature float32
-	TopP        float32
-	Model       string
-	MaxTokens   int
-	Client      *ai.Client
-	Messages    []ai.ChatCompletionMessage
-}
-
-// StreamResponse is used to handle both content and error in the streaming response
-type StreamResponse struct {
-	Content string
-	Err     error
 }
 
 // ChatCompletionStreamTask handles streaming completions asynchronously
-func ChatCompletionStreamTask(ctx context.Context, req *CompletionRequest) <-chan StreamResponse {
-	ch := make(chan StreamResponse, 10)
-	go completionstream(ctx, req, ch)
-	return ch
+func ChatCompletionStreamTask(ctx *ChatContext, req *CompletionRequest) (<-chan StreamResponse, <-chan ai.ToolCall) {
+	messageChannel := make(chan StreamResponse, 10)
+	toolChannel := make(chan ai.ToolCall, 10)
+	go completionstream(ctx, req, messageChannel, toolChannel)
+	return messageChannel, toolChannel
 }
 
-func completionstream(ctx context.Context, req *CompletionRequest, ch chan<- StreamResponse) {
-	defer close(ch)
-	ctx, cancel := context.WithTimeout(ctx, req.Timeout)
+func completionstream(ctx *ChatContext, req *CompletionRequest, messageChannel chan<- StreamResponse, toolChannel chan<- ai.ToolCall) {
+	defer close(messageChannel)
+	defer close(toolChannel)
+	timeout, cancel := context.WithTimeout(ctx, req.Timeout)
 	defer cancel()
 
-	log.Printf("completionstream: %v messages", len(req.Messages))
+	tools := make([]ai.Tool, 0)
+	if req.Tools {
+		tools = BotConfig.ToolRegistry.GetToolDefinitions()
+	}
 
-	stream, err := req.Client.CreateChatCompletionStream(ctx, ai.ChatCompletionRequest{
+	stream, err := req.Client.CreateChatCompletionStream(timeout, ai.ChatCompletionRequest{
 		MaxCompletionsTokens: req.MaxTokens,
 		Model:                req.Model,
 		Messages:             req.Messages,
 		Temperature:          req.Temperature,
 		TopP:                 req.TopP,
 		Stream:               true,
+		Tools:                tools,
 	})
 
 	if err != nil {
-		ch <- StreamResponse{Err: fmt.Errorf("failed to create chat completion stream: %w", err)}
+		messageChannel <- StreamResponse{Err: fmt.Errorf("failed to create chat completion stream: %w", err)}
 		return
 	}
 	defer stream.Close()
 
+	var assemblingToolCall bool
+	var partialToolCall ai.ToolCall
 	for {
 		select {
-		case <-ctx.Done():
+		case <-timeout.Done():
 			log.Println("completionstream: context canceled")
-			ch <- StreamResponse{Err: fmt.Errorf("api timeout of %s exceeded: %w", req.Timeout.String(), ctx.Err())}
+			messageChannel <- StreamResponse{Err: fmt.Errorf("api timeout of %s exceeded: %w", req.Timeout.String(), ctx.Err())}
 			return
 		default:
 			response, err := stream.Recv()
 			if err != nil {
 				if errors.Is(err, io.EOF) {
-					log.Println("completionstream: EOF")
-					ch <- StreamResponse{Content: "\n"}
+					log.Println("completionstream: finished")
+					msg := ai.ChatCompletionMessage{Role: ai.ChatMessageRoleAssistant, Content: "\n", ToolCalls: []ai.ToolCall{partialToolCall}}
+					messageChannel <- StreamResponse{Message: msg}
 				} else {
-					ch <- StreamResponse{Err: fmt.Errorf("stream receive error: %w", err)}
+					messageChannel <- StreamResponse{Err: fmt.Errorf("stream receive error: %w", err)}
 				}
 				return
 			}
+
+			// api streams chunks of the toolcalls, we need to assemble them
+			// this is the janky and should probably be part of the chunker?
+			if len(response.Choices) > 0 && len(response.Choices[0].Delta.ToolCalls) > 0 {
+				toolCall := response.Choices[0].Delta.ToolCalls[0]
+
+				if !assemblingToolCall {
+					partialToolCall = toolCall
+					assemblingToolCall = true
+				}
+				partialToolCall.Function.Arguments += toolCall.Function.Arguments
+				if strings.HasSuffix(toolCall.Function.Arguments, "\"}") {
+					log.Println("completionstream: tool call assembled", partialToolCall)
+					toolChannel <- partialToolCall
+					assemblingToolCall = false
+				}
+			}
+
 			if len(response.Choices) > 0 {
-				ch <- StreamResponse{Content: response.Choices[0].Delta.Content}
+				msg := ai.ChatCompletionMessage{Role: ai.ChatMessageRoleAssistant, Content: response.Choices[0].Delta.Content}
+				messageChannel <- StreamResponse{Message: msg}
 			}
 		}
 	}
