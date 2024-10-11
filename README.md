@@ -13,7 +13,7 @@ soulshack is an irc chat bot that utilizes an openai api endpoint to generate hu
 - utilizes the openai api and compatible endpoints like ollama
 - allows dynamic configuration of bot settings through commands
 - supports ssl and SASL
-
+- tool calling (on openai models)
 
 ## building
 
