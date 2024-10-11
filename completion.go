@@ -89,8 +89,6 @@ func Complete(ctx *ChatContext, msg ai.ChatCompletionMessage) {
 
 			if err != nil {
 				log.Printf("Error executing function: %v", err)
-				ctx.Client.Cmd.Reply(*ctx.Event, "error: "+err.Error())
-				continue
 			}
 			// wtf
 			ctx.Session.AddMessage(ai.ChatCompletionMessage{Role: ai.ChatMessageRoleAssistant, ToolCalls: []ai.ToolCall{toolCall}})
