@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"strings"
 	"sync"
 	"time"
 
@@ -95,7 +94,6 @@ func Complete(ctx *ChatContext, msg ai.ChatCompletionMessage) {
 			}
 			// wtf
 			ctx.Session.AddMessage(ai.ChatCompletionMessage{Role: ai.ChatMessageRoleAssistant, ToolCalls: []ai.ToolCall{toolCall}})
-			log.Println("tool result:", toolmsg.Content)
 			Complete(ctx, toolmsg)
 		}
 
@@ -150,6 +148,7 @@ func completionstream(ctx *ChatContext, req *CompletionRequest, messageChannel c
 			return
 		default:
 			response, err := stream.Recv()
+			//log.Println("completionstream: response", response)
 			if err != nil {
 				if errors.Is(err, io.EOF) {
 					log.Println("completionstream: finished")
@@ -161,26 +160,31 @@ func completionstream(ctx *ChatContext, req *CompletionRequest, messageChannel c
 				return
 			}
 
-			// api streams chunks of the toolcalls, we need to assemble them
-			// this is the janky and should probably be part of the chunker?
-			if len(response.Choices) > 0 && len(response.Choices[0].Delta.ToolCalls) > 0 {
-				toolCall := response.Choices[0].Delta.ToolCalls[0]
-
-				if !assemblingToolCall {
-					partialToolCall = toolCall
-					assemblingToolCall = true
-				}
-				partialToolCall.Function.Arguments += toolCall.Function.Arguments
-				if strings.HasSuffix(toolCall.Function.Arguments, "\"}") {
+			if len(response.Choices) > 0 {
+				choice := response.Choices[0]
+				if choice.FinishReason == ai.FinishReasonToolCalls {
+					log.Println("completionstream:", choice.FinishReason)
 					log.Println("completionstream: tool call assembled", partialToolCall)
 					toolChannel <- partialToolCall
 					assemblingToolCall = false
 				}
-			}
 
-			if len(response.Choices) > 0 {
-				msg := ai.ChatCompletionMessage{Role: ai.ChatMessageRoleAssistant, Content: response.Choices[0].Delta.Content}
-				messageChannel <- StreamResponse{Message: msg}
+				// api streams chunks of the toolcalls, we need to assemble them
+				// this is the janky and should probably be part of the chunker?
+				if len(choice.Delta.ToolCalls) > 0 {
+					toolCall := choice.Delta.ToolCalls[0]
+					if !assemblingToolCall {
+						log.Println("completionstream: assembling tool call", toolCall)
+						partialToolCall = toolCall
+						assemblingToolCall = true
+					}
+					partialToolCall.Function.Arguments += toolCall.Function.Arguments
+				}
+
+				if len(choice.Delta.Content) > 0 {
+					msg := ai.ChatCompletionMessage{Role: ai.ChatMessageRoleAssistant, Content: choice.Delta.Content}
+					messageChannel <- StreamResponse{Message: msg}
+				}
 			}
 		}
 	}
