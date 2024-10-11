@@ -30,11 +30,8 @@ type StreamResponse struct {
 
 func Complete(ctx *ChatContext, msg ai.ChatCompletionMessage) {
 	ctx.Session.AddMessage(msg)
-
 	messageChan, toolChan := ChatCompletionStreamTask(ctx, newCompletionRequest(ctx))
-
 	chunkChan := newChunker().Filter(messageChan)
-
 	processCompletionStreams(ctx, chunkChan, toolChan)
 }
 

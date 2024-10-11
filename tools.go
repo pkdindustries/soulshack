@@ -107,9 +107,9 @@ type ShellTool struct {
 	Command     string
 }
 
-// wrapper around a shell script to implement the SoulshackTool interface
+// wrapper around an executable shell script / binary to implement the SoulshackTool interface
 func (s *ShellTool) GetTool() (ai.Tool, error) {
-	// Obtain the JSON schema by executing the binary with the --schema argument
+	// Obtain the JSON schema by executing with the --schema argument
 	cmd := exec.Command(s.Command, "--schema")
 	schemaOutput, err := cmd.Output()
 	if err != nil {
