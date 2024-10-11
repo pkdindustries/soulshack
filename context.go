@@ -23,12 +23,12 @@ func (s *ChatContext) IsAddressed() bool {
 }
 
 func (c *ChatContext) IsAdmin() bool {
-	admins := BotConfig.Admins
+
 	nick := c.Event.Source.Name
-	if len(admins) == 0 {
+	if len(BotConfig.Admins) == 0 {
 		return true
 	}
-	for _, user := range admins {
+	for _, user := range BotConfig.Admins {
 		if user == nick {
 			return true
 		}
@@ -67,7 +67,7 @@ func NewChatContext(parentctx context.Context, ircclient *girc.Client, e *girc.E
 
 	ctx := &ChatContext{
 		Context: timedctx,
-		AI:      GetAIClient(&BotConfig.OpenAI),
+		AI:      ai.NewClientWithConfig(BotConfig.OpenAI),
 		Client:  ircclient,
 		Event:   e,
 		Args:    strings.Fields(e.Last()),
