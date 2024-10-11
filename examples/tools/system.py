@@ -15,8 +15,8 @@ def print_schema():
         "properties": {
             "resource": {
                 "type": "string",
-                "description": "The type of system resource to monitor (e.g., 'cpu', 'memory', 'disk', 'processes', 'docker', 'full')",
-                "enum": ["cpu", "memory", "disk", "processes", "docker", "full"]
+                "description": "The type of system resource to monitor (e.g., 'cpu', 'memory', 'disk', 'processes', 'docker', 'all', 'loadavg')",
+                "enum": ["cpu", "memory", "disk", "processes", "docker", "all", "loadavg", "uptime"]
             }
         },
         "required": ["resource"],
@@ -28,7 +28,7 @@ def get_name():
     print("system_resource_monitor")
 
 def get_description():
-    print("provides system resource usage such as CPU, memory, disk, process, and Docker container information")
+    print("provides system resource usage such as CPU, memory, disk, process, Docker container, and load average information")
 
 def execute(resource_json):
     try:
@@ -40,7 +40,7 @@ def execute(resource_json):
             sys.exit(1)
         
         # Provide system resource information based on the requested type
-        if resource_type == "cpu" or resource_type == "full":
+        if resource_type == "cpu" or resource_type == "all":
             # Get CPU information using /proc/stat
             with open("/proc/stat", "r") as f:
                 line = f.readline()
@@ -50,7 +50,7 @@ def execute(resource_json):
                     total_time = sum(cpu_times)
                     print(f"Total CPU Time: {total_time}")
                     print(f"Idle CPU Time: {idle_time}")
-        if resource_type == "memory" or resource_type == "full":
+        if resource_type == "memory" or resource_type == "all":
             # Get memory information using /proc/meminfo
             with open("/proc/meminfo", "r") as f:
                 meminfo = {}
@@ -66,7 +66,7 @@ def execute(resource_json):
                 print(f"Total Memory: {total_memory:.2f} MB")
                 print(f"Used Memory: {used_memory:.2f} MB")
                 print(f"Free Memory: {free_memory:.2f} MB")
-        if resource_type == "disk" or resource_type == "full":
+        if resource_type == "disk" or resource_type == "all":
             # Get disk space information for all mounted volumes
             with open("/proc/mounts", "r") as f:
                 mounts = [line.split()[1] for line in f if line.startswith("/dev/")]
@@ -77,7 +77,7 @@ def execute(resource_json):
                 print(f"  Total Disk Space: {total / (1024 * 1024 * 1024):.2f} GB")
                 print(f"  Used Disk Space: {used / (1024 * 1024 * 1024):.2f} GB")
                 print(f"  Free Disk Space: {free / (1024 * 1024 * 1024):.2f} GB")
-        if resource_type == "processes" or resource_type == "full":
+        if resource_type == "processes" or resource_type == "all":
             # Get process information using /proc
             processes = []
             for pid in os.listdir("/proc"):
@@ -95,30 +95,35 @@ def execute(resource_json):
                     except FileNotFoundError:
                         # Process might have ended before we could read it
                         continue
-            print("PID	USERNAME	NAME	STATE	USER_TIME	SYSTEM_TIME")
+            print("PID\tUSERNAME\tNAME\tSTATE\tUSER_TIME\tSYSTEM_TIME")
             for pid, username, name, state, u_time, s_time in processes:
-                print(f"{pid}	{username}	{name}	{state}	{u_time:.2f}s	{s_time:.2f}s")
-        if resource_type == "docker" or resource_type == "full":
+                print(f"{pid}\t{username}\t{name}\t{state}\t{u_time:.2f}s\t{s_time:.2f}s")
+        if resource_type == "docker" or resource_type == "all":
             # Get Docker container information using the docker command line
             try:
                 result = subprocess.run(["docker", "ps", "--format", "{{.ID}}\t{{.Image}}\t{{.Status}}\t{{.Names}}"], capture_output=True, text=True, check=True)
                 if result.stdout:
-                    print("CONTAINER ID	IMAGE	STATUS	NAME	CPU %	MEMORY USAGE / LIMIT	UPTIME")
-                    container_ids = [line.split()[0] for line in result.stdout.strip().split('\n')]
-                    for container_id in container_ids:
-                        stats_result = subprocess.run(["docker", "stats", container_id, "--no-stream", "--format", "{{.CPUPerc}}\t{{.MemUsage}}\t{{.ID}}"], capture_output=True, text=True, check=True)
-                        if stats_result.stdout:
-                            stats = stats_result.stdout.strip().split('\t')
-                            cpu_usage = stats[0]
-                            mem_usage = stats[1]
-                            uptime_result = subprocess.run(["docker", "inspect", "-f", "{{.State.StartedAt}}", container_id], capture_output=True, text=True, check=True)
-                            if uptime_result.stdout:
-                                started_at = uptime_result.stdout.strip()
-                                started_at_epoch = time.mktime(time.strptime(started_at.split('.')[0], "%Y-%m-%dT%H:%M:%S"))
-                                uptime_seconds = time.time() - started_at_epoch
-                                uptime = time.strftime("%H:%M:%S", time.gmtime(uptime_seconds))
-                                container_info = [line for line in result.stdout.strip().split('\n') if container_id in line][0]
-                                print(f"{container_info}\t{cpu_usage}\t{mem_usage}\t{uptime}")
+                    print("CONTAINER ID\tIMAGE\tSTATUS\tNAME\tCPU %\tMEMORY USAGE / LIMIT\tUPTIME")
+                    container_info_lines = result.stdout.strip().split('\n')
+                    container_info = {line.split('\t')[0]: line for line in container_info_lines}
+
+                    # Fetch stats for all containers in one go
+                    stats_result = subprocess.run(["docker", "stats", "--no-stream", "--format", "{{.ID}}\t{{.CPUPerc}}\t{{.MemUsage}}"], capture_output=True, text=True, check=True)
+                    if stats_result.stdout:
+                        for line in stats_result.stdout.strip().split('\n'):
+                            container_id, cpu_usage, mem_usage = line.split('\t')
+                            if container_id in container_info:
+                                uptime_result = subprocess.run(["docker", "inspect", "-f", "{{.State.StartedAt}}", container_id], capture_output=True, text=True, check=True)
+                                if uptime_result.stdout:
+                                    started_at = uptime_result.stdout.strip()
+                                    started_at_epoch = time.mktime(time.strptime(started_at.split('.')[0], "%Y-%m-%dT%H:%M:%S"))
+                                    uptime_seconds = time.time() - started_at_epoch
+                                    uptime = time.strftime("%H:%M:%S", time.gmtime(uptime_seconds))
+
+                                    # Print consolidated container stats
+                                    print(f"{container_info[container_id]}\t{cpu_usage}\t{mem_usage}\t{uptime}")
+                    else:
+                        print("No running Docker containers found.")
                 else:
                     print("No running Docker containers found.")
             except FileNotFoundError:
@@ -127,8 +132,21 @@ def execute(resource_json):
             except subprocess.CalledProcessError:
                 print("Error: Failed to run Docker command.", file=sys.stderr)
                 sys.exit(1)
-        if resource_type not in ["cpu", "memory", "disk", "processes", "docker", "full"]:
-            print(f"Error: Unknown resource type '{resource_type}'. Supported types are 'cpu', 'memory', 'disk', 'processes', 'docker', 'full'.", file=sys.stderr)
+        if resource_type == "loadavg" or resource_type == "uptime" or resource_type == "all":
+            # Get load average and system uptime using uptime command
+            try:
+                uptime_result = subprocess.run(["uptime"], capture_output=True, text=True, check=True)
+                if uptime_result.stdout:
+                    uptime_info = uptime_result.stdout.strip()
+                    print(f"Uptime and Load Average: {uptime_info}")
+            except FileNotFoundError:
+                print("Error: 'uptime' command is not found.", file=sys.stderr)
+                sys.exit(1)
+            except subprocess.CalledProcessError:
+                print("Error: Failed to run 'uptime' command.", file=sys.stderr)
+                sys.exit(1)
+        if resource_type not in ["cpu", "memory", "disk", "processes", "docker", "all", "loadavg", "uptime"]:
+            print(f"Error: Unknown resource type '{resource_type}'. Supported types are 'cpu', 'memory', 'disk', 'processes', 'docker', 'all', 'loadavg'.", file=sys.stderr)
             sys.exit(1)
     except json.JSONDecodeError:
         print("Error: Invalid JSON input.", file=sys.stderr)
@@ -136,7 +154,7 @@ def execute(resource_json):
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: system_resource_monitor.py [--schema | --name | --description | --execute <resource_json>]", file=sys.stderr)
+        print("Usage: system.py [--schema | --name | --description | --execute <resource_json>]", file=sys.stderr)
         sys.exit(1)
 
     command = sys.argv[1]
@@ -149,5 +167,5 @@ if __name__ == "__main__":
     elif command == "--execute" and len(sys.argv) == 3:
         execute(sys.argv[2])
     else:
-        print("Usage: system_resource_monitor.py [--schema | --name | --description | --execute <resource_json>]", file=sys.stderr)
+        print("Usage: system.py [--schema | --name | --description | --execute <resource_json>]", file=sys.stderr)
         sys.exit(1)
