@@ -124,9 +124,10 @@ put a an executable or script in your tooldir location. in order for it to be re
 try to make sure the llm can't inject something in the execute json that will ruin your life. 
 because you can't trust bots or the people who use them.
 
-```bash
-#!/bin/bash
+to be honest you shouldn't do this will shell scripts, it's kind of a minefield.
+so here's a shell script
 
+```bash
 set -e
 
 # Check if --schema argument is provided
@@ -161,17 +162,31 @@ if [[ "$1" == "--description" ]]; then
 fi
 
 if [[ "$1" == "--execute" ]]; then
+  # Ensure jq is available
+  if ! command -v jq &> /dev/null; then
+    echo "Error: jq is not installed." >&2
+    exit 1
+  fi
 
-  # extract format field from JSON
+  # Extract format field from JSON
   format=$(jq -r '.format' <<< "$2")
 
-  # Use exec to prevent command injection
-  exec date "$format"
+  # Sanitize the format string
+  if [[ "$format" =~ [^a-zA-Z0-9%+:/\ \-] ]]; then
+    echo "Error: Invalid characters in format string." >&2
+    exit 1
+  fi
+
+  # Use -- to prevent option parsing
+  date_output=$(date -- "$format")
+  echo "$date_output"
   exit 0
 fi
 
+
 # if no arguments, show usage
-echo "Usage: currentdate.sh [--schema | --name | --description | --execute <format>]"
+# shellcheck disable=SC2140
+echo "Usage: currentdate.sh [--schema | --name | --description | --execute '{"format": "+%Y-%m-%d %H:%M:%S"}']"
 ```
 ![jacob, high five me](https://i.imgur.com/CDccJ5r.png)
 
