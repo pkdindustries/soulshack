@@ -46,7 +46,7 @@ func Complete(ctx *ChatContext, msg ai.ChatCompletionMessage) {
 		Messages:    ctx.Session.GetHistory(),
 		Temperature: BotConfig.Temperature,
 		TopP:        BotConfig.TopP,
-		Tools:       true,
+		Tools:       BotConfig.Tools,
 	})
 
 	chunker := &Chunker{

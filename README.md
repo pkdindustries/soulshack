@@ -69,6 +69,8 @@ Flags:
       --temperature float32        temperature for the completion (default 0.7)
   -e, --tls                        enable TLS for the IRC connection
       --tlsinsecure                skip TLS certificate verification
+      --tools                      enable tool use (default false)
+      --toolsdir                   directory to load tools from (default "examples/tools")
       --top_p float32              top P value for the completion (default 1)
   -v, --verbose                    enable verbose logging of sessions and configuration
       --version                    version for soulshack
@@ -108,6 +110,69 @@ soulshack --config /path/to/marvin.yml
 - `/leave`: make the bot leave the channel and exit
 - `/help`: display help for available commands
 
+
+## tools
+
+put a an executable or script in your tooldir location. in order for it to be registerd it must respond to the following commands:
+
+- --schema: Outputs a JSON schema describing the tool use.
+- --name: Outputs the name of the tool.
+- --description: Outputs a description of the tool.
+- --execute $json: Will be called with JSON matching your schema
+
+
+try to make sure the llm can't inject something in the execute json that will ruin your life. 
+because you can't trust bots or the people who use them.
+
+```bash
+#!/bin/bash
+
+set -e
+
+# Check if --schema argument is provided
+if [[ "$1" == "--schema" ]]; then
+  # Output a JSON schema to describe the tool
+  # shellcheck disable=SC2016
+  cat <<EOF
+{
+  "schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "format": {
+      "type": "string",
+      "description": "The format for the date output (e.g., +%Y-%m-%d %H:%M:%S)"
+    }
+  },
+  "required": ["format"],
+  "additionalProperties": false
+}
+EOF
+  exit 0
+fi
+
+if [[ "$1" == "--name" ]]; then
+  echo "get_current_date_with_format"
+  exit 0
+fi
+
+if [[ "$1" == "--description" ]]; then
+  echo "provides the current date in the specified unix date command format"
+  exit 0
+fi
+
+if [[ "$1" == "--execute" ]]; then
+
+  # extract format field from JSON
+  format=$(jq -r '.format' <<< "$2")
+
+  # Use exec to prevent command injection
+  exec date "$format"
+  exit 0
+fi
+
+# if no arguments, show usage
+echo "Usage: currentdate.sh [--schema | --name | --description | --execute <format>]"
+```
 ![jacob, high five me](https://i.imgur.com/CDccJ5r.png)
 
 ## named as tribute to my old friend dayv, sp0t, who i think of often
