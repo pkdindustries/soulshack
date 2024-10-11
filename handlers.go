@@ -26,7 +26,7 @@ func slashSet(ctx *ChatContext) {
 		return
 	}
 
-	if len(ctx.Args) != 3 {
+	if len(ctx.Args) < 3 {
 		ctx.Reply(fmt.Sprintf("Usage: /set <key> <value>. Available keys: %s", strings.Join(ModifiableConfigKeys, ", ")))
 		return
 	}
