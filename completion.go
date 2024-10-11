@@ -31,16 +31,15 @@ type StreamResponse struct {
 func Complete(ctx *ChatContext, msg ai.ChatCompletionMessage) {
 	ctx.Session.AddMessage(msg)
 
-	messageChan, toolCallChan := ChatCompletionStreamTask(ctx, newCompletionRequest(ctx))
+	messageChan, toolChan := ChatCompletionStreamTask(ctx, newCompletionRequest(ctx))
 
-	chunker := newChunker()
-	chunkChan := chunker.ChunkingFilter(messageChan)
+	chunkChan := newChunker().Filter(messageChan)
 
-	processCompletionStreams(ctx, chunkChan, toolCallChan)
+	processCompletionStreams(ctx, chunkChan, toolChan)
 }
 
-func processCompletionStreams(ctx *ChatContext, chunkChan <-chan StreamResponse, toolCallChan <-chan ai.ToolCall) {
-	for chunkChan != nil || toolCallChan != nil {
+func processCompletionStreams(ctx *ChatContext, chunkChan <-chan StreamResponse, toolChan <-chan ai.ToolCall) {
+	for chunkChan != nil || toolChan != nil {
 		select {
 		case reply, ok := <-chunkChan:
 			if !ok {
@@ -48,9 +47,9 @@ func processCompletionStreams(ctx *ChatContext, chunkChan <-chan StreamResponse,
 				continue
 			}
 			handleReply(ctx, reply)
-		case toolCall, ok := <-toolCallChan:
+		case toolCall, ok := <-toolChan:
 			if !ok {
-				toolCallChan = nil
+				toolChan = nil
 				continue
 			}
 			handleToolCall(ctx, toolCall)
@@ -73,11 +72,12 @@ func newCompletionRequest(ctx *ChatContext) *CompletionRequest {
 
 func newChunker() *Chunker {
 	return &Chunker{
-		Buffer: &bytes.Buffer{},
-		Length: BotConfig.ChunkMax,
-		Delay:  BotConfig.ChunkDelay,
-		Quote:  BotConfig.ChunkQuoted,
-		Last:   time.Now(),
+		Buffer:    &bytes.Buffer{},
+		Length:    BotConfig.ChunkMax,
+		Delay:     BotConfig.ChunkDelay,
+		Quote:     BotConfig.ChunkQuoted,
+		Last:      time.Now(),
+		Tokenizer: BotConfig.Tokenizer,
 	}
 }
 
@@ -119,6 +119,7 @@ func createChatCompletionStream(ctx context.Context, req *CompletionRequest) (*a
 		TopP:                req.TopP,
 		Stream:              true,
 		Tools:               tools,
+		ParallelToolCalls:   false,
 	})
 }
 

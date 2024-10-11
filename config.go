@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/neurosnap/sentences"
+	"github.com/neurosnap/sentences/english"
 	"github.com/sashabaranov/go-openai"
 	"github.com/spf13/cobra"
 	vip "github.com/spf13/viper"
@@ -42,6 +44,7 @@ type Configuration struct {
 	ChunkDelay      time.Duration
 	ChunkMax        int
 	ChunkQuoted     bool
+	Tokenizer       *sentences.DefaultSentenceTokenizer
 	ClientTimeout   time.Duration
 	MaxHistory      int
 	MaxTokens       int
@@ -53,7 +56,8 @@ type Configuration struct {
 	URL             string
 	Prompt          string
 	Greeting        string
-	OpenAI          openai.ClientConfig
+	OpenAIConfig    openai.ClientConfig
+	OpenAiClient    *openai.Client
 	ToolRegistry    *ToolRegistry
 	ToolsDir        string
 	Tools           bool
@@ -86,7 +90,7 @@ func (c *Configuration) PrintConfig() {
 	} else {
 		fmt.Printf("openapikey: %s\n", c.APIKey)
 	}
-	fmt.Printf("openaiurl: %s\n", c.OpenAI.BaseURL)
+	fmt.Printf("openaiurl: %s\n", c.OpenAIConfig.BaseURL)
 
 	fmt.Printf("model: %s\n", c.Model)
 	fmt.Printf("temperature: %f\n", c.Temperature)
@@ -133,14 +137,16 @@ func loadConfig() {
 		TopP:            float32(vip.GetFloat64("top_p")),
 		Prompt:          vip.GetString("prompt"),
 		Greeting:        vip.GetString("greeting"),
-		OpenAI:          openai.DefaultConfig(vip.GetString("openaikey")),
+		OpenAIConfig:    openai.DefaultConfig(vip.GetString("openaikey")),
 	}
 
 	baseurl := vip.GetString("openaiurl")
 	if baseurl != "" {
 		log.Println("using alternate OpenAI API URL:", baseurl)
-		BotConfig.OpenAI.BaseURL = baseurl
+		BotConfig.OpenAIConfig.BaseURL = baseurl
 	}
+
+	BotConfig.OpenAiClient = openai.NewClientWithConfig(BotConfig.OpenAIConfig)
 
 	if BotConfig.Tools {
 		toolsDir := vip.GetString("toolsdir")
@@ -152,7 +158,13 @@ func loadConfig() {
 		}
 	}
 
-	if err := VerifyConfig(); err != nil {
+	tokenizer, err := english.NewSentenceTokenizer(nil)
+	if err != nil {
+		log.Fatal("Error creating tokenizer:", err)
+	}
+	BotConfig.Tokenizer = tokenizer
+
+	if err := verifyConfig(); err != nil {
 		fmt.Println("")
 		fmt.Println("invalid configuration,", err)
 		fmt.Println("use soulshack --help for more information")
@@ -210,12 +222,12 @@ func InitializeConfig() {
 
 }
 
-func VerifyConfig() error {
+func verifyConfig() error {
 	if BotConfig.Verbose {
 		BotConfig.PrintConfig()
 	}
 
-	if BotConfig.OpenAI.BaseURL == "https://api.openai.com/v1" {
+	if BotConfig.OpenAIConfig.BaseURL == "https://api.openai.com/v1" {
 		if vip.GetString("openaikey") == "" {
 			return fmt.Errorf("missing required configuration key: %s", "openaikey")
 		}

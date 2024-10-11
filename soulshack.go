@@ -63,19 +63,19 @@ func runBot(r *cobra.Command, _ []string) {
 	}
 
 	irc.Handlers.AddBg(girc.CONNECTED, func(irc *girc.Client, e girc.Event) {
-		ctx, cancel := NewChatContext(context.Background(), irc, &e)
-		defer cancel()
-
 		log.Println("joining channel:", BotConfig.Channel)
 		irc.Cmd.Join(BotConfig.Channel)
+	})
 
-		time.Sleep(1 * time.Second)
+	irc.Handlers.AddBg(girc.JOIN, func(irc *girc.Client, e girc.Event) {
+		ctx, cancel := NewChatContext(context.Background(), BotConfig.OpenAiClient, irc, &e)
+		defer cancel()
 		greeting(ctx)
 	})
 
 	irc.Handlers.AddBg(girc.PRIVMSG, func(irc *girc.Client, e girc.Event) {
 
-		ctx, cancel := NewChatContext(context.Background(), irc, &e)
+		ctx, cancel := NewChatContext(context.Background(), BotConfig.OpenAiClient, irc, &e)
 		defer cancel()
 
 		if ctx.Valid() {
@@ -99,14 +99,17 @@ func runBot(r *cobra.Command, _ []string) {
 		}
 	})
 
-	for {
-		log.Printf("connecting to server:%s, port:%d, tls:%t, sasl:%t, api:%s", irc.Config.Server, irc.Config.Port, irc.Config.SSL, irc.Config.SASL != nil, BotConfig.OpenAI.BaseURL)
+	// Reconnect loop with a maximum retry limit
+	maxRetries := 5
+	for retries := 0; retries < maxRetries; retries++ {
+		log.Printf("connecting to server:%s, port:%d, tls:%t, sasl:%t, api:%s", irc.Config.Server, irc.Config.Port, irc.Config.SSL, irc.Config.SASL != nil, BotConfig.OpenAIConfig.BaseURL)
 		if err := irc.Connect(); err != nil {
-			log.Println(err)
+			log.Println("connection error:", err)
 			log.Println("reconnecting in 5 seconds...")
 			time.Sleep(5 * time.Second)
-		} else {
-			return
+			continue
 		}
+		return
 	}
+	log.Println("maximum retry limit reached, exiting...")
 }

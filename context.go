@@ -18,6 +18,35 @@ type ChatContext struct {
 	Args    []string
 }
 
+func NewChatContext(parentctx context.Context, aiclient *ai.Client, ircclient *girc.Client, e *girc.Event) (*ChatContext, context.CancelFunc) {
+	timedctx, cancel := context.WithTimeout(parentctx, BotConfig.ClientTimeout)
+
+	ctx := &ChatContext{
+		Context: timedctx,
+		AI:      aiclient,
+		Client:  ircclient,
+		Event:   e,
+		Args:    strings.Fields(e.Last()),
+	}
+
+	if ctx.IsAddressed() {
+		ctx.Args = ctx.Args[1:]
+	}
+
+	if e.Source == nil {
+		e.Source = &girc.Source{
+			Name: BotConfig.Channel,
+		}
+	}
+
+	key := e.Params[0]
+	if !girc.IsValidChannel(key) {
+		key = e.Source.Name
+	}
+	ctx.Session = Sessions.Get(key)
+	return ctx, cancel
+}
+
 func (s *ChatContext) IsAddressed() bool {
 	return strings.HasPrefix(s.Event.Last(), s.Client.GetNick())
 }
@@ -60,33 +89,4 @@ func (c *ChatContext) IsPrivate() bool {
 
 func (c *ChatContext) GetCommand() string {
 	return strings.ToLower(c.Args[0])
-}
-
-func NewChatContext(parentctx context.Context, ircclient *girc.Client, e *girc.Event) (*ChatContext, context.CancelFunc) {
-	timedctx, cancel := context.WithTimeout(parentctx, BotConfig.ClientTimeout)
-
-	ctx := &ChatContext{
-		Context: timedctx,
-		AI:      ai.NewClientWithConfig(BotConfig.OpenAI),
-		Client:  ircclient,
-		Event:   e,
-		Args:    strings.Fields(e.Last()),
-	}
-
-	if ctx.IsAddressed() {
-		ctx.Args = ctx.Args[1:]
-	}
-
-	if e.Source == nil {
-		e.Source = &girc.Source{
-			Name: BotConfig.Channel,
-		}
-	}
-
-	key := e.Params[0]
-	if !girc.IsValidChannel(key) {
-		key = e.Source.Name
-	}
-	ctx.Session = Sessions.Get(key)
-	return ctx, cancel
 }

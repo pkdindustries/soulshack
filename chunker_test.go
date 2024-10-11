@@ -6,6 +6,8 @@ import (
 	"math/rand"
 	"testing"
 	"time"
+
+	"github.com/neurosnap/sentences/english"
 )
 
 func TestChunker_Chunk(t *testing.T) {
@@ -56,12 +58,16 @@ func TestChunker_Chunk(t *testing.T) {
 // // Test for chunking based on timeout
 func TestChunker_Chunk_Timeout(t *testing.T) {
 	timeout := 100 * time.Millisecond
-
+	tokenizer, err := english.NewSentenceTokenizer(nil)
+	if err != nil {
+		t.Fatalf("failed to create sentence tokenizer: %v", err)
+	}
 	c := &Chunker{
-		Length: 50,
-		Last:   time.Now(),
-		Buffer: &bytes.Buffer{},
-		Delay:  timeout,
+		Length:    50,
+		Last:      time.Now(),
+		Buffer:    &bytes.Buffer{},
+		Delay:     timeout,
+		Tokenizer: tokenizer,
 	}
 	c.Buffer.WriteString("Hello world! How are you?")
 

@@ -2,25 +2,24 @@ package main
 
 import (
 	"bytes"
-	"log"
 	"time"
 
 	"github.com/neurosnap/sentences"
-	"github.com/neurosnap/sentences/english"
 	ai "github.com/sashabaranov/go-openai"
 )
 
 // Chunker handles splitting a stream of text into smaller chunks.
 type Chunker struct {
-	Buffer *bytes.Buffer // Buffer to hold incoming data
-	Delay  time.Duration // Time delay before forced chunk
-	Length int           // Maximum chunk size
-	Quote  bool          // Flag for handling code blocks
-	Last   time.Time     // Timestamp of the last chunk
+	Buffer    *bytes.Buffer // Buffer to hold incoming data
+	Delay     time.Duration // Time delay before forced chunk
+	Length    int           // Maximum chunk size
+	Quote     bool          // Flag for handling code blocks
+	Last      time.Time     // Timestamp of the last chunk
+	Tokenizer *sentences.DefaultSentenceTokenizer
 }
 
-// ChunkingFilter reads from the input channel and returns a channel with chunked responses.
-func (c *Chunker) ChunkingFilter(messageChan <-chan StreamResponse) <-chan StreamResponse {
+// Filter reads from the input channel and returns a channel with chunked responses.
+func (c *Chunker) Filter(messageChan <-chan StreamResponse) <-chan StreamResponse {
 	chunkedChan := make(chan StreamResponse, 10)
 	go c.processChunks(messageChan, chunkedChan)
 	return chunkedChan
@@ -119,7 +118,7 @@ func (c *Chunker) chunkByMaxLength() ([]byte, bool) {
 
 // chunkBySentenceBoundary chunks the buffer at a sentence boundary.
 func (c *Chunker) chunkBySentenceBoundary() ([]byte, bool) {
-	index := sentenceBoundary(c.Buffer.Bytes())
+	index := c.sentenceBoundary(c.Buffer.Bytes())
 	if index != -1 {
 		return c.readChunk(index + 1), true
 	}
@@ -133,21 +132,9 @@ func (c *Chunker) readChunk(n int) []byte {
 	return chunk
 }
 
-// Tokenizer for sentence boundary detection
-var tokenizer *sentences.DefaultSentenceTokenizer
-
-// Initialize the tokenizer during package initialization.
-func init() {
-	t, err := english.NewSentenceTokenizer(nil)
-	if err != nil {
-		log.Fatal("Error creating tokenizer:", err)
-	}
-	tokenizer = t
-}
-
 // sentenceBoundary finds the end of the first sentence in the buffer.
-func sentenceBoundary(s []byte) int {
-	sentences := tokenizer.Tokenize(string(s))
+func (c *Chunker) sentenceBoundary(s []byte) int {
+	sentences := c.Tokenizer.Tokenize(string(s))
 	if len(sentences) > 1 {
 		return len([]byte(sentences[0].Text))
 	}
