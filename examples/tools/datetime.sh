@@ -13,7 +13,7 @@ if [[ "$1" == "--schema" ]]; then
   "properties": {
     "format": {
       "type": "string",
-      "description": "The format for the date output (e.g., +%Y-%m-%d %H:%M:%S)"
+      "description": "The format for the date output. use unix date command format (e.g., +%Y-%m-%d %H:%M:%S). always include the leading + sign."
     }
   },
   "required": ["format"],
