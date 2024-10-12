@@ -7,7 +7,7 @@ RUN go get .
 RUN go build -o /soulshack
 
 FROM alpine
-COPY --from=build /src/config /config
+COPY --from=build /src/examples /examples
 COPY --from=build /soulshack /soulshack
 
 CMD ["/soulshack"]
