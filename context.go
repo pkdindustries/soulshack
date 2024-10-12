@@ -53,24 +53,20 @@ func (s *ChatContext) IsAddressed() bool {
 
 func (c *ChatContext) IsAdmin() bool {
 
-	nick := c.Event.Source.Name
+	hostmask := c.Event.Source.String()
+	log.Println("checking hostmask:", hostmask)
+	// XXX: if no admins are configured, all hostmasks are admins
 	if len(BotConfig.Admins) == 0 {
+		log.Println("all hostmasks are admin, please configure admins")
 		return true
 	}
 	for _, user := range BotConfig.Admins {
-		if user == nick {
+		if user == hostmask {
+			log.Println(hostmask, "is admin")
 			return true
 		}
 	}
 	return false
-}
-
-func (c *ChatContext) Stats() {
-	log.Printf("session: messages %d, bytes %d, maxtokens %d, model %s",
-		len(c.Session.GetHistory()),
-		c.Session.TotalChars,
-		BotConfig.MaxTokens,
-		BotConfig.Model)
 }
 
 func (c *ChatContext) Reply(message string) *ChatContext {

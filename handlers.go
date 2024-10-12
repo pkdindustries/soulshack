@@ -176,8 +176,9 @@ func slashLeave(ctx *ChatContext) {
 
 func completionResponse(ctx *ChatContext) {
 	msg := strings.Join(ctx.Args, " ")
+	nick := ctx.Event.Source.Name
 	Complete(ctx, ai.ChatCompletionMessage{
 		Role:    ai.ChatMessageRoleUser,
-		Content: msg,
+		Content: fmt.Sprintf("nick:%s says %s", nick, msg),
 	})
 }

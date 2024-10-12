@@ -33,7 +33,7 @@ func NewToolRegistry(toolsDir string) (*ToolRegistry, error) {
 	}
 
 	for _, file := range files {
-		log.Println("found tool:", file.Name())
+		log.Println("found:", file.Name())
 		if file.IsDir() {
 			continue
 		}
@@ -68,6 +68,7 @@ func NewToolRegistry(toolsDir string) (*ToolRegistry, error) {
 			continue
 		}
 
+		log.Println("registered tool:", shellTool.Name)
 		toolRegistry.Tools[shellTool.Name] = shellTool
 	}
 
@@ -76,6 +77,12 @@ func NewToolRegistry(toolsDir string) (*ToolRegistry, error) {
 
 func (r *ToolRegistry) RegisterTool(name string, tool SoulShackTool) {
 	log.Println("registering tool:", name)
+	// Validate the tool by calling GetTool
+	_, err := tool.GetTool()
+	if err != nil {
+		log.Printf("failed to validate tool %s: %v", name, err)
+		return
+	}
 	r.Tools[name] = tool
 }
 
@@ -141,7 +148,7 @@ func (s *ShellTool) Execute(ctx ChatContext, tool ai.ToolCall) (ai.ChatCompletio
 	var args json.RawMessage
 	err := json.Unmarshal([]byte(tool.Function.Arguments), &args)
 	if err != nil {
-		return ai.ChatCompletionMessage{}, err
+		return ai.ChatCompletionMessage{Role: ai.ChatMessageRoleTool, ToolCallID: tool.ID, Name: s.Name}, err
 	}
 
 	cmd := exec.Command(s.Command, "--execute", string(args))

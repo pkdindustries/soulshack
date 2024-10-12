@@ -152,10 +152,13 @@ func loadConfig() {
 		toolsDir := vip.GetString("toolsdir")
 		registry, err := NewToolRegistry(toolsDir)
 		if err != nil {
-			log.Println("failed to load tools:", err)
+			log.Println("failed to initialize tools:", err)
+			BotConfig.Tools = false
 		} else {
+			RegisterIrcTools(registry)
 			BotConfig.ToolRegistry = registry
 		}
+
 	}
 
 	tokenizer, err := english.NewSentenceTokenizer(nil)
@@ -188,7 +191,7 @@ func InitializeConfig() {
 
 	// bot configuration
 	root.PersistentFlags().StringP("config", "b", "", "use the named configuration file")
-	root.PersistentFlags().StringSliceP("admins", "A", []string{}, "comma-separated list of allowed users to administrate the bot (e.g., user1,user2,user3)")
+	root.PersistentFlags().StringSliceP("admins", "A", []string{}, "comma-separated list of allowed hostmasks to administrate the bot (e.g. alex!~alex@localhost, josh!~josh@localhost)")
 
 	// informational
 	root.PersistentFlags().BoolP("verbose", "v", false, "enable verbose logging of sessions and configuration")
