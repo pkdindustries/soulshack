@@ -43,28 +43,9 @@ func NewToolRegistry(toolsDir string) (*ToolRegistry, error) {
 			Command: toolPath,
 		}
 
-		// Get the tool name
-		cmd := exec.Command(toolPath, "--name")
-		nameOutput, err := cmd.Output()
-		if err != nil {
-			log.Printf("failed to get tool name for %s: %v", toolPath, err)
-			continue
-		}
-		shellTool.Name = strings.Trim(string(nameOutput), "\n")
-
-		// Get the tool description
-		cmd = exec.Command(toolPath, "--description")
-		descriptionOutput, err := cmd.Output()
-		if err != nil {
-			log.Printf("failed to get tool description for %s: %v", toolPath, err)
-			continue
-		}
-		shellTool.Description = strings.Trim(string(descriptionOutput), "\n")
-
-		// check if the tool parses out
-		_, err = shellTool.GetTool()
-		if err != nil {
-			log.Printf("failed to get tool definition for %s: %v", toolPath, err)
+		// Load metadata (name, description, schema)
+		if err := shellTool.LoadMetadata(); err != nil {
+			log.Printf("failed to load metadata for tool %s: %v", toolPath, err)
 			continue
 		}
 
@@ -77,7 +58,7 @@ func NewToolRegistry(toolsDir string) (*ToolRegistry, error) {
 
 func (r *ToolRegistry) RegisterTool(name string, tool SoulShackTool) {
 	log.Println("registering tool:", name)
-	// Validate the tool by calling GetTool
+	// validate the tool by calling GetTool
 	_, err := tool.GetTool()
 	if err != nil {
 		log.Printf("failed to validate tool %s: %v", name, err)
@@ -107,35 +88,58 @@ func (r *ToolRegistry) GetToolDefinitions() []ai.Tool {
 	return tools
 }
 
-// ShellTool is a generic tool that can be configured to execute binaries or scripts.
+// generic tool that can be configured to execute binaries or scripts.
 type ShellTool struct {
 	Name        string
 	Description string
 	Command     string
+	Schema      jsonschema.Definition
 }
 
-// wrapper around an executable shell script / binary to implement the SoulshackTool interface
+// loads the name, description, and schema for the ShellTool.
+func (s *ShellTool) LoadMetadata() error {
+
+	name, err := s.runCommand("--name")
+	if err != nil {
+		return fmt.Errorf("failed to get tool name: %v", err)
+	}
+	s.Name = name
+
+	description, err := s.runCommand("--description")
+	if err != nil {
+		return fmt.Errorf("failed to get tool description: %v", err)
+	}
+	s.Description = description
+
+	schemaOutput, err := s.runCommand("--schema")
+	if err != nil {
+		return fmt.Errorf("failed to get schema: %v", err)
+	}
+
+	err = json.Unmarshal([]byte(schemaOutput), &s.Schema)
+	if err != nil {
+		return fmt.Errorf("failed to unmarshal schema: %v", err)
+	}
+
+	return nil
+}
+
+func (s *ShellTool) runCommand(arg string) (string, error) {
+	cmd := exec.Command(s.Command, arg)
+	output, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(output)), nil
+}
+
 func (s *ShellTool) GetTool() (ai.Tool, error) {
-	// Obtain the JSON schema by executing with the --schema argument
-	cmd := exec.Command(s.Command, "--schema")
-	schemaOutput, err := cmd.Output()
-	if err != nil {
-		log.Printf("failed to get schema: %v", err)
-		return ai.Tool{}, err
-	}
-
-	var schema jsonschema.Definition
-	err = json.Unmarshal(schemaOutput, &schema)
-	if err != nil {
-		log.Printf("failed to unmarshal schema: %v", err)
-	}
-
 	return ai.Tool{
 		Type: ai.ToolTypeFunction,
 		Function: &ai.FunctionDefinition{
 			Name:        s.Name,
 			Description: s.Description,
-			Parameters:  schema,
+			Parameters:  s.Schema,
 			Strict:      true,
 		},
 	}, nil
@@ -155,7 +159,7 @@ func (s *ShellTool) Execute(ctx ChatContext, tool ai.ToolCall) (ai.ChatCompletio
 	output, err := cmd.CombinedOutput()
 
 	log.Printf("tool output: %s", output)
-	output = []byte(strings.Trim(string(output), "\n"))
-	msg := ai.ChatCompletionMessage{ToolCallID: tool.ID, Name: s.Name, Role: ai.ChatMessageRoleTool, Content: string(output)}
+	outputStr := strings.TrimSpace(string(output))
+	msg := ai.ChatCompletionMessage{ToolCallID: tool.ID, Name: s.Name, Role: ai.ChatMessageRoleTool, Content: outputStr}
 	return msg, err
 }
