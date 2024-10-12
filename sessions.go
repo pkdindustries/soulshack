@@ -65,6 +65,13 @@ func (s *Session) trimHistory() {
 		return
 	}
 	s.History = append(s.History[:1], s.History[len(s.History)-BotConfig.MaxHistory:]...)
+
+	// "messages with role 'tool' must be a response to a preceeding message with 'tool_calls'."
+	// if the second oldest message is a tool, remove it
+	// (the first message is the system message)
+	if s.History[1].Role == ai.ChatMessageRoleTool {
+		s.History = append(s.History[:1], s.History[2:]...)
+	}
 }
 
 func (s *Session) Reset() {
