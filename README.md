@@ -45,7 +45,7 @@ soulshack --nick chatbot --server irc.freenode.net --port 6697 --channel '#souls
 
 Flags:
   -a, --addressed                  require bot be addressed by nick for response (default true)
-  -A, --admins strings             comma-separated list of allowed users to administrate the bot (e.g., user1,user2,user3)
+  -A, --admins strings             comma-separated list of allowed hostmasks (e.g. alex!~alex@localhost, josh!~josh@localhost).
   -t, --apitimeout duration        timeout for each completion request (default 5m0s)
   -c, --channel string             irc channel to join
   -C, --chunkdelay duration        after this delay, bot will look to split the incoming buffer on sentence boundaries (default 15s)
