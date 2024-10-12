@@ -113,7 +113,7 @@ soulshack --config /path/to/marvin.yml
 
 ## tools
 
-put a an executable or script in your tooldir location. in order for it to be registerd it must respond to the following commands:
+put an executable or script in your tooldir location. in order for it to be registerd it must respond to the following commands:
 
 - --schema: Outputs a JSON schema describing the tool use.
 - --name: Outputs the name of the tool.
