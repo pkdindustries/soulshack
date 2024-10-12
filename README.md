@@ -60,7 +60,6 @@ Flags:
       --openaiurl string           alternative base url to use instead of openai
   -p, --port int                   irc server port (default 6667)
       --prompt string              initial system prompt (default "you are a helpful chatbot. do not use caps. do not use emoji.")
-      --reactmode                  enable ReAct mode for the bot
       --saslnick string            nick used for SASL
       --saslpass string            password for SASL plain
   -s, --server string              irc server address (default "localhost")
@@ -113,7 +112,7 @@ soulshack --config /path/to/marvin.yml
 
 ## tools
 
-put an executable or script in your tooldir location. in order for it to be registerd it must respond to the following commands:
+put an executable or script in your tooldir location. in order for it to be registered it must respond to the following commands:
 
 - --schema: Outputs a JSON schema describing the tool use.
 - --name: Outputs the name of the tool.
