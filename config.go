@@ -27,7 +27,7 @@ var ModifiableConfigKeys = []string{
 	"tools",
 }
 
-var BotConfig *Configuration
+var Config *Configuration
 
 type Configuration struct {
 	// bot
@@ -118,7 +118,7 @@ func loadConfig() {
 		}
 	}
 
-	BotConfig = &Configuration{
+	Config = &Configuration{
 		Nick:            vip.GetString("nick"),
 		Server:          vip.GetString("server"),
 		Port:            vip.GetInt("port"),
@@ -152,21 +152,21 @@ func loadConfig() {
 	baseurl := vip.GetString("openaiurl")
 	if baseurl != "" {
 		log.Println("using alternate OpenAI API URL:", baseurl)
-		BotConfig.OpenAIConfig.BaseURL = baseurl
+		Config.OpenAIConfig.BaseURL = baseurl
 	}
 
-	BotConfig.OpenAiClient = openai.NewClientWithConfig(BotConfig.OpenAIConfig)
+	Config.OpenAiClient = openai.NewClientWithConfig(Config.OpenAIConfig)
 
 	// initialize tools
-	if BotConfig.Tools {
+	if Config.Tools {
 		toolsDir := vip.GetString("toolsdir")
 		registry, err := NewToolRegistry(toolsDir)
 		if err != nil {
 			log.Println("failed to initialize tools:", err)
-			BotConfig.Tools = false
+			Config.Tools = false
 		} else {
 			RegisterIrcTools(registry)
-			BotConfig.ToolRegistry = registry
+			Config.ToolRegistry = registry
 		}
 	}
 
@@ -175,10 +175,10 @@ func loadConfig() {
 	if err != nil {
 		log.Fatal("Error creating tokenizer:", err)
 	}
-	BotConfig.Tokenizer = tokenizer
+	Config.Tokenizer = tokenizer
 
 	// initialize sessions
-	BotConfig.Sessions = &Sessions{}
+	Config.Sessions = &Sessions{}
 
 	if err := verifyConfig(); err != nil {
 		fmt.Println("")
@@ -239,17 +239,17 @@ func InitializeConfig() {
 }
 
 func verifyConfig() error {
-	if BotConfig.Verbose {
-		BotConfig.PrintConfig()
+	if Config.Verbose {
+		Config.PrintConfig()
 	}
 
-	if BotConfig.OpenAIConfig.BaseURL == "https://api.openai.com/v1" {
+	if Config.OpenAIConfig.BaseURL == "https://api.openai.com/v1" {
 		if vip.GetString("openaikey") == "" {
 			return fmt.Errorf("missing required configuration key: %s", "openaikey")
 		}
 	}
 
-	if BotConfig.Channel == "" {
+	if Config.Channel == "" {
 		return fmt.Errorf("missing required config: %s", "channel")
 	}
 

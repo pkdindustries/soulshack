@@ -57,24 +57,24 @@ func processCompletionStreams(ctx *ChatContext, chunkChan <-chan StreamResponse,
 func newCompletionRequest(ctx *ChatContext) *CompletionRequest {
 	return &CompletionRequest{
 		Client:      ctx.AI,
-		Timeout:     BotConfig.ClientTimeout,
-		Model:       BotConfig.Model,
-		MaxTokens:   BotConfig.MaxTokens,
+		Timeout:     Config.ClientTimeout,
+		Model:       Config.Model,
+		MaxTokens:   Config.MaxTokens,
 		Messages:    ctx.Session.GetHistory(),
-		Temperature: BotConfig.Temperature,
-		TopP:        BotConfig.TopP,
-		Tools:       BotConfig.Tools,
+		Temperature: Config.Temperature,
+		TopP:        Config.TopP,
+		Tools:       Config.Tools,
 	}
 }
 
 func newChunker() *Chunker {
 	return &Chunker{
 		Buffer:    &bytes.Buffer{},
-		Length:    BotConfig.ChunkMax,
-		Delay:     BotConfig.ChunkDelay,
-		Quote:     BotConfig.ChunkQuoted,
+		Length:    Config.ChunkMax,
+		Delay:     Config.ChunkDelay,
+		Quote:     Config.ChunkQuoted,
 		Last:      time.Now(),
-		Tokenizer: BotConfig.Tokenizer,
+		Tokenizer: Config.Tokenizer,
 	}
 }
 
@@ -105,7 +105,7 @@ func completionStream(ctx *ChatContext, req *CompletionRequest, messageChannel c
 func createChatCompletionStream(ctx context.Context, req *CompletionRequest) (*ai.ChatCompletionStream, error) {
 	tools := make([]ai.Tool, 0)
 	if req.Tools {
-		tools = BotConfig.ToolRegistry.GetToolDefinitions()
+		tools = Config.ToolRegistry.GetToolDefinitions()
 	}
 
 	return req.Client.CreateChatCompletionStream(ctx, ai.ChatCompletionRequest{
@@ -158,7 +158,7 @@ func handleReply(ctx *ChatContext, reply StreamResponse) {
 func handleToolCall(ctx *ChatContext, toolCall ai.ToolCall) {
 	log.Printf("Function Call Received: %v", toolCall)
 
-	soultool, err := BotConfig.ToolRegistry.GetToolByName(toolCall.Function.Name)
+	soultool, err := Config.ToolRegistry.GetToolByName(toolCall.Function.Name)
 	if err != nil {
 		ctx.Client.Cmd.Reply(*ctx.Event, "error: "+err.Error())
 		return

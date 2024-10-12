@@ -32,7 +32,7 @@ func (sessions *Sessions) Get(id string) *Session {
 	// start session reaper, returns when the session is gone
 	go func() {
 		for {
-			time.Sleep(BotConfig.SessionDuration)
+			time.Sleep(Config.SessionDuration)
 			if session.Reap() {
 				return
 			}
@@ -67,12 +67,12 @@ func (s *Session) AddMessage(msg ai.ChatCompletionMessage) {
 	defer s.mu.Unlock()
 
 	if len(s.History) == 0 {
-		s.addMessage(ai.ChatCompletionMessage{Role: ai.ChatMessageRoleSystem, Content: BotConfig.Prompt})
+		s.addMessage(ai.ChatCompletionMessage{Role: ai.ChatMessageRoleSystem, Content: Config.Prompt})
 	}
 
 	s.addMessage(msg)
 	s.trimHistory()
-	if BotConfig.Verbose {
+	if Config.Verbose {
 		s.Debug()
 	}
 }
@@ -84,10 +84,10 @@ func (s *Session) addMessage(msg ai.ChatCompletionMessage) {
 }
 
 func (s *Session) trimHistory() {
-	if len(s.History) <= BotConfig.MaxHistory {
+	if len(s.History) <= Config.MaxHistory {
 		return
 	}
-	s.History = append(s.History[:1], s.History[len(s.History)-BotConfig.MaxHistory:]...)
+	s.History = append(s.History[:1], s.History[len(s.History)-Config.MaxHistory:]...)
 
 	// "messages with role 'tool' must be a response to a preceeding message with 'tool_calls'."
 	// if the second oldest message is a tool, remove it
@@ -107,11 +107,11 @@ func (s *Session) Reset() {
 func (s *Session) Reap() bool {
 	now := time.Now()
 
-	if _, ok := BotConfig.Sessions.Load(s.Name); !ok {
+	if _, ok := Config.Sessions.Load(s.Name); !ok {
 		return true
 	}
-	if now.Sub(s.Last) > BotConfig.SessionDuration {
-		BotConfig.Sessions.Delete(s.Name)
+	if now.Sub(s.Last) > Config.SessionDuration {
+		Config.Sessions.Delete(s.Name)
 		return true
 	}
 	return false

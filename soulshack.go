@@ -46,30 +46,30 @@ func getBanner() string {
 func runBot(r *cobra.Command, _ []string) {
 
 	irc := girc.New(girc.Config{
-		Server:    BotConfig.Server,
-		Port:      BotConfig.Port,
-		Nick:      BotConfig.Nick,
+		Server:    Config.Server,
+		Port:      Config.Port,
+		Nick:      Config.Nick,
 		User:      "soulshack",
 		Name:      "soulshack",
-		SSL:       BotConfig.SSL,
-		TLSConfig: &tls.Config{InsecureSkipVerify: BotConfig.TLSInsecure},
+		SSL:       Config.SSL,
+		TLSConfig: &tls.Config{InsecureSkipVerify: Config.TLSInsecure},
 	})
 
-	if BotConfig.SASLNick != "" && BotConfig.SASLPass != "" {
+	if Config.SASLNick != "" && Config.SASLPass != "" {
 		irc.Config.SASL = &girc.SASLPlain{
-			User: BotConfig.SASLNick,
-			Pass: BotConfig.SASLPass,
+			User: Config.SASLNick,
+			Pass: Config.SASLPass,
 		}
 	}
 
 	irc.Handlers.AddBg(girc.CONNECTED, func(irc *girc.Client, e girc.Event) {
-		log.Println("joining channel:", BotConfig.Channel)
-		irc.Cmd.Join(BotConfig.Channel)
+		log.Println("joining channel:", Config.Channel)
+		irc.Cmd.Join(Config.Channel)
 	})
 
 	irc.Handlers.AddBg(girc.JOIN, func(irc *girc.Client, e girc.Event) {
-		if e.Source.Name == BotConfig.Nick {
-			ctx, cancel := NewChatContext(context.Background(), BotConfig.OpenAiClient, irc, &e)
+		if e.Source.Name == Config.Nick {
+			ctx, cancel := NewChatContext(context.Background(), Config.OpenAiClient, irc, &e)
 			defer cancel()
 			greeting(ctx)
 		}
@@ -77,7 +77,7 @@ func runBot(r *cobra.Command, _ []string) {
 
 	irc.Handlers.AddBg(girc.PRIVMSG, func(irc *girc.Client, e girc.Event) {
 
-		ctx, cancel := NewChatContext(context.Background(), BotConfig.OpenAiClient, irc, &e)
+		ctx, cancel := NewChatContext(context.Background(), Config.OpenAiClient, irc, &e)
 		defer cancel()
 
 		if ctx.Valid() {
@@ -104,7 +104,7 @@ func runBot(r *cobra.Command, _ []string) {
 	// Reconnect loop with a maximum retry limit
 	maxRetries := 5
 	for retries := 0; retries < maxRetries; retries++ {
-		log.Printf("connecting to server:%s, port:%d, tls:%t, sasl:%t, api:%s", irc.Config.Server, irc.Config.Port, irc.Config.SSL, irc.Config.SASL != nil, BotConfig.OpenAIConfig.BaseURL)
+		log.Printf("connecting to server:%s, port:%d, tls:%t, sasl:%t, api:%s", irc.Config.Server, irc.Config.Port, irc.Config.SSL, irc.Config.SASL != nil, Config.OpenAIConfig.BaseURL)
 		if err := irc.Connect(); err != nil {
 			log.Println("connection error:", err)
 			log.Println("reconnecting in 5 seconds...")

@@ -15,7 +15,7 @@ func greeting(ctx *ChatContext) {
 	log.Println("sending greeting...")
 	Complete(ctx, ai.ChatCompletionMessage{
 		Role:    ai.ChatMessageRoleAssistant,
-		Content: BotConfig.Greeting,
+		Content: Config.Greeting,
 	})
 	ctx.Session.Reset()
 }
@@ -46,20 +46,20 @@ func slashSet(ctx *ChatContext) {
 			ctx.Reply("Invalid value for addressed. Please provide 'true' or 'false'.")
 			return
 		}
-		BotConfig.Addressed = addressed
-		ctx.Reply(fmt.Sprintf("%s set to: %t", param, BotConfig.Addressed))
+		Config.Addressed = addressed
+		ctx.Reply(fmt.Sprintf("%s set to: %t", param, Config.Addressed))
 	case "prompt":
-		BotConfig.Prompt = value
-		ctx.Reply(fmt.Sprintf("%s set to: %s", param, BotConfig.Prompt))
+		Config.Prompt = value
+		ctx.Reply(fmt.Sprintf("%s set to: %s", param, Config.Prompt))
 	case "model":
-		BotConfig.Model = value
-		ctx.Reply(fmt.Sprintf("%s set to: %s", param, BotConfig.Model))
+		Config.Model = value
+		ctx.Reply(fmt.Sprintf("%s set to: %s", param, Config.Model))
 	case "nick":
-		BotConfig.Nick = value
+		Config.Nick = value
 		ctx.Client.Cmd.Nick(value)
 	case "channel":
-		BotConfig.Channel = value
-		ctx.Client.Cmd.Part(BotConfig.Channel)
+		Config.Channel = value
+		ctx.Client.Cmd.Part(Config.Channel)
 		ctx.Client.Cmd.Join(value)
 	case "maxtokens":
 		maxTokens, err := strconv.Atoi(value)
@@ -67,16 +67,16 @@ func slashSet(ctx *ChatContext) {
 			ctx.Reply("Invalid value for maxtokens. Please provide a valid integer.")
 			return
 		}
-		BotConfig.MaxTokens = maxTokens
-		ctx.Reply(fmt.Sprintf("%s set to: %d", param, BotConfig.MaxTokens))
+		Config.MaxTokens = maxTokens
+		ctx.Reply(fmt.Sprintf("%s set to: %d", param, Config.MaxTokens))
 	case "temperature":
 		temperature, err := strconv.ParseFloat(value, 32)
 		if err != nil {
 			ctx.Reply("Invalid value for temperature. Please provide a valid float.")
 			return
 		}
-		BotConfig.Temperature = float32(temperature)
-		ctx.Reply(fmt.Sprintf("%s set to: %f", param, BotConfig.Temperature))
+		Config.Temperature = float32(temperature)
+		ctx.Reply(fmt.Sprintf("%s set to: %f", param, Config.Temperature))
 	case "top_p":
 		topP, err := strconv.ParseFloat(value, 32)
 		if err != nil {
@@ -87,8 +87,8 @@ func slashSet(ctx *ChatContext) {
 			ctx.Reply("Invalid value for top_p. Please provide a float between 0 and 1.")
 			return
 		}
-		BotConfig.TopP = float32(topP)
-		ctx.Reply(fmt.Sprintf("%s set to: %f", param, BotConfig.TopP))
+		Config.TopP = float32(topP)
+		ctx.Reply(fmt.Sprintf("%s set to: %f", param, Config.TopP))
 	case "admins":
 		admins := strings.Split(value, ",")
 		for _, admin := range admins {
@@ -97,16 +97,16 @@ func slashSet(ctx *ChatContext) {
 				return
 			}
 		}
-		BotConfig.Admins = admins
-		ctx.Reply(fmt.Sprintf("%s set to: %s", param, strings.Join(BotConfig.Admins, ", ")))
+		Config.Admins = admins
+		ctx.Reply(fmt.Sprintf("%s set to: %s", param, strings.Join(Config.Admins, ", ")))
 	case "tools":
 		toolUse, err := strconv.ParseBool(value)
 		if err != nil {
 			ctx.Reply("Invalid value for tools. Please provide 'true' or 'false'.")
 			return
 		}
-		BotConfig.Tools = toolUse
-		ctx.Reply(fmt.Sprintf("%s set to: %t", param, BotConfig.Tools))
+		Config.Tools = toolUse
+		ctx.Reply(fmt.Sprintf("%s set to: %t", param, Config.Tools))
 	}
 
 	ctx.Session.Reset()
@@ -127,27 +127,27 @@ func slashGet(ctx *ChatContext) {
 
 	switch param {
 	case "addressed":
-		ctx.Reply(fmt.Sprintf("%s: %t", param, BotConfig.Addressed))
+		ctx.Reply(fmt.Sprintf("%s: %t", param, Config.Addressed))
 	case "prompt":
-		ctx.Reply(fmt.Sprintf("%s: %s", param, BotConfig.Prompt))
+		ctx.Reply(fmt.Sprintf("%s: %s", param, Config.Prompt))
 	case "model":
-		ctx.Reply(fmt.Sprintf("%s: %s", param, BotConfig.Model))
+		ctx.Reply(fmt.Sprintf("%s: %s", param, Config.Model))
 	case "nick":
-		ctx.Reply(fmt.Sprintf("%s: %s", param, BotConfig.Nick))
+		ctx.Reply(fmt.Sprintf("%s: %s", param, Config.Nick))
 	case "channel":
-		ctx.Reply(fmt.Sprintf("%s: %s", param, BotConfig.Channel))
+		ctx.Reply(fmt.Sprintf("%s: %s", param, Config.Channel))
 	case "maxtokens":
-		ctx.Reply(fmt.Sprintf("%s: %d", param, BotConfig.MaxTokens))
+		ctx.Reply(fmt.Sprintf("%s: %d", param, Config.MaxTokens))
 	case "temperature":
-		ctx.Reply(fmt.Sprintf("%s: %f", param, BotConfig.Temperature))
+		ctx.Reply(fmt.Sprintf("%s: %f", param, Config.Temperature))
 	case "top_p":
-		ctx.Reply(fmt.Sprintf("%s: %f", param, BotConfig.TopP))
+		ctx.Reply(fmt.Sprintf("%s: %f", param, Config.TopP))
 	case "admins":
-		if len(BotConfig.Admins) == 0 {
+		if len(Config.Admins) == 0 {
 			ctx.Reply("empty admin list, all nicks are permitted to use admin commands")
 			return
 		}
-		ctx.Reply(fmt.Sprintf("%s: %s", param, strings.Join(BotConfig.Admins, ", ")))
+		ctx.Reply(fmt.Sprintf("%s: %s", param, strings.Join(Config.Admins, ", ")))
 	}
 }
 

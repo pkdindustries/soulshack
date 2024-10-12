@@ -74,7 +74,7 @@ func (t *IrcOpTool) Execute(ctx ChatContext, tool ai.ToolCall) (ai.ChatCompletio
 		opcmd = "+o"
 	}
 
-	ctx.Client.Cmd.Mode(BotConfig.Channel, opcmd, req.Nick)
+	ctx.Client.Cmd.Mode(Config.Channel, opcmd, req.Nick)
 
 	return ai.ChatCompletionMessage{
 		Role:       ai.ChatMessageRoleTool,
@@ -136,7 +136,7 @@ func (t *IrcKickTool) Execute(ctx ChatContext, tool ai.ToolCall) (ai.ChatComplet
 		}, fmt.Errorf("unauthorized")
 	}
 
-	ctx.Client.Cmd.Kick(BotConfig.Channel, req.Nick, req.Reason)
+	ctx.Client.Cmd.Kick(Config.Channel, req.Nick, req.Reason)
 
 	return ai.ChatCompletionMessage{
 		Role:       ai.ChatMessageRoleTool,
@@ -195,7 +195,7 @@ func (t *IrcTopicTool) Execute(ctx ChatContext, tool ai.ToolCall) (ai.ChatComple
 		}, fmt.Errorf("unauthorized")
 	}
 
-	ctx.Client.Cmd.Topic(BotConfig.Channel, req.Topic)
+	ctx.Client.Cmd.Topic(Config.Channel, req.Topic)
 	return ai.ChatCompletionMessage{
 		Role:       ai.ChatMessageRoleTool,
 		Content:    "success",

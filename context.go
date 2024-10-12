@@ -19,7 +19,7 @@ type ChatContext struct {
 }
 
 func NewChatContext(parentctx context.Context, aiclient *ai.Client, ircclient *girc.Client, e *girc.Event) (*ChatContext, context.CancelFunc) {
-	timedctx, cancel := context.WithTimeout(parentctx, BotConfig.ClientTimeout)
+	timedctx, cancel := context.WithTimeout(parentctx, Config.ClientTimeout)
 
 	ctx := &ChatContext{
 		Context: timedctx,
@@ -35,7 +35,7 @@ func NewChatContext(parentctx context.Context, aiclient *ai.Client, ircclient *g
 
 	if e.Source == nil {
 		e.Source = &girc.Source{
-			Name: BotConfig.Channel,
+			Name: Config.Channel,
 		}
 	}
 
@@ -43,7 +43,7 @@ func NewChatContext(parentctx context.Context, aiclient *ai.Client, ircclient *g
 	if !girc.IsValidChannel(key) {
 		key = e.Source.Name
 	}
-	ctx.Session = BotConfig.Sessions.Get(key)
+	ctx.Session = Config.Sessions.Get(key)
 	return ctx, cancel
 }
 
@@ -56,11 +56,11 @@ func (c *ChatContext) IsAdmin() bool {
 	hostmask := c.Event.Source.String()
 	log.Println("checking hostmask:", hostmask)
 	// XXX: if no admins are configured, all hostmasks are admins
-	if len(BotConfig.Admins) == 0 {
+	if len(Config.Admins) == 0 {
 		log.Println("all hostmasks are admin, please configure admins")
 		return true
 	}
-	for _, user := range BotConfig.Admins {
+	for _, user := range Config.Admins {
 		if user == hostmask {
 			log.Println(hostmask, "is admin")
 			return true
@@ -76,7 +76,7 @@ func (c *ChatContext) Reply(message string) *ChatContext {
 
 // checks if the message is valid for processing
 func (c *ChatContext) Valid() bool {
-	return (c.IsAddressed() || !BotConfig.Addressed || c.IsPrivate()) && len(c.Args) > 0
+	return (c.IsAddressed() || !Config.Addressed || c.IsPrivate()) && len(c.Args) > 0
 }
 
 func (c *ChatContext) IsPrivate() bool {
