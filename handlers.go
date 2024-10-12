@@ -93,7 +93,7 @@ func slashSet(ctx *ChatContext) {
 		admins := strings.Split(value, ",")
 		for _, admin := range admins {
 			if admin == "" {
-				ctx.Reply("Invalid value for admins. Please provide a comma-separated list of non-empty nicknames.")
+				ctx.Reply("Invalid value for admins. Please provide a comma-separated list of hostmasks.")
 				return
 			}
 		}
@@ -102,7 +102,7 @@ func slashSet(ctx *ChatContext) {
 	case "tools":
 		toolUse, err := strconv.ParseBool(value)
 		if err != nil {
-			ctx.Reply("Invalid value for tooluse. Please provide 'true' or 'false'.")
+			ctx.Reply("Invalid value for tools. Please provide 'true' or 'false'.")
 			return
 		}
 		BotConfig.Tools = toolUse
@@ -179,6 +179,6 @@ func completionResponse(ctx *ChatContext) {
 	nick := ctx.Event.Source.Name
 	Complete(ctx, ai.ChatCompletionMessage{
 		Role:    ai.ChatMessageRoleUser,
-		Content: fmt.Sprintf("nick:%s says %s", nick, msg),
+		Content: fmt.Sprintf("(nick:%s) %s", nick, msg),
 	})
 }
