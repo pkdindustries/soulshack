@@ -43,7 +43,7 @@ func NewChatContext(parentctx context.Context, aiclient *ai.Client, ircclient *g
 	if !girc.IsValidChannel(key) {
 		key = e.Source.Name
 	}
-	ctx.Session = Sessions.Get(key)
+	ctx.Session = BotConfig.Sessions.Get(key)
 	return ctx, cancel
 }
 

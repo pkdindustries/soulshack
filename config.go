@@ -30,37 +30,46 @@ var ModifiableConfigKeys = []string{
 var BotConfig *Configuration
 
 type Configuration struct {
-	Nick            string
-	Server          string
-	Port            int
-	Channel         string
-	SSL             bool
-	TLSInsecure     bool
-	SASLNick        string
-	SASLPass        string
-	Admins          []string
-	Verbose         bool
-	Addressed       bool
+	// bot
+	Nick        string
+	Server      string
+	Port        int
+	Channel     string
+	SSL         bool
+	TLSInsecure bool
+	SASLNick    string
+	SASLPass    string
+	Admins      []string
+	Verbose     bool
+	Addressed   bool
+	Prompt      string
+	Greeting    string
+
+	// ai
+	OpenAIConfig  openai.ClientConfig
+	OpenAiClient  *openai.Client
+	ClientTimeout time.Duration
+	MaxTokens     int
+	APIKey        string
+	Model         string
+	Temperature   float32
+	TopP          float32
+
+	// tools
+	ToolRegistry *ToolRegistry
+	ToolsDir     string
+	Tools        bool
+
+	// sessions
+	Sessions        *Sessions
 	ChunkDelay      time.Duration
 	ChunkMax        int
 	ChunkQuoted     bool
-	Tokenizer       *sentences.DefaultSentenceTokenizer
-	ClientTimeout   time.Duration
 	MaxHistory      int
-	MaxTokens       int
 	SessionDuration time.Duration
-	APIKey          string
-	Model           string
-	Temperature     float32
-	TopP            float32
-	URL             string
-	Prompt          string
-	Greeting        string
-	OpenAIConfig    openai.ClientConfig
-	OpenAiClient    *openai.Client
-	ToolRegistry    *ToolRegistry
-	ToolsDir        string
-	Tools           bool
+
+	// tokenizer
+	Tokenizer *sentences.DefaultSentenceTokenizer
 }
 
 func (c *Configuration) PrintConfig() {
@@ -91,7 +100,6 @@ func (c *Configuration) PrintConfig() {
 		fmt.Printf("openapikey: %s\n", c.APIKey)
 	}
 	fmt.Printf("openaiurl: %s\n", c.OpenAIConfig.BaseURL)
-
 	fmt.Printf("model: %s\n", c.Model)
 	fmt.Printf("temperature: %f\n", c.Temperature)
 	fmt.Printf("topp: %f\n", c.TopP)
@@ -104,7 +112,7 @@ func loadConfig() {
 	if configfile != "" {
 		vip.SetConfigFile(configfile)
 		if err := vip.ReadInConfig(); err != nil {
-			log.Printf("config file %s not found", configfile)
+			log.Fatalf("config file %s not found", configfile)
 		} else {
 			log.Println("using config file:", vip.ConfigFileUsed())
 		}
@@ -140,6 +148,7 @@ func loadConfig() {
 		OpenAIConfig:    openai.DefaultConfig(vip.GetString("openaikey")),
 	}
 
+	// initialize the ai client
 	baseurl := vip.GetString("openaiurl")
 	if baseurl != "" {
 		log.Println("using alternate OpenAI API URL:", baseurl)
@@ -148,6 +157,7 @@ func loadConfig() {
 
 	BotConfig.OpenAiClient = openai.NewClientWithConfig(BotConfig.OpenAIConfig)
 
+	// initialize tools
 	if BotConfig.Tools {
 		toolsDir := vip.GetString("toolsdir")
 		registry, err := NewToolRegistry(toolsDir)
@@ -158,14 +168,17 @@ func loadConfig() {
 			RegisterIrcTools(registry)
 			BotConfig.ToolRegistry = registry
 		}
-
 	}
 
+	// initialize tokenizer
 	tokenizer, err := english.NewSentenceTokenizer(nil)
 	if err != nil {
 		log.Fatal("Error creating tokenizer:", err)
 	}
 	BotConfig.Tokenizer = tokenizer
+
+	// initialize sessions
+	BotConfig.Sessions = &Sessions{}
 
 	if err := verifyConfig(); err != nil {
 		fmt.Println("")

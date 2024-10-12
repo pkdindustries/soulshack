@@ -10,14 +10,37 @@ import (
 	ai "github.com/sashabaranov/go-openai"
 )
 
-var Sessions = SessionMap{
-	sessionMap: make(map[string]*Session),
-	mu:         sync.RWMutex{},
+// type SessionStore interface {
+// 	Get(id string) *Session
+// }
+
+type Sessions struct {
+	sync.Map
 }
 
-type SessionMap struct {
-	sessionMap map[string]*Session
-	mu         sync.RWMutex
+func (sessions *Sessions) Get(id string) *Session {
+	if value, ok := sessions.Load(id); ok {
+		return value.(*Session)
+	}
+
+	session := &Session{
+		Name:  id,
+		Last:  time.Now(),
+		Stash: make(map[string]interface{}),
+	}
+
+	// start session reaper, returns when the session is gone
+	go func() {
+		for {
+			time.Sleep(BotConfig.SessionDuration)
+			if session.Reap() {
+				return
+			}
+		}
+	}()
+
+	sessions.Store(id, session)
+	return session
 }
 
 type Session struct {
@@ -81,43 +104,14 @@ func (s *Session) Reset() {
 	s.Last = time.Now()
 }
 
-func (sessions *SessionMap) Get(id string) *Session {
-	sessions.mu.Lock()
-	defer sessions.mu.Unlock()
-
-	if v, ok := sessions.sessionMap[id]; ok {
-		return v
-	}
-
-	session := &Session{
-		Name:  id,
-		Last:  time.Now(),
-		Stash: make(map[string]any),
-	}
-
-	// start session reaper, returns when the session is gone
-	go func() {
-		for {
-			time.Sleep(BotConfig.SessionDuration)
-			if session.Reap() {
-				return
-			}
-		}
-	}()
-
-	sessions.sessionMap[id] = session
-	return session
-}
-
 func (s *Session) Reap() bool {
 	now := time.Now()
-	Sessions.mu.Lock()
-	defer Sessions.mu.Unlock()
-	if Sessions.sessionMap[s.Name] == nil {
+
+	if _, ok := BotConfig.Sessions.Load(s.Name); !ok {
 		return true
 	}
 	if now.Sub(s.Last) > BotConfig.SessionDuration {
-		delete(Sessions.sessionMap, s.Name)
+		BotConfig.Sessions.Delete(s.Name)
 		return true
 	}
 	return false
