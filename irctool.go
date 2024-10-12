@@ -70,17 +70,15 @@ func (t *IrcOpTool) Execute(ctx ChatContext, tool ai.ToolCall) (ai.ChatCompletio
 
 	// set opcmd to the appropriate value
 	opcmd := "-o"
-	opmsg := ctx.Event.Source.Name + "revoked operator privileges from " + req.Nick
 	if req.Op {
 		opcmd = "+o"
-		opmsg = ctx.Event.Source.Name + "granted operator privileges to " + req.Nick
 	}
 
 	ctx.Client.Cmd.Mode(BotConfig.Channel, opcmd, req.Nick)
 
 	return ai.ChatCompletionMessage{
 		Role:       ai.ChatMessageRoleTool,
-		Content:    opmsg,
+		Content:    "success",
 		Name:       tool.Function.Name,
 		ToolCallID: tool.ID,
 	}, nil
@@ -142,7 +140,7 @@ func (t *IrcKickTool) Execute(ctx ChatContext, tool ai.ToolCall) (ai.ChatComplet
 
 	return ai.ChatCompletionMessage{
 		Role:       ai.ChatMessageRoleTool,
-		Content:    "kicked " + req.Nick + " (" + req.Reason + ")",
+		Content:    "success",
 		ToolCallID: tool.ID,
 		Name:       tool.Function.Name,
 	}, nil
@@ -200,7 +198,7 @@ func (t *IrcTopicTool) Execute(ctx ChatContext, tool ai.ToolCall) (ai.ChatComple
 	ctx.Client.Cmd.Topic(BotConfig.Channel, req.Topic)
 	return ai.ChatCompletionMessage{
 		Role:       ai.ChatMessageRoleTool,
-		Content:    req.Topic + " set topic to " + req.Topic,
+		Content:    "success",
 		ToolCallID: tool.ID,
 		Name:       tool.Function.Name,
 	}, nil
