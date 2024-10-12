@@ -163,7 +163,7 @@ func (t *IrcTopicTool) GetTool() (ai.Tool, error) {
 						Description: "the new channel topic",
 					},
 				},
-				Required: []string{"topic", "request_nick"},
+				Required: []string{"topic"},
 			},
 		}}, nil
 }
