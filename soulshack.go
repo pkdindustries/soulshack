@@ -68,9 +68,11 @@ func runBot(r *cobra.Command, _ []string) {
 	})
 
 	irc.Handlers.AddBg(girc.JOIN, func(irc *girc.Client, e girc.Event) {
-		ctx, cancel := NewChatContext(context.Background(), BotConfig.OpenAiClient, irc, &e)
-		defer cancel()
-		greeting(ctx)
+		if e.Source.Name == BotConfig.Nick {
+			ctx, cancel := NewChatContext(context.Background(), BotConfig.OpenAiClient, irc, &e)
+			defer cancel()
+			greeting(ctx)
+		}
 	})
 
 	irc.Handlers.AddBg(girc.PRIVMSG, func(irc *girc.Client, e girc.Event) {
