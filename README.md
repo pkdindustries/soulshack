@@ -176,7 +176,7 @@ fi
 
 # if no arguments, show usage
 # shellcheck disable=SC2140
-echo "Usage: currentdate.sh [--schema | --name | --description | --execute '{"format": "+%Y-%m-%d %H:%M:%S"}']"
+echo "Usage: currentdate.sh [--schema | --execute '{"format": "+%Y-%m-%d %H:%M:%S"}']"
 ```
 ![jacob, high five me](https://i.imgur.com/CDccJ5r.png)
 
