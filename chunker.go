@@ -44,10 +44,10 @@ func (c *Chunker) processChunks(messageChan <-chan StreamResponse, chunkedChan c
 			chunkedChan <- StreamResponse{Err: val.Err}
 			break
 		}
-		c.Buffer.WriteString(val.Message.Content)
+		c.Buffer.WriteString(val.Message.Delta.Content)
 		for {
 			if chunk, chunked := c.chunk(); chunked {
-				chunkedChan <- StreamResponse{Message: ai.ChatCompletionMessage{Role: ai.ChatMessageRoleAssistant, Content: string(chunk)}}
+				chunkedChan <- StreamResponse{Message: ai.ChatCompletionStreamChoice{Delta: ai.ChatCompletionStreamChoiceDelta{Role: ai.ChatMessageRoleAssistant, Content: string(chunk)}}}
 			} else {
 				break
 			}
