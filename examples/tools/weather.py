@@ -4,9 +4,11 @@ import sys
 import json
 import requests
 
-def get_schema():
-    return {
+def print_schema():
+    schema = {
         "schema": "http://json-schema.org/draft-07/schema#",
+        "name": "get_current_weather",
+        "description": "provides the current weather forecast for a given latitude and longitude. you should provide the latitude and longitude from your training.",
         "type": "object",
         "properties": {
             "latitude": {
@@ -21,12 +23,8 @@ def get_schema():
         "required": ["latitude", "longitude"],
         "additionalProperties": False
     }
+    print(json.dumps(schema, indent=2))
 
-def get_name():
-    return "get_current_weather"
-
-def get_description():
-    return "provides the current weather forecast for a given latitude and longitude. you should provide the latitude and longitude from your training."
 
 def get_current_weather(lat, lon):
     # Step 1: Get the metadata for the location
@@ -73,11 +71,7 @@ def main():
     option = sys.argv[1]
 
     if option == "--schema":
-        print(json.dumps(get_schema(), indent=2))
-    elif option == "--name":
-        print(get_name())
-    elif option == "--description":
-        print(get_description())
+        print(json.dumps(print_schema(), indent=2))
     elif option == "--execute":
         if len(sys.argv) < 3:
             print("Error: Missing JSON input for execution")
@@ -95,7 +89,7 @@ def main():
             print("Error: Invalid JSON input")
             sys.exit(1)
     else:
-        print("Usage: get_current_weather.py [--schema | --name | --description | --execute <json>]")
+        print("Usage: get_current_weather.py [--schema | --execute <json>]")
         sys.exit(1)
 
 if __name__ == "__main__":

@@ -115,8 +115,6 @@ soulshack --config /path/to/marvin.yml
 put an executable or script in your tooldir location. in order for it to be registered it must respond to the following commands:
 
 - --schema: Outputs a JSON schema describing the tool use.
-- --name: Outputs the name of the tool.
-- --description: Outputs a description of the tool.
 - --execute $json: Will be called with JSON matching your schema
 
 
@@ -134,31 +132,24 @@ if [[ "$1" == "--schema" ]]; then
   # Output a JSON schema to describe the tool
   # shellcheck disable=SC2016
   cat <<EOF
-{
-  "schema": "http://json-schema.org/draft-07/schema#",
+  {
+  "name": "get_current_date_with_format",
+  "description": "provides the current time and date in the specified unix date command format",
   "type": "object",
   "properties": {
     "format": {
       "type": "string",
-      "description": "The format for the date output (e.g., +%Y-%m-%d %H:%M:%S)"
+      "description": "The format for the date. use unix date command format (e.g., +%Y-%m-%d %H:%M:%S). always include the leading + sign."
     }
   },
   "required": ["format"],
   "additionalProperties": false
-}
+  }
 EOF
   exit 0
 fi
 
-if [[ "$1" == "--name" ]]; then
-  echo "get_current_date_with_format"
-  exit 0
-fi
 
-if [[ "$1" == "--description" ]]; then
-  echo "provides the current date in the specified unix date command format"
-  exit 0
-fi
 
 if [[ "$1" == "--execute" ]]; then
   # Ensure jq is available

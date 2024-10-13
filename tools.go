@@ -90,33 +90,27 @@ func (r *ToolRegistry) GetToolDefinitions() []ai.Tool {
 
 // generic tool that can be configured to execute binaries or scripts.
 type ShellTool struct {
+	Command     string
 	Name        string
 	Description string
-	Command     string
-	Schema      jsonschema.Definition
+	Properties  jsonschema.Definition
 }
 
-// loads the name, description, and schema for the ShellTool.
+// loads schema for the ShellTool.
 func (s *ShellTool) LoadMetadata() error {
-
-	name, err := s.runCommand("--name")
-	if err != nil {
-		return fmt.Errorf("failed to get tool name: %v", err)
-	}
-	s.Name = name
-
-	description, err := s.runCommand("--description")
-	if err != nil {
-		return fmt.Errorf("failed to get tool description: %v", err)
-	}
-	s.Description = description
 
 	schemaOutput, err := s.runCommand("--schema")
 	if err != nil {
 		return fmt.Errorf("failed to get schema: %v", err)
 	}
 
-	err = json.Unmarshal([]byte(schemaOutput), &s.Schema)
+	err = json.Unmarshal([]byte(schemaOutput), &s)
+	if err != nil {
+		return fmt.Errorf("failed to unmarshal schema: %v", err)
+	}
+
+	// i probably don't understand the go-openai library parser
+	err = json.Unmarshal([]byte(schemaOutput), &s.Properties)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal schema: %v", err)
 	}
@@ -139,7 +133,7 @@ func (s *ShellTool) GetTool() (ai.Tool, error) {
 		Function: &ai.FunctionDefinition{
 			Name:        s.Name,
 			Description: s.Description,
-			Parameters:  s.Schema,
+			Parameters:  s.Properties,
 			Strict:      true,
 		},
 	}, nil

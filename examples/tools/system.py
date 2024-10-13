@@ -10,7 +10,9 @@ import time
 
 def print_schema():
     schema = {
-        "$schema": "http://json-schema.org/draft-07/schema#",
+       "$schema": "http://json-schema.org/draft-07/schema#",
+        "name": "system_resource_monitor",
+        "description": "provides system resource usage such as CPU, memory, disk, process, Docker container, and load average information",
         "type": "object",
         "properties": {
             "resource": {
@@ -23,12 +25,6 @@ def print_schema():
         "additionalProperties": False
     }
     print(json.dumps(schema, indent=2))
-
-def get_name():
-    print("system_resource_monitor")
-
-def get_description():
-    print("provides system resource usage such as CPU, memory, disk, process, Docker container, and load average information")
 
 def execute(resource_json):
     try:
@@ -154,18 +150,14 @@ def execute(resource_json):
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: system.py [--schema | --name | --description | --execute <resource_json>]", file=sys.stderr)
+        print("Usage: system.py [--schema | --execute <resource_json>]", file=sys.stderr)
         sys.exit(1)
 
     command = sys.argv[1]
     if command == "--schema":
         print_schema()
-    elif command == "--name":
-        get_name()
-    elif command == "--description":
-        get_description()
     elif command == "--execute" and len(sys.argv) == 3:
         execute(sys.argv[2])
     else:
-        print("Usage: system.py [--schema | --name | --description | --execute <resource_json>]", file=sys.stderr)
+        print("Usage: system.py [--schema | --execute <resource_json>]", file=sys.stderr)
         sys.exit(1)

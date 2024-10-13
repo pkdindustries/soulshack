@@ -8,28 +8,19 @@ if [[ "$1" == "--schema" ]]; then
   # shellcheck disable=SC2016
   cat <<EOF
 {
-  "schema": "http://json-schema.org/draft-07/schema#",
+  "name": "get_current_date_with_format",
+  "description": "provides the current time and date in the specified unix date command format",
   "type": "object",
   "properties": {
     "format": {
       "type": "string",
-      "description": "The format for the date output. use unix date command format (e.g., +%Y-%m-%d %H:%M:%S). always include the leading + sign."
+      "description": "The format for the date. use unix date command format (e.g., +%Y-%m-%d %H:%M:%S). always include the leading + sign."
     }
   },
   "required": ["format"],
   "additionalProperties": false
 }
 EOF
-  exit 0
-fi
-
-if [[ "$1" == "--name" ]]; then
-  echo "get_current_date_with_format"
-  exit 0
-fi
-
-if [[ "$1" == "--description" ]]; then
-  echo "provides the current date in the specified unix date command format"
   exit 0
 fi
 
@@ -58,5 +49,5 @@ fi
 
 # if no arguments, show usage
 # shellcheck disable=SC2140
-echo "Usage: currentdate.sh [--schema | --name | --description | --execute '{"format": "+%Y-%m-%d %H:%M:%S"}']"
+echo "Usage: currentdate.sh [--schema | --execute '{"format": "+%Y-%m-%d %H:%M:%S"}']"
 
