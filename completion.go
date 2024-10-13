@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -30,8 +29,8 @@ type StreamResponse struct {
 
 func Complete(ctx *ChatContext, msg ai.ChatCompletionMessage) {
 	ctx.Session.AddMessage(msg)
-	messageChan, toolChan := ChatCompletionStreamTask(ctx, newCompletionRequest(ctx))
-	chunkChan := newChunker().Filter(messageChan)
+	messageChan, toolChan := ChatCompletionStreamTask(ctx, NewCompletionRequest(ctx))
+	chunkChan := NewChunker().Filter(messageChan)
 	processCompletionStreams(ctx, chunkChan, toolChan)
 }
 
@@ -54,7 +53,7 @@ func processCompletionStreams(ctx *ChatContext, chunkChan <-chan StreamResponse,
 	}
 }
 
-func newCompletionRequest(ctx *ChatContext) *CompletionRequest {
+func NewCompletionRequest(ctx *ChatContext) *CompletionRequest {
 	return &CompletionRequest{
 		Client:      ctx.AI,
 		Timeout:     Config.ClientTimeout,
@@ -64,17 +63,6 @@ func newCompletionRequest(ctx *ChatContext) *CompletionRequest {
 		Temperature: Config.Temperature,
 		TopP:        Config.TopP,
 		Tools:       Config.Tools,
-	}
-}
-
-func newChunker() *Chunker {
-	return &Chunker{
-		Buffer:    &bytes.Buffer{},
-		Length:    Config.ChunkMax,
-		Delay:     Config.ChunkDelay,
-		Quote:     Config.ChunkQuoted,
-		Last:      time.Now(),
-		Tokenizer: Config.Tokenizer,
 	}
 }
 

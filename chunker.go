@@ -18,6 +18,17 @@ type Chunker struct {
 	Tokenizer *sentences.DefaultSentenceTokenizer
 }
 
+func NewChunker() *Chunker {
+	return &Chunker{
+		Buffer:    &bytes.Buffer{},
+		Length:    Config.ChunkMax,
+		Delay:     Config.ChunkDelay,
+		Quote:     Config.ChunkQuoted,
+		Last:      time.Now(),
+		Tokenizer: Config.Tokenizer,
+	}
+}
+
 // Filter reads from the input channel and returns a channel with chunked responses.
 func (c *Chunker) Filter(messageChan <-chan StreamResponse) <-chan StreamResponse {
 	chunkedChan := make(chan StreamResponse, 10)

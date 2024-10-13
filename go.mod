@@ -1,8 +1,6 @@
 module pkdindustries/soulshack
 
-go 1.22.0
-
-toolchain go1.22.2
+go 1.23.2
 
 require (
 	github.com/lrstanley/girc v0.0.0-20240914071631-5c0cc76257bf
