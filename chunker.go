@@ -2,20 +2,22 @@ package main
 
 import (
 	"bytes"
+	"log"
 	"time"
 
 	"github.com/neurosnap/sentences"
 	ai "github.com/sashabaranov/go-openai"
 )
 
-// Chunker handles splitting a stream of text into smaller chunks.
 type Chunker struct {
-	Buffer    *bytes.Buffer // Buffer to hold incoming data
-	Delay     time.Duration // Time delay before forced chunk
-	Length    int           // Maximum chunk size
-	Quote     bool          // Flag for handling code blocks
-	Last      time.Time     // Timestamp of the last chunk
-	Tokenizer *sentences.DefaultSentenceTokenizer
+	Buffer          *bytes.Buffer
+	Delay           time.Duration
+	Length          int
+	Quote           bool
+	Last            time.Time
+	Tokenizer       *sentences.DefaultSentenceTokenizer
+	assemblingTool  bool
+	partialToolCall ai.ToolCall
 }
 
 func NewChunker() *Chunker {
@@ -29,22 +31,29 @@ func NewChunker() *Chunker {
 	}
 }
 
-// Filter reads from the input channel and returns a channel with chunked responses.
-func (c *Chunker) Filter(messageChan <-chan StreamResponse) <-chan StreamResponse {
+func (c *Chunker) Filter(messageChan <-chan StreamResponse) (<-chan StreamResponse, <-chan ai.ToolCall) {
 	chunkedChan := make(chan StreamResponse, 10)
-	go c.processChunks(messageChan, chunkedChan)
-	return chunkedChan
+	toolChan := make(chan ai.ToolCall, 10)
+	go c.processChunks(messageChan, chunkedChan, toolChan)
+	return chunkedChan, toolChan
 }
 
-// processChunks reads data from the input channel, writes it to the buffer, and triggers chunking.
-func (c *Chunker) processChunks(messageChan <-chan StreamResponse, chunkedChan chan<- StreamResponse) {
+func (c *Chunker) processChunks(messageChan <-chan StreamResponse, chunkedChan chan<- StreamResponse, toolChan chan<- ai.ToolCall) {
 	defer close(chunkedChan)
+	defer close(toolChan)
 	for val := range messageChan {
 		if val.Err != nil {
 			chunkedChan <- StreamResponse{Err: val.Err}
 			break
 		}
-		c.Buffer.WriteString(val.Message.Delta.Content)
+
+		choice := val.Message
+		if len(choice.Delta.ToolCalls) > 0 {
+			c.assemblingTool, c.partialToolCall = c.assembleToolCall(choice.Delta.ToolCalls[0])
+		}
+
+		c.Buffer.WriteString(choice.Delta.Content)
+
 		for {
 			if chunk, chunked := c.chunk(); chunked {
 				chunkedChan <- StreamResponse{Message: ai.ChatCompletionStreamChoice{Delta: ai.ChatCompletionStreamChoiceDelta{Role: ai.ChatMessageRoleAssistant, Content: string(chunk)}}}
@@ -52,10 +61,26 @@ func (c *Chunker) processChunks(messageChan <-chan StreamResponse, chunkedChan c
 				break
 			}
 		}
+
+		if choice.FinishReason == ai.FinishReasonToolCalls {
+			log.Println("completionStream: tool call assembled", c.partialToolCall)
+			toolChan <- c.partialToolCall
+			c.assemblingTool = false
+		}
 	}
 }
 
-// chunk decides the method of chunking based on the current state of the buffer.
+func (c *Chunker) assembleToolCall(toolCall ai.ToolCall) (bool, ai.ToolCall) {
+	if !c.assemblingTool {
+		log.Println("completionStream: assembling tool call", toolCall)
+		c.partialToolCall = toolCall
+		c.assemblingTool = true
+	} else {
+		c.partialToolCall.Function.Arguments += toolCall.Function.Arguments
+	}
+	return c.assemblingTool, c.partialToolCall
+}
+
 func (c *Chunker) chunk() ([]byte, bool) {
 	if c.Buffer.Len() == 0 {
 		return nil, false
@@ -93,7 +118,6 @@ func (c *Chunker) chunk() ([]byte, bool) {
 	return nil, false
 }
 
-// chunkByBlockQuote detects and chunks by code block quotes.
 func (c *Chunker) chunkByBlockQuote() ([]byte, bool) {
 	content := c.Buffer.Bytes()
 	blockStart := bytes.Index(content, []byte("```"))
@@ -106,7 +130,6 @@ func (c *Chunker) chunkByBlockQuote() ([]byte, bool) {
 	return nil, false
 }
 
-// chunkByNewline chunks the buffer up to a newline character.
 func (c *Chunker) chunkByNewline() ([]byte, bool) {
 	end := c.Length
 	if c.Buffer.Len() < end {
@@ -119,7 +142,6 @@ func (c *Chunker) chunkByNewline() ([]byte, bool) {
 	return nil, false
 }
 
-// chunkByMaxLength chunks the buffer based on the maximum allowed length.
 func (c *Chunker) chunkByMaxLength() ([]byte, bool) {
 	if c.Buffer.Len() >= c.Length {
 		return c.readChunk(c.Length), true
@@ -127,7 +149,6 @@ func (c *Chunker) chunkByMaxLength() ([]byte, bool) {
 	return nil, false
 }
 
-// chunkBySentenceBoundary chunks the buffer at a sentence boundary.
 func (c *Chunker) chunkBySentenceBoundary() ([]byte, bool) {
 	index := c.sentenceBoundary(c.Buffer.Bytes())
 	if index != -1 {
@@ -136,14 +157,12 @@ func (c *Chunker) chunkBySentenceBoundary() ([]byte, bool) {
 	return nil, false
 }
 
-// readChunk extracts a chunk of bytes from the buffer and updates the last chunk time.
 func (c *Chunker) readChunk(n int) []byte {
 	chunk := c.Buffer.Next(n)
 	c.Last = time.Now()
 	return chunk
 }
 
-// sentenceBoundary finds the end of the first sentence in the buffer.
 func (c *Chunker) sentenceBoundary(s []byte) int {
 	sentences := c.Tokenizer.Tokenize(string(s))
 	if len(sentences) > 1 {

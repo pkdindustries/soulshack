@@ -29,8 +29,8 @@ type StreamResponse struct {
 
 func Complete(ctx *ChatContext, msg ai.ChatCompletionMessage) {
 	ctx.Session.AddMessage(msg)
-	messageChan, toolChan := ChatCompletionStreamTask(ctx, NewCompletionRequest(ctx))
-	chunkChan := NewChunker().Filter(messageChan)
+	messageChan := ChatCompletionStreamTask(ctx, NewCompletionRequest(ctx))
+	chunkChan, toolChan := NewChunker().Filter(messageChan)
 	processCompletionStreams(ctx, chunkChan, toolChan)
 }
 
@@ -66,16 +66,14 @@ func NewCompletionRequest(ctx *ChatContext) *CompletionRequest {
 	}
 }
 
-func ChatCompletionStreamTask(ctx *ChatContext, req *CompletionRequest) (<-chan StreamResponse, <-chan ai.ToolCall) {
+func ChatCompletionStreamTask(ctx *ChatContext, req *CompletionRequest) <-chan StreamResponse {
 	messageChannel := make(chan StreamResponse, 10)
-	toolChannel := make(chan ai.ToolCall, 10)
-	go completionStream(ctx, req, messageChannel, toolChannel)
-	return messageChannel, toolChannel
+	go completionStream(ctx, req, messageChannel)
+	return messageChannel
 }
 
-func completionStream(ctx *ChatContext, req *CompletionRequest, messageChannel chan<- StreamResponse, toolChannel chan<- ai.ToolCall) {
+func completionStream(ctx *ChatContext, req *CompletionRequest, messageChannel chan<- StreamResponse) {
 	defer close(messageChannel)
-	defer close(toolChannel)
 
 	timeout, cancel := context.WithTimeout(ctx, req.Timeout)
 	defer cancel()
@@ -87,7 +85,7 @@ func completionStream(ctx *ChatContext, req *CompletionRequest, messageChannel c
 	}
 	defer stream.Close()
 
-	processStream(timeout, stream, messageChannel, toolChannel)
+	processStream(timeout, stream, messageChannel)
 }
 
 func createChatCompletionStream(ctx context.Context, req *CompletionRequest) (*ai.ChatCompletionStream, error) {
@@ -108,9 +106,7 @@ func createChatCompletionStream(ctx context.Context, req *CompletionRequest) (*a
 	})
 }
 
-func processStream(ctx context.Context, stream *ai.ChatCompletionStream, messageChannel chan<- StreamResponse, toolChannel chan<- ai.ToolCall) {
-	var assembling bool
-	var partialToolCall ai.ToolCall
+func processStream(ctx context.Context, stream *ai.ChatCompletionStream, messageChannel chan<- StreamResponse) {
 
 	for {
 		select {
@@ -121,13 +117,13 @@ func processStream(ctx context.Context, stream *ai.ChatCompletionStream, message
 		default:
 			response, err := stream.Recv()
 			if err != nil {
-				handleStreamError(err, messageChannel, partialToolCall)
+				handleStreamError(err, messageChannel)
 				return
 			}
 
 			if len(response.Choices) > 0 {
 				choice := response.Choices[0]
-				assembling, partialToolCall = handleChoice(choice, assembling, partialToolCall, messageChannel, toolChannel)
+				handleChoice(choice, messageChannel)
 			}
 		}
 	}
@@ -147,7 +143,7 @@ func handleReply(ctx *ChatContext, reply StreamResponse) {
 }
 
 func handleToolCall(ctx *ChatContext, toolCall ai.ToolCall) {
-	log.Printf("Function Call Received: %v", toolCall)
+	log.Printf("Tool Call Received: %v", toolCall)
 
 	soultool, err := Config.ToolRegistry.GetToolByName(toolCall.Function.Name)
 	if err != nil {
@@ -157,7 +153,7 @@ func handleToolCall(ctx *ChatContext, toolCall ai.ToolCall) {
 
 	toolmsg, err := soultool.Execute(*ctx, toolCall)
 	if err != nil {
-		log.Printf("Error executing function: %v", err)
+		log.Printf("Error executing tool: %v", err)
 	}
 
 	ctx.Session.AddMessage(ai.ChatCompletionMessage{
@@ -167,14 +163,13 @@ func handleToolCall(ctx *ChatContext, toolCall ai.ToolCall) {
 	Complete(ctx, toolmsg)
 }
 
-func handleStreamError(err error, messageChannel chan<- StreamResponse, partialToolCall ai.ToolCall) {
+func handleStreamError(err error, messageChannel chan<- StreamResponse) {
 	if errors.Is(err, io.EOF) {
 		log.Println("completionStream: finished")
 		msg := ai.ChatCompletionStreamChoice{
 			Delta: ai.ChatCompletionStreamChoiceDelta{
-				Role:      ai.ChatMessageRoleAssistant,
-				Content:   "\n",
-				ToolCalls: []ai.ToolCall{partialToolCall},
+				Role:    ai.ChatMessageRoleAssistant,
+				Content: "\n",
 			},
 		}
 		messageChannel <- StreamResponse{Message: msg}
@@ -183,31 +178,8 @@ func handleStreamError(err error, messageChannel chan<- StreamResponse, partialT
 	}
 }
 
-func handleChoice(choice ai.ChatCompletionStreamChoice, assemblingToolCall bool, partialToolCall ai.ToolCall,
-	messageChannel chan<- StreamResponse, toolChannel chan<- ai.ToolCall) (bool, ai.ToolCall) {
-
-	if choice.FinishReason == ai.FinishReasonToolCalls {
-		log.Println("completionStream:", choice.FinishReason)
-		log.Println("completionStream: tool call assembled", partialToolCall)
-		toolChannel <- partialToolCall
-		assemblingToolCall = false
-	}
-
-	if len(choice.Delta.ToolCalls) > 0 {
-		assemblingToolCall, partialToolCall = assembleToolCall(choice.Delta.ToolCalls[0], assemblingToolCall, partialToolCall)
-	}
+func handleChoice(choice ai.ChatCompletionStreamChoice, messageChannel chan<- StreamResponse) {
 
 	messageChannel <- StreamResponse{Message: choice}
 
-	return assemblingToolCall, partialToolCall
-}
-
-func assembleToolCall(toolCall ai.ToolCall, assemblingToolCall bool, partialToolCall ai.ToolCall) (bool, ai.ToolCall) {
-	if !assemblingToolCall {
-		log.Println("completionStream: assembling tool call", toolCall)
-		partialToolCall = toolCall
-		assemblingToolCall = true
-	}
-	partialToolCall.Function.Arguments += toolCall.Function.Arguments
-	return assemblingToolCall, partialToolCall
 }
