@@ -10,7 +10,6 @@ import time
 
 def print_schema():
     schema = {
-       "$schema": "http://json-schema.org/draft-07/schema#",
         "name": "system_resource_monitor",
         "description": "provides system resource usage such as CPU, memory, disk, process, Docker container, and load average information",
         "type": "object",

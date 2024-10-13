@@ -1,4 +1,7 @@
 # connect to a local ollama server via openai compatible API
 nick: ollamabot
-model: llama3.2:3b
+prompt: "you are an irc chatbot. do not use emoji. never use caps. tool calls are prefixed with a <tool> tag."
+model: qwen2.5:32b-instruct 
 openaiurl: "http://localhost:11434/v1/"
+temperature: 0.3
+tools: true

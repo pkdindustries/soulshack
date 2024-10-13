@@ -96,7 +96,23 @@ type ShellTool struct {
 	Properties  jsonschema.Definition
 }
 
-// loads schema for the ShellTool.
+// loads schema for a ShellTool.
+//
+//	{
+//		"name": "get_current_date_with_format",
+//		"description": "provides the current time and date in the specified unix date command format",
+//		"type": "object",
+//		"properties": {
+//		  "format": {
+//			"type": "string",
+//			"description": "The format for the date. use unix date command format (e.g., +%Y-%m-%d %H:%M:%S). always include the leading + sign."
+//		  }
+//		},
+//		"required": ["format"],
+//		"additionalProperties": false
+//	  }
+//
+
 func (s *ShellTool) LoadMetadata() error {
 
 	schemaOutput, err := s.runCommand("--schema")
@@ -111,6 +127,12 @@ func (s *ShellTool) LoadMetadata() error {
 
 	// i probably don't understand the go-openai library parser
 	err = json.Unmarshal([]byte(schemaOutput), &s.Properties)
+	if err != nil {
+		return fmt.Errorf("failed to unmarshal schema: %v", err)
+	}
+
+	tool := ai.Tool{}
+	err = json.Unmarshal([]byte(schemaOutput), &tool)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal schema: %v", err)
 	}

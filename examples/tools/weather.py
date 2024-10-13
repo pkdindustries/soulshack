@@ -6,7 +6,6 @@ import requests
 
 def print_schema():
     schema = {
-        "schema": "http://json-schema.org/draft-07/schema#",
         "name": "get_current_weather",
         "description": "provides the current weather forecast for a given latitude and longitude. you should provide the latitude and longitude from your training.",
         "type": "object",
@@ -21,7 +20,7 @@ def print_schema():
             }
         },
         "required": ["latitude", "longitude"],
-        "additionalProperties": False
+        "additionalProperties": False,
     }
     print(json.dumps(schema, indent=2))
 
@@ -65,13 +64,13 @@ def get_current_weather(lat, lon):
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: weather.py [--schema | --name | --description | --execute <json>]")
+        print("Usage: weather.py [--schema | --execute <json>]")
         sys.exit(1)
 
     option = sys.argv[1]
 
     if option == "--schema":
-        print(json.dumps(print_schema(), indent=2))
+        print_schema()
     elif option == "--execute":
         if len(sys.argv) < 3:
             print("Error: Missing JSON input for execution")
