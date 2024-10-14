@@ -1,9 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"math/rand"
-	"strings"
 	"testing"
 	"time"
 
@@ -15,25 +15,25 @@ func TestChunker_Chunk(t *testing.T) {
 		name     string
 		input    string
 		size     int
-		expected []byte
+		expected string
 	}{
 		{
 			name:     "chunk on newline",
 			input:    "Hello\nworld",
 			size:     350,
-			expected: []byte("Hello\n"),
+			expected: "Hello\n",
 		},
 		{
 			name:     "chunk on buffer size",
 			input:    "Hello",
 			size:     5,
-			expected: []byte("Hello"),
+			expected: "Hello",
 		},
 		{
 			name:     "no chunk",
 			input:    "Hello",
 			size:     10,
-			expected: []byte(""),
+			expected: "",
 		},
 	}
 
@@ -42,7 +42,7 @@ func TestChunker_Chunk(t *testing.T) {
 			c := &Chunker{
 				Length: tt.size,
 				Last:   time.Now(),
-				buffer: strings.Builder{},
+				buffer: &bytes.Buffer{},
 				Delay:  1000 * time.Millisecond,
 			}
 			c.buffer.WriteString(tt.input)
@@ -56,7 +56,7 @@ func TestChunker_Chunk(t *testing.T) {
 }
 
 // // Test for chunking based on timeout
-func TestChunker_Chunk_Timeout(t *testing.T) {
+func TestChunker_Chunk_Sentence(t *testing.T) {
 	timeout := 100 * time.Millisecond
 	tokenizer, err := english.NewSentenceTokenizer(nil)
 	if err != nil {
@@ -65,19 +65,19 @@ func TestChunker_Chunk_Timeout(t *testing.T) {
 	c := &Chunker{
 		Length:    50,
 		Last:      time.Now(),
-		buffer:    strings.Builder{},
+		buffer:    &bytes.Buffer{},
 		Delay:     timeout,
 		Tokenizer: tokenizer,
 	}
-	c.buffer.WriteString("Hello world! How are you?")
+	c.buffer.WriteString("Hello world, Dr. Mike here! How are you?")
 
 	// Wait for timeout duration
 	time.Sleep(500 * time.Millisecond)
 
 	chunk, chunked := c.chunk()
-	expected := []byte("Hello world! ")
+	expected := []byte("Hello world, Dr. Mike here!")
 	if chunked && string(chunk) != string(expected) {
-		t.Errorf("Chunk() got = %v, want = %v", chunk, expected)
+		t.Errorf("Chunk() got = %v, want = %v", string(chunk), string(expected))
 	}
 }
 
@@ -99,18 +99,24 @@ func BenchmarkChunker_StressTest(b *testing.B) {
 		// Generate random text
 		text := generateRandomText(bufSize)
 		b.ResetTimer()
+		tokenizer, _ := english.NewSentenceTokenizer(nil)
 		b.Run(fmt.Sprintf("StressTest_BufferSize_%d", bufSize), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				c := &Chunker{
-					Length: 40,
-					Last:   time.Now(),
-					buffer: strings.Builder{},
-					Delay:  timeout,
+					Length:    50,
+					Last:      time.Now(),
+					buffer:    &bytes.Buffer{},
+					Delay:     timeout,
+					Tokenizer: tokenizer,
 				}
 				c.buffer.WriteString(text)
 
-				// Continuously call Chunk() until no chunks are left
-				for _, chunked := c.chunk(); chunked; _, chunked = c.chunk() {
+				for {
+					chunk, chunked := c.chunk()
+					if !chunked {
+						break
+					}
+					_ = chunk
 				}
 			}
 		})
