@@ -22,6 +22,19 @@ type CompletionRequest struct {
 	Tools       bool
 }
 
+func NewCompletionRequest(ctx *ChatContext) *CompletionRequest {
+	return &CompletionRequest{
+		Client:      ctx.AI,
+		Timeout:     Config.ClientTimeout,
+		Model:       Config.Model,
+		MaxTokens:   Config.MaxTokens,
+		Messages:    ctx.Session.GetHistory(),
+		Temperature: Config.Temperature,
+		TopP:        Config.TopP,
+		Tools:       Config.Tools,
+	}
+}
+
 type StreamResponse struct {
 	Message ai.ChatCompletionStreamChoice
 	Err     error
@@ -53,17 +66,38 @@ func processCompletionStreams(ctx *ChatContext, chunkChan <-chan StreamResponse,
 	}
 }
 
-func NewCompletionRequest(ctx *ChatContext) *CompletionRequest {
-	return &CompletionRequest{
-		Client:      ctx.AI,
-		Timeout:     Config.ClientTimeout,
-		Model:       Config.Model,
-		MaxTokens:   Config.MaxTokens,
-		Messages:    ctx.Session.GetHistory(),
-		Temperature: Config.Temperature,
-		TopP:        Config.TopP,
-		Tools:       Config.Tools,
+func handleReply(ctx *ChatContext, reply StreamResponse) {
+	if reply.Err != nil {
+		log.Println("error:", reply.Err)
+		ctx.Client.Cmd.Reply(*ctx.Event, "error:"+reply.Err.Error())
+		return
 	}
+	ctx.Client.Cmd.Reply(*ctx.Event, reply.Message.Delta.Content)
+	ctx.Session.AddMessage(ai.ChatCompletionMessage{
+		Role:    reply.Message.Delta.Role,
+		Content: reply.Message.Delta.Content,
+	})
+}
+
+func handleToolCall(ctx *ChatContext, toolCall ai.ToolCall) {
+	log.Printf("Tool Call Received: %v", toolCall)
+
+	soultool, err := Config.ToolRegistry.GetToolByName(toolCall.Function.Name)
+	if err != nil {
+		ctx.Client.Cmd.Reply(*ctx.Event, "error: "+err.Error())
+		return
+	}
+
+	toolmsg, err := soultool.Execute(*ctx, toolCall)
+	if err != nil {
+		log.Printf("Error executing tool: %v", err)
+	}
+
+	ctx.Session.AddMessage(ai.ChatCompletionMessage{
+		Role:      ai.ChatMessageRoleAssistant,
+		ToolCalls: []ai.ToolCall{toolCall},
+	})
+	Complete(ctx, toolmsg)
 }
 
 func ChatCompletionStreamTask(ctx *ChatContext, req *CompletionRequest) <-chan StreamResponse {
@@ -127,40 +161,6 @@ func processStream(ctx context.Context, stream *ai.ChatCompletionStream, message
 			}
 		}
 	}
-}
-
-func handleReply(ctx *ChatContext, reply StreamResponse) {
-	if reply.Err != nil {
-		log.Println("error:", reply.Err)
-		ctx.Client.Cmd.Reply(*ctx.Event, "error:"+reply.Err.Error())
-		return
-	}
-	ctx.Client.Cmd.Reply(*ctx.Event, reply.Message.Delta.Content)
-	ctx.Session.AddMessage(ai.ChatCompletionMessage{
-		Role:    reply.Message.Delta.Role,
-		Content: reply.Message.Delta.Content,
-	})
-}
-
-func handleToolCall(ctx *ChatContext, toolCall ai.ToolCall) {
-	log.Printf("Tool Call Received: %v", toolCall)
-
-	soultool, err := Config.ToolRegistry.GetToolByName(toolCall.Function.Name)
-	if err != nil {
-		ctx.Client.Cmd.Reply(*ctx.Event, "error: "+err.Error())
-		return
-	}
-
-	toolmsg, err := soultool.Execute(*ctx, toolCall)
-	if err != nil {
-		log.Printf("Error executing tool: %v", err)
-	}
-
-	ctx.Session.AddMessage(ai.ChatCompletionMessage{
-		Role:      ai.ChatMessageRoleAssistant,
-		ToolCalls: []ai.ToolCall{toolCall},
-	})
-	Complete(ctx, toolmsg)
 }
 
 func handleStreamError(err error, messageChannel chan<- StreamResponse) {

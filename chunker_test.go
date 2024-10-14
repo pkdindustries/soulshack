@@ -1,9 +1,9 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
 	"math/rand"
+	"strings"
 	"testing"
 	"time"
 
@@ -42,10 +42,10 @@ func TestChunker_Chunk(t *testing.T) {
 			c := &Chunker{
 				Length: tt.size,
 				Last:   time.Now(),
-				Buffer: &bytes.Buffer{},
+				buffer: strings.Builder{},
 				Delay:  1000 * time.Millisecond,
 			}
-			c.Buffer.WriteString(tt.input)
+			c.buffer.WriteString(tt.input)
 
 			chunk, chunked := c.chunk()
 			if chunked && string(chunk) != string(tt.expected) {
@@ -65,11 +65,11 @@ func TestChunker_Chunk_Timeout(t *testing.T) {
 	c := &Chunker{
 		Length:    50,
 		Last:      time.Now(),
-		Buffer:    &bytes.Buffer{},
+		buffer:    strings.Builder{},
 		Delay:     timeout,
 		Tokenizer: tokenizer,
 	}
-	c.Buffer.WriteString("Hello world! How are you?")
+	c.buffer.WriteString("Hello world! How are you?")
 
 	// Wait for timeout duration
 	time.Sleep(500 * time.Millisecond)
@@ -104,10 +104,10 @@ func BenchmarkChunker_StressTest(b *testing.B) {
 				c := &Chunker{
 					Length: 40,
 					Last:   time.Now(),
-					Buffer: &bytes.Buffer{},
+					buffer: strings.Builder{},
 					Delay:  timeout,
 				}
-				c.Buffer.WriteString(text)
+				c.buffer.WriteString(text)
 
 				// Continuously call Chunk() until no chunks are left
 				for _, chunked := c.chunk(); chunked; _, chunked = c.chunk() {
