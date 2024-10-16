@@ -59,6 +59,8 @@ type Configuration struct {
 	ToolRegistry *ToolRegistry
 	ToolsDir     string
 	Tools        bool
+	//ToolTag      string
+	//ToolsInline  bool
 
 	// sessions
 	Sessions        *Sessions
@@ -93,6 +95,8 @@ func (c *Configuration) PrintConfig() {
 	fmt.Printf("maxtokens: %d\n", c.MaxTokens)
 	fmt.Printf("tools: %t\n", c.Tools)
 	fmt.Printf("toolsdir: %s\n", c.ToolsDir)
+	//fmt.Printf("tooltag: %s\n", c.ToolTag)
+	//fmt.Printf("toolsinline: %t\n", c.ToolsInline)
 	fmt.Printf("sessionduration: %s\n", c.SessionDuration)
 	if len(c.APIKey) > 3 && c.APIKey != "" {
 		fmt.Printf("openapikey: %s\n", strings.Repeat("*", len(c.APIKey)-3)+c.APIKey[len(c.APIKey)-3:])
@@ -119,25 +123,27 @@ func loadConfig() {
 	}
 
 	Config = &Configuration{
-		Nick:            vip.GetString("nick"),
-		Server:          vip.GetString("server"),
-		Port:            vip.GetInt("port"),
-		Channel:         vip.GetString("channel"),
-		SSL:             vip.GetBool("tls"),
-		TLSInsecure:     vip.GetBool("tlsinsecure"),
-		SASLNick:        vip.GetString("saslnick"),
-		SASLPass:        vip.GetString("saslpass"),
-		Admins:          vip.GetStringSlice("admins"),
-		Verbose:         vip.GetBool("verbose"),
-		Addressed:       vip.GetBool("addressed"),
-		ChunkDelay:      vip.GetDuration("chunkdelay"),
-		ChunkMax:        vip.GetInt("chunkmax"),
-		ChunkQuoted:     vip.GetBool("chunkquoted"),
-		ClientTimeout:   vip.GetDuration("apitimeout"),
-		MaxHistory:      vip.GetInt("sessionhistory"),
-		MaxTokens:       vip.GetInt("maxtokens"),
-		Tools:           vip.GetBool("tools"),
-		ToolsDir:        vip.GetString("toolsdir"),
+		Nick:          vip.GetString("nick"),
+		Server:        vip.GetString("server"),
+		Port:          vip.GetInt("port"),
+		Channel:       vip.GetString("channel"),
+		SSL:           vip.GetBool("tls"),
+		TLSInsecure:   vip.GetBool("tlsinsecure"),
+		SASLNick:      vip.GetString("saslnick"),
+		SASLPass:      vip.GetString("saslpass"),
+		Admins:        vip.GetStringSlice("admins"),
+		Verbose:       vip.GetBool("verbose"),
+		Addressed:     vip.GetBool("addressed"),
+		ChunkDelay:    vip.GetDuration("chunkdelay"),
+		ChunkMax:      vip.GetInt("chunkmax"),
+		ChunkQuoted:   vip.GetBool("chunkquoted"),
+		ClientTimeout: vip.GetDuration("apitimeout"),
+		MaxHistory:    vip.GetInt("sessionhistory"),
+		MaxTokens:     vip.GetInt("maxtokens"),
+		Tools:         vip.GetBool("tools"),
+		ToolsDir:      vip.GetString("toolsdir"),
+		//ToolTag:       vip.GetString("tooltag"),
+		//ToolsInline:     vip.GetBool("toolsinline"),
 		SessionDuration: vip.GetDuration("sessionduration"),
 		APIKey:          vip.GetString("openaikey"),
 		Model:           vip.GetString("model"),
@@ -218,12 +224,14 @@ func InitializeConfig() {
 	root.PersistentFlags().Float32("temperature", 0.7, "temperature for the completion")
 	root.PersistentFlags().Float32("top_p", 1, "top P value for the completion")
 	root.PersistentFlags().Bool("tools", false, "enable tool use")
+	//root.PersistentFlags().Bool("toolsinline", false, "enable inline tool use")
 	root.PersistentFlags().String("toolsdir", "examples/tools", "directory to load tools from")
+	root.PersistentFlags().String("tooltag", "tool_call", "tag llm uses for inline tool commands")
 
 	// timeouts and behavior
 	root.PersistentFlags().BoolP("addressed", "a", true, "require bot be addressed by nick for response")
 	root.PersistentFlags().DurationP("sessionduration", "S", time.Minute*3, "duration for the chat session; message context will be cleared after this time")
-	root.PersistentFlags().IntP("sessionhistory", "H", 50, "maximum number of lines of context to keep per session")
+	root.PersistentFlags().IntP("sessionhistory", "H", 250, "maximum number of lines of context to keep per session")
 	root.PersistentFlags().DurationP("chunkdelay", "C", time.Second*15, "after this delay, bot will look to split the incoming buffer on sentence boundaries")
 	root.PersistentFlags().IntP("chunkmax", "m", 350, "maximum number of characters to send as a single message")
 

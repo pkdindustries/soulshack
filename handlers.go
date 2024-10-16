@@ -11,16 +11,20 @@ import (
 	ai "github.com/sashabaranov/go-openai"
 )
 
-func greeting(ctx *ChatContext) {
-	log.Println("sending greeting...")
-	Complete(ctx, ai.ChatCompletionMessage{
+func greeting(ctx ChatContext) {
+	outch := Complete(ctx, ai.ChatCompletionMessage{
 		Role:    ai.ChatMessageRoleAssistant,
 		Content: Config.Greeting,
 	})
-	ctx.Session.Reset()
+
+	res := <-outch
+	switch res.Message.Delta.Role {
+	case ai.ChatMessageRoleAssistant:
+		ctx.Reply(res.String())
+	}
 }
 
-func slashSet(ctx *ChatContext) {
+func slashSet(ctx ChatContext) {
 	if !ctx.IsAdmin() {
 		ctx.Reply("You don't have permission to perform this action.")
 		return
@@ -112,7 +116,7 @@ func slashSet(ctx *ChatContext) {
 	ctx.Session.Reset()
 }
 
-func slashGet(ctx *ChatContext) {
+func slashGet(ctx ChatContext) {
 
 	if len(ctx.Args) < 2 {
 		ctx.Reply(fmt.Sprintf("Usage: /get <key>. Available keys: %s", strings.Join(ModifiableConfigKeys, ", ")))
@@ -160,7 +164,7 @@ func contains(slice []string, item string) bool {
 	return false
 }
 
-func slashLeave(ctx *ChatContext) {
+func slashLeave(ctx ChatContext) {
 
 	if !ctx.IsAdmin() {
 		ctx.Reply("You don't have permission to perform this action.")
@@ -174,11 +178,23 @@ func slashLeave(ctx *ChatContext) {
 	}()
 }
 
-func completionResponse(ctx *ChatContext) {
+func completionResponse(ctx ChatContext) {
 	msg := strings.Join(ctx.Args, " ")
 	nick := ctx.Event.Source.Name
-	Complete(ctx, ai.ChatCompletionMessage{
+
+	outch := Complete(ctx, ai.ChatCompletionMessage{
 		Role:    ai.ChatMessageRoleUser,
 		Content: fmt.Sprintf("(nick:%s) %s", nick, msg),
 	})
+
+	for res := range outch {
+		switch res.Message.Delta.Role {
+		case ai.ChatMessageRoleAssistant:
+			ctx.Reply(res.String())
+		default:
+			log.Println("non-assistant response:", res)
+		}
+
+	}
+
 }

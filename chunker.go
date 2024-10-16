@@ -2,6 +2,9 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
+	"fmt"
+	"log"
 	"time"
 
 	"github.com/neurosnap/sentences"
@@ -9,9 +12,13 @@ import (
 )
 
 type Chunker struct {
-	Delay           time.Duration
-	Length          int
-	Last            time.Time
+	Delay  time.Duration
+	Length int
+	Last   time.Time
+	// enable tool calls
+	Tools bool
+	// ToolsInline     bool
+	// ToolTag         string
 	Tokenizer       *sentences.DefaultSentenceTokenizer
 	buffer          *bytes.Buffer
 	toolBuffer      *bytes.Buffer
@@ -20,10 +27,14 @@ type Chunker struct {
 
 // NewChunker creates a new Chunker instance.
 func NewChunker() *Chunker {
+	log.Println("chunk: creating new chunker")
 	return &Chunker{
-		Length:     Config.ChunkMax,
-		Delay:      Config.ChunkDelay,
-		Last:       time.Now(),
+		Length: Config.ChunkMax,
+		Delay:  Config.ChunkDelay,
+		Last:   time.Now(),
+		Tools:  Config.Tools,
+		// ToolTag: Config.ToolTag,
+		// ToolsInline: Config.ToolsInline,
 		Tokenizer:  Config.Tokenizer,
 		buffer:     &bytes.Buffer{},
 		toolBuffer: &bytes.Buffer{},
@@ -32,29 +43,27 @@ func NewChunker() *Chunker {
 
 // Filter reads from the input channel and returns two channels:
 // one with chunked responses and one with tool calls.
-func (c *Chunker) Filter(messageChan <-chan StreamResponse) (<-chan StreamResponse, <-chan ai.ToolCall) {
+func (c *Chunker) Filter(msgChan <-chan StreamResponse) (<-chan StreamResponse, <-chan ai.ToolCall) {
 	chunkedChan := make(chan StreamResponse, 1000)
 	toolChan := make(chan ai.ToolCall, 1000)
 	contentChan := make(chan []byte, 1000)
 
-	go c.processToolCalls(messageChan, contentChan, toolChan)
+	go c.processToolCalls(msgChan, contentChan, toolChan)
 	go c.processChunks(contentChan, chunkedChan)
 
 	return chunkedChan, toolChan
 }
 
-// processToolCalls handles assembling tool calls from streamed data.
 func (c *Chunker) processToolCalls(messageChan <-chan StreamResponse, contentChan chan<- []byte, toolChan chan<- ai.ToolCall) {
 	defer close(toolChan)
 	defer close(contentChan)
-	// messageChan closed by caller
 
+	log.Println("chunk: processing tool calls &")
 	for val := range messageChan {
 		if val.Err != nil {
-			// Handle error, possibly send it to chunkedChan if needed
+			contentChan <- []byte(fmt.Sprintf("%s\n", val.Err.Error()))
 			continue
 		}
-
 		choice := val.Message
 		if len(choice.Delta.ToolCalls) > 0 {
 			toolCall := &choice.Delta.ToolCalls[0]
@@ -85,6 +94,8 @@ func (c *Chunker) processToolCalls(messageChan <-chan StreamResponse, contentCha
 // processChunks reads data from contentChan, writes it to the buffer, and triggers chunking.
 func (c *Chunker) processChunks(contentChan <-chan []byte, chunkedChan chan<- StreamResponse) {
 	defer close(chunkedChan)
+	log.Println("chunk: processing byte chunks &")
+
 	for content := range contentChan {
 		c.buffer.Write(content)
 		for {
@@ -92,6 +103,7 @@ func (c *Chunker) processChunks(contentChan <-chan []byte, chunkedChan chan<- St
 			if !chunked {
 				break
 			}
+			log.Println("chunk: sending text chunk to channel")
 			chunkedChan <- StreamResponse{
 				Message: ai.ChatCompletionStreamChoice{
 					Delta: ai.ChatCompletionStreamChoiceDelta{
@@ -124,6 +136,7 @@ func (c *Chunker) chunk() ([]byte, bool) {
 
 	// Attempt to chunk by sentence boundary if delay has passed.
 	if time.Since(c.Last) >= c.Delay {
+		log.Println("chunk: attempting to chunk by sentence boundary")
 		index = c.sentenceBoundary(content)
 		if index != -1 {
 			return c.readChunk(index), true
@@ -140,6 +153,7 @@ func (c *Chunker) chunk() ([]byte, bool) {
 
 // readChunk extracts a chunk of bytes from the buffer and updates the last chunk time.
 func (c *Chunker) readChunk(n int) []byte {
+	log.Println("chunk: chunked", n, "bytes")
 	chunk := c.buffer.Next(n)
 	c.Last = time.Now()
 	return chunk
@@ -154,4 +168,63 @@ func (c *Chunker) sentenceBoundary(s []byte) int {
 		return sentences[0].End
 	}
 	return -1
+}
+
+// or we just wait for https://github.com/ollama/ollama/issues/6790
+func (c *Chunker) processInlineTools(_ <-chan StreamResponse, _ chan<- []byte, _ chan<- ai.ToolCall) {
+	log.Fatalf("processInlineTools: not implemented")
+}
+
+func createStartTag(baseName string) string {
+	return "<" + baseName + ">"
+}
+
+func createEndTag(baseName string) string {
+	return "</" + baseName + ">"
+}
+
+func toolCallFromBuffer(buffer *bytes.Buffer) (*ai.ToolCall, error) {
+	tool := map[string]interface{}{}
+	err := json.Unmarshal(buffer.Bytes(), &tool)
+	if err != nil {
+		return nil, fmt.Errorf("toolcallFromBuffer: map tool: %v", err)
+	}
+
+	toolCall := ai.ToolCall{}
+	if name, exists := tool["name"].(string); exists {
+		toolCall.Function.Name = name
+	} else {
+		return nil, fmt.Errorf("toolcallFromBuffer: failed to get name: %v", err)
+	}
+
+	if id, exists := tool["id"].(string); exists {
+		toolCall.ID = id
+	} else {
+		log.Printf("toolcallFromBuffer: failed get id: %v", err)
+	}
+
+	// Extract the params field as a JSON string
+	params, paramexists := tool["parameters"]
+	args, argsexists := tool["arguments"]
+
+	if !paramexists && !argsexists {
+		return nil, fmt.Errorf("toolcallFromBuffer: tool failed to get arguments")
+	}
+	// Use the parameters field if it exists, otherwise use the arguments field
+	var finalargs any
+	if paramexists {
+		finalargs = params
+	} else {
+		finalargs = args
+	}
+
+	argumentsJSON, err := json.Marshal(finalargs)
+	if err != nil {
+		return nil, fmt.Errorf("toolcallFromBuffer: failed to marshal arguments: %v", err)
+	}
+
+	toolCall.Function.Arguments = string(argumentsJSON)
+
+	log.Printf("callfrombuffer: buffer tool call assembled: %v\n", toolCall)
+	return &toolCall, nil
 }

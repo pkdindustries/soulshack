@@ -18,10 +18,10 @@ type ChatContext struct {
 	Args    []string
 }
 
-func NewChatContext(parentctx context.Context, aiclient *ai.Client, ircclient *girc.Client, e *girc.Event) (*ChatContext, context.CancelFunc) {
+func NewChatContext(parentctx context.Context, aiclient *ai.Client, ircclient *girc.Client, e *girc.Event) (ChatContext, context.CancelFunc) {
 	timedctx, cancel := context.WithTimeout(parentctx, Config.ClientTimeout)
 
-	ctx := &ChatContext{
+	ctx := ChatContext{
 		Context: timedctx,
 		AI:      aiclient,
 		Client:  ircclient,
@@ -47,11 +47,11 @@ func NewChatContext(parentctx context.Context, aiclient *ai.Client, ircclient *g
 	return ctx, cancel
 }
 
-func (s *ChatContext) IsAddressed() bool {
+func (s ChatContext) IsAddressed() bool {
 	return strings.HasPrefix(s.Event.Last(), s.Client.GetNick())
 }
 
-func (c *ChatContext) IsAdmin() bool {
+func (c ChatContext) IsAdmin() bool {
 
 	hostmask := c.Event.Source.String()
 	log.Println("checking hostmask:", hostmask)
@@ -69,20 +69,20 @@ func (c *ChatContext) IsAdmin() bool {
 	return false
 }
 
-func (c *ChatContext) Reply(message string) *ChatContext {
+func (c ChatContext) Reply(message string) ChatContext {
 	c.Client.Cmd.Reply(*c.Event, message)
 	return c
 }
 
 // checks if the message is valid for processing
-func (c *ChatContext) Valid() bool {
+func (c ChatContext) Valid() bool {
 	return (c.IsAddressed() || !Config.Addressed || c.IsPrivate()) && len(c.Args) > 0
 }
 
-func (c *ChatContext) IsPrivate() bool {
+func (c ChatContext) IsPrivate() bool {
 	return !strings.HasPrefix(c.Event.Params[0], "#")
 }
 
-func (c *ChatContext) GetCommand() string {
+func (c ChatContext) GetCommand() string {
 	return strings.ToLower(c.Args[0])
 }
