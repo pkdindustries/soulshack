@@ -72,9 +72,6 @@ func (s *Session) AddMessage(msg ai.ChatCompletionMessage) {
 
 	s.addMessage(msg)
 	s.trimHistory()
-	if Config.Verbose {
-		s.Debug()
-	}
 }
 
 func (s *Session) addMessage(msg ai.ChatCompletionMessage) {
