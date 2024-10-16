@@ -17,6 +17,8 @@ func RegisterIrcTools(registry *ToolRegistry) {
 	registry.RegisterTool("irc_mode", &IrcOpTool{})
 	registry.RegisterTool("irc_kick", &IrcKickTool{})
 	registry.RegisterTool("irc_topic", &IrcTopicTool{})
+	registry.RegisterTool("irc_self_operator", &IrcOperTool{})
+	registry.RegisterTool("irc_action", &IrcActionTool{})
 }
 
 func (t *IrcOpTool) GetTool() (ai.Tool, error) {
@@ -43,7 +45,6 @@ func (t *IrcOpTool) GetTool() (ai.Tool, error) {
 }
 
 func (t *IrcOpTool) Execute(ctx ChatContext, tool ai.ToolCall) (ai.ChatCompletionMessage, error) {
-
 	type kickRequest struct {
 		Nick string `json:"nick"`
 		Op   bool   `json:"op"`
@@ -169,7 +170,6 @@ func (t *IrcTopicTool) GetTool() (ai.Tool, error) {
 }
 
 func (t *IrcTopicTool) Execute(ctx ChatContext, tool ai.ToolCall) (ai.ChatCompletionMessage, error) {
-
 	type topicRequest struct {
 		Topic string `json:"topic"`
 	}
@@ -199,6 +199,104 @@ func (t *IrcTopicTool) Execute(ctx ChatContext, tool ai.ToolCall) (ai.ChatComple
 	return ai.ChatCompletionMessage{
 		Role:       ai.ChatMessageRoleTool,
 		Content:    "success",
+		ToolCallID: tool.ID,
+		Name:       tool.Function.Name,
+	}, nil
+}
+
+type IrcOperTool struct {
+}
+
+func (t *IrcOperTool) GetTool() (ai.Tool, error) {
+	return ai.Tool{
+		Type: ai.ToolTypeFunction,
+		Function: &ai.FunctionDefinition{
+			Name:        "irc_self_operator",
+			Description: "grants the chatbot /oper operator status on the server (irc operator)",
+			Parameters: jsonschema.Definition{
+				Type: jsonschema.Object,
+				Properties: map[string]jsonschema.Definition{
+					"password": {
+						Type:        jsonschema.String,
+						Description: "the irc operator password",
+					},
+				},
+				Required: []string{"password"},
+			},
+		}}, nil
+}
+
+func (t *IrcOperTool) Execute(ctx ChatContext, tool ai.ToolCall) (ai.ChatCompletionMessage, error) {
+	type operRequest struct {
+		Password string `json:"password"`
+	}
+
+	var req operRequest
+	err := json.Unmarshal([]byte(tool.Function.Arguments), &req)
+
+	if err != nil {
+		return ai.ChatCompletionMessage{
+			Role:       ai.ChatMessageRoleTool,
+			ToolCallID: tool.ID,
+			Name:       tool.Function.Name,
+			Content:    "failed to unmarshal arguments" + err.Error(),
+		}, err
+	}
+
+	ctx.Client.Cmd.Oper(Config.Nick, req.Password)
+
+	return ai.ChatCompletionMessage{
+		Role:       ai.ChatMessageRoleTool,
+		Content:    "success",
+		ToolCallID: tool.ID,
+		Name:       tool.Function.Name,
+	}, nil
+}
+
+type IrcActionTool struct {
+}
+
+func (t *IrcActionTool) GetTool() (ai.Tool, error) {
+	return ai.Tool{
+		Type: ai.ToolTypeFunction,
+		Function: &ai.FunctionDefinition{
+			Name:        "irc_action",
+			Description: "sends an irc action message (/me) to the channel",
+			Parameters: jsonschema.Definition{
+				Type: jsonschema.Object,
+				Properties: map[string]jsonschema.Definition{
+					"message": {
+						Type:        jsonschema.String,
+						Description: "the action message to send",
+					},
+				},
+				Required: []string{"message"},
+			},
+		}}, nil
+}
+
+func (t *IrcActionTool) Execute(ctx ChatContext, tool ai.ToolCall) (ai.ChatCompletionMessage, error) {
+	type actionRequest struct {
+		Message string `json:"message"`
+	}
+
+	var req actionRequest
+	err := json.Unmarshal([]byte(tool.Function.Arguments), &req)
+
+	if err != nil {
+		return ai.ChatCompletionMessage{
+			Role:       ai.ChatMessageRoleTool,
+			ToolCallID: tool.ID,
+			Name:       tool.Function.Name,
+			Content:    "failed to unmarshal arguments" + err.Error(),
+		}, err
+	}
+
+	ctx.Client.Cmd.Action(Config.Channel, req.Message)
+
+	return ai.ChatCompletionMessage{
+		Role:       ai.ChatMessageRoleTool,
+		Content:    "success. reply with simple confirmation.",
 		ToolCallID: tool.ID,
 		Name:       tool.Function.Name,
 	}, nil
