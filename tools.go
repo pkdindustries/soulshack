@@ -174,7 +174,11 @@ func (s *ShellTool) Execute(ctx ChatContext, tool ai.ToolCall) (ai.ChatCompletio
 	cmd := exec.Command(s.Command, "--execute", string(args))
 	output, err := cmd.CombinedOutput()
 
-	log.Printf("tool output: %s", output)
+	if err != nil {
+		log.Println("error executing tool:", err)
+		log.Println("tool output:", string(output))
+	}
+
 	outputStr := strings.TrimSpace(string(output))
 	msg := ai.ChatCompletionMessage{ToolCallID: tool.ID, Name: s.Name, Role: ai.ChatMessageRoleTool, Content: outputStr}
 	return msg, err
