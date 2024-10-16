@@ -3,6 +3,7 @@ package main
 import (
 	"testing"
 
+	"github.com/lrstanley/girc"
 	ai "github.com/sashabaranov/go-openai"
 	"github.com/stretchr/testify/assert"
 )
@@ -68,4 +69,56 @@ func TestShellTool_Execute(t *testing.T) {
 
 	// show the result
 	t.Log(toolmsg.Content)
+}
+
+func TestIsAdmin(t *testing.T) {
+	tests := []struct {
+		name     string
+		admins   []string
+		hostmask string
+		expected bool
+	}{
+		{
+			name:     "No admins configured",
+			admins:   []string{},
+			hostmask: "user@host",
+			expected: true,
+		},
+		{
+			name:     "Hostmask is admin",
+			admins:   []string{"~user@host"},
+			hostmask: "~user@host",
+			expected: true,
+		},
+		{
+			name:     "Hostmask is not admin",
+			admins:   []string{"admin@host", "user@host2"},
+			hostmask: "user@host",
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Mock Config
+			Config = &Configuration{}
+			Config.Admins = tt.admins
+
+			// Mock Event
+			event := &girc.Event{
+				Source: &girc.Source{
+					Name: tt.hostmask,
+				},
+			}
+
+			// Create ChatContext
+			ctx := &ChatContext{
+				Event: event,
+			}
+
+			// Test IsAdmin
+			result := ctx.IsAdmin()
+			assert.Equal(t, tt.expected, result)
+		})
+	}
 }
