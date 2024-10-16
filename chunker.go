@@ -103,7 +103,6 @@ func (c *Chunker) processChunks(contentChan <-chan []byte, chunkedChan chan<- St
 			if !chunked {
 				break
 			}
-			log.Println("chunk: sending text chunk to channel")
 			chunkedChan <- StreamResponse{
 				Message: ai.ChatCompletionStreamChoice{
 					Delta: ai.ChatCompletionStreamChoiceDelta{
@@ -136,7 +135,7 @@ func (c *Chunker) chunk() ([]byte, bool) {
 
 	// Attempt to chunk by sentence boundary if delay has passed.
 	if time.Since(c.Last) >= c.Delay {
-		log.Println("chunk: attempting to chunk by sentence boundary")
+		c.Last = time.Now()
 		index = c.sentenceBoundary(content)
 		if index != -1 {
 			return c.readChunk(index), true
@@ -153,7 +152,6 @@ func (c *Chunker) chunk() ([]byte, bool) {
 
 // readChunk extracts a chunk of bytes from the buffer and updates the last chunk time.
 func (c *Chunker) readChunk(n int) []byte {
-	log.Println("chunk: chunked", n, "bytes")
 	chunk := c.buffer.Next(n)
 	c.Last = time.Now()
 	return chunk
@@ -161,6 +159,7 @@ func (c *Chunker) readChunk(n int) []byte {
 
 // sentenceBoundary finds the end index of the first sentence in the buffer.
 func (c *Chunker) sentenceBoundary(s []byte) int {
+	log.Println("chunk: attempting to chunk by sentence boundary")
 	text := string(s)
 	sentences := c.Tokenizer.Tokenize(text)
 	if len(sentences) > 1 {

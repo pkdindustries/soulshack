@@ -161,7 +161,7 @@ func completionStream(ctx ChatContext, req *CompletionRequest, messageChannel ch
 
 	for {
 		select {
-		case <-ctx.Done():
+		case <-timeout.Done():
 			log.Println("completionStream: context canceled")
 			messageChannel <- StreamResponse{Err: fmt.Errorf("api timeout exceeded: %w", ctx.Err())}
 			return
@@ -192,12 +192,5 @@ func handleStreamError(err error, messageChannel chan<- StreamResponse) {
 			},
 		}
 		messageChannel <- StreamResponse{Message: msg}
-	} else {
-		messageChannel <- StreamResponse{Err: fmt.Errorf("stream receive error: %w", err), Message: ai.ChatCompletionStreamChoice{
-			Delta: ai.ChatCompletionStreamChoiceDelta{
-				Role:    ai.ChatMessageRoleAssistant,
-				Content: fmt.Sprintf("i'm having trouble talking to my endpoint: %v", err),
-			},
-		}}
 	}
 }
