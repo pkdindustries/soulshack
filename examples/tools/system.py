@@ -34,17 +34,6 @@ def execute(resource_json):
             print("Error: 'resource' is required in the input JSON.", file=sys.stderr)
             sys.exit(1)
         
-        # Provide system resource information based on the requested type
-        if resource_type == "cpu" or resource_type == "all":
-            # Get CPU information using /proc/stat
-            with open("/proc/stat", "r") as f:
-                line = f.readline()
-                if line.startswith("cpu "):
-                    cpu_times = list(map(int, line.split()[1:]))
-                    idle_time = cpu_times[3]
-                    total_time = sum(cpu_times)
-                    print(f"Total CPU Time: {total_time}")
-                    print(f"Idle CPU Time: {idle_time}")
         if resource_type == "memory" or resource_type == "all":
             # Get memory information using /proc/meminfo
             with open("/proc/meminfo", "r") as f:
@@ -58,9 +47,7 @@ def execute(resource_json):
                 total_memory = meminfo.get("MemTotal", 0) / 1024
                 free_memory = (meminfo.get("MemFree", 0) + meminfo.get("Buffers", 0) + meminfo.get("Cached", 0)) / 1024
                 used_memory = total_memory - free_memory
-                print(f"Total Memory: {total_memory:.2f} MB")
-                print(f"Used Memory: {used_memory:.2f} MB")
-                print(f"Free Memory: {free_memory:.2f} MB")
+                print(f"Memory: Total: {total_memory:.2f} MB, Used: {used_memory:.2f} MB, Free: {free_memory:.2f} MB")
         if resource_type == "disk" or resource_type == "all":
             # Get disk space information for all mounted volumes
             with open("/proc/mounts", "r") as f:
@@ -68,10 +55,7 @@ def execute(resource_json):
             
             for mount in mounts:
                 total, used, free = shutil.disk_usage(mount)
-                print(f"Mount Point: {mount}")
-                print(f"  Total Disk Space: {total / (1024 * 1024 * 1024):.2f} GB")
-                print(f"  Used Disk Space: {used / (1024 * 1024 * 1024):.2f} GB")
-                print(f"  Free Disk Space: {free / (1024 * 1024 * 1024):.2f} GB")
+                print(f"Mount Point: {mount}, Total: {total / (1024 * 1024 * 1024):.2f} GB, Used: {used / (1024 * 1024 * 1024):.2f} GB, Free: {free / (1024 * 1024 * 1024):.2f} GB")
         if resource_type == "processes" or resource_type == "all":
             # Get process information using /proc
             processes = []
@@ -82,17 +66,21 @@ def execute(resource_json):
                             stat_info = f.readline().split()
                             process_name = stat_info[1].strip("()")
                             process_state = stat_info[2]
+                            parent_pid = stat_info[3]
                             user_time = int(stat_info[13]) / os.sysconf(os.sysconf_names['SC_CLK_TCK'])
                             system_time = int(stat_info[14]) / os.sysconf(os.sysconf_names['SC_CLK_TCK'])
                             uid = os.stat(f"/proc/{pid}").st_uid
                             username = pwd.getpwuid(uid).pw_name
-                            processes.append((pid, username, process_name, process_state, user_time, system_time))
+                            memory_usage = int(stat_info[22]) / (1024 * 1024)  # Adding memory usage in MB
+                            with open(f"/proc/{pid}/cmdline", "r") as cmd_file:
+                                command = cmd_file.read().replace('\0', ' ')[:64]  # Get first 64 characters of command
+                            processes.append((pid, parent_pid, username, process_name, process_state, user_time, system_time, memory_usage, command))
                     except FileNotFoundError:
                         # Process might have ended before we could read it
                         continue
-            print("PID\tUSERNAME\tNAME\tSTATE\tUSER_TIME\tSYSTEM_TIME")
-            for pid, username, name, state, u_time, s_time in processes:
-                print(f"{pid}\t{username}\t{name}\t{state}\t{u_time:.2f}s\t{s_time:.2f}s")
+            print("PID PPID USERNAME NAME STATE USER_TIME SYSTEM_TIME MEMORY_USAGE (MB) COMMAND")
+            for pid, ppid, username, name, state, u_time, s_time, mem_usage, command in processes:
+                print(f"{pid} {ppid} {username} {name} {state} {u_time:.2f}s {s_time:.2f}s {mem_usage:.2f} MB {command}")
         if resource_type == "docker" or resource_type == "all":
             # Get Docker container information using the docker command line
             try:
@@ -127,7 +115,7 @@ def execute(resource_json):
             except subprocess.CalledProcessError:
                 print("Error: Failed to run Docker command.", file=sys.stderr)
                 sys.exit(1)
-        if resource_type == "loadavg" or resource_type == "uptime" or resource_type == "all":
+        if resource_type == "loadavg" or resource_type == "uptime" or resource_type == "cpu" or resource_type == "all":
             # Get load average and system uptime using uptime command
             try:
                 uptime_result = subprocess.run(["uptime"], capture_output=True, text=True, check=True)
@@ -141,7 +129,7 @@ def execute(resource_json):
                 print("Error: Failed to run 'uptime' command.", file=sys.stderr)
                 sys.exit(1)
         if resource_type not in ["cpu", "memory", "disk", "processes", "docker", "all", "loadavg", "uptime"]:
-            print(f"Error: Unknown resource type '{resource_type}'. Supported types are 'cpu', 'memory', 'disk', 'processes', 'docker', 'all', 'loadavg'.", file=sys.stderr)
+            print(f"Error: Unknown resource type '{resource_type}'. Supported types are {resource_type}.", file=sys.stderr)
             sys.exit(1)
     except json.JSONDecodeError:
         print("Error: Invalid JSON input.", file=sys.stderr)
