@@ -15,6 +15,8 @@ type Chunker struct {
 	Delay  time.Duration
 	Length int
 	Last   time.Time
+	// enable streaming input
+	Stream bool
 	// enable tool calls
 	Tools bool
 	// ToolsInline     bool
@@ -33,6 +35,7 @@ func NewChunker() *Chunker {
 		Delay:  Config.ChunkDelay,
 		Last:   time.Now(),
 		Tools:  Config.Tools,
+		Stream: Config.Stream,
 		// ToolTag: Config.ToolTag,
 		// ToolsInline: Config.ToolsInline,
 		Tokenizer:  Config.Tokenizer,
@@ -41,15 +44,15 @@ func NewChunker() *Chunker {
 	}
 }
 
-// Filter reads from the input channel and returns two channels:
+// FilterTask reads from the input channel and returns two channels:
 // one with chunked responses and one with tool calls.
-func (c *Chunker) Filter(msgChan <-chan StreamResponse) (<-chan StreamResponse, <-chan ai.ToolCall) {
-	chunkedChan := make(chan StreamResponse, 1000)
+func (c *Chunker) FilterTask(msgChan <-chan StreamResponse) (<-chan ChatText, <-chan ai.ToolCall) {
+	chunkedChan := make(chan ChatText, 1000)
 	toolChan := make(chan ai.ToolCall, 1000)
-	contentChan := make(chan []byte, 1000)
+	textChan := make(chan []byte, 1000)
 
-	go c.processToolCalls(msgChan, contentChan, toolChan)
-	go c.processChunks(contentChan, chunkedChan)
+	go c.processToolCalls(msgChan, textChan, toolChan)
+	go c.processChunks(textChan, chunkedChan)
 
 	return chunkedChan, toolChan
 }
@@ -65,34 +68,43 @@ func (c *Chunker) processToolCalls(messageChan <-chan StreamResponse, contentCha
 			continue
 		}
 		choice := val.Message
-		if len(choice.Delta.ToolCalls) > 0 {
-			toolCall := &choice.Delta.ToolCalls[0]
-			if c.partialToolCall == nil {
-				// Begin assembling a new tool call
-				c.partialToolCall = toolCall
+
+		if c.Stream {
+			if len(choice.Delta.ToolCalls) > 0 {
+				toolCall := &choice.Delta.ToolCalls[0]
+				if c.partialToolCall == nil {
+					// Begin assembling a new tool call
+					c.partialToolCall = toolCall
+					c.toolBuffer.Reset()
+				}
+				// Write tool call arguments as bytes
+				c.toolBuffer.Write([]byte(toolCall.Function.Arguments))
+			}
+
+			if choice.Delta.Content != "" {
+				// Send content as bytes
+				contentChan <- []byte(choice.Delta.Content)
+			}
+
+			if choice.FinishReason == ai.FinishReasonToolCalls {
+				// Tool call is fully assembled
+				c.partialToolCall.Function.Arguments = c.toolBuffer.String()
+				toolChan <- *c.partialToolCall
+				c.partialToolCall = nil
 				c.toolBuffer.Reset()
 			}
-			// Write tool call arguments as bytes
-			c.toolBuffer.Write([]byte(toolCall.Function.Arguments))
-		}
-
-		if choice.Delta.Content != "" {
-			// Send content as bytes
+		} else {
+			for _, toolCall := range choice.Delta.ToolCalls {
+				toolChan <- toolCall
+			}
 			contentChan <- []byte(choice.Delta.Content)
 		}
-
-		if choice.FinishReason == ai.FinishReasonToolCalls {
-			// Tool call is fully assembled
-			c.partialToolCall.Function.Arguments = c.toolBuffer.String()
-			toolChan <- *c.partialToolCall
-			c.partialToolCall = nil
-			c.toolBuffer.Reset()
-		}
 	}
+
 }
 
 // processChunks reads data from contentChan, writes it to the buffer, and triggers chunking.
-func (c *Chunker) processChunks(contentChan <-chan []byte, chunkedChan chan<- StreamResponse) {
+func (c *Chunker) processChunks(contentChan <-chan []byte, chunkedChan chan<- ChatText) {
 	defer close(chunkedChan)
 	log.Println("chunk: processing byte chunks &")
 
@@ -103,13 +115,9 @@ func (c *Chunker) processChunks(contentChan <-chan []byte, chunkedChan chan<- St
 			if !chunked {
 				break
 			}
-			chunkedChan <- StreamResponse{
-				Message: ai.ChatCompletionStreamChoice{
-					Delta: ai.ChatCompletionStreamChoiceDelta{
-						Role:    ai.ChatMessageRoleAssistant,
-						Content: string(chunk),
-					},
-				},
+			chunkedChan <- ChatText{
+				Text: string(chunk),
+				Role: ai.ChatMessageRoleAssistant,
 			}
 		}
 	}
@@ -135,7 +143,6 @@ func (c *Chunker) chunk() ([]byte, bool) {
 
 	// Attempt to chunk by sentence boundary if delay has passed.
 	if time.Since(c.Last) >= c.Delay {
-		c.Last = time.Now()
 		index = c.sentenceBoundary(content)
 		if index != -1 {
 			return c.readChunk(index), true

@@ -10,9 +10,16 @@ import (
 	ai "github.com/sashabaranov/go-openai"
 )
 
-// type SessionStore interface {
-// 	Get(id string) *Session
-// }
+type SessionInterface interface {
+	GetHistory() []ai.ChatCompletionMessage
+	AddMessage(ai.ChatCompletionMessage)
+	GetTotalChars() int
+}
+
+type SessionsInterface interface {
+	Get(string) *Session
+	Range(func(key, value interface{}) bool)
+}
 
 type Sessions struct {
 	sync.Map

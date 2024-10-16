@@ -48,6 +48,7 @@ type Configuration struct {
 	// ai
 	OpenAIConfig  openai.ClientConfig
 	OpenAiClient  *openai.Client
+	Stream        bool
 	ClientTimeout time.Duration
 	MaxTokens     int
 	APIKey        string
@@ -104,6 +105,7 @@ func (c *Configuration) PrintConfig() {
 		fmt.Printf("openapikey: %s\n", c.APIKey)
 	}
 	fmt.Printf("openaiurl: %s\n", c.OpenAIConfig.BaseURL)
+	fmt.Printf("streaming: %t\n", c.Stream)
 	fmt.Printf("model: %s\n", c.Model)
 	fmt.Printf("temperature: %f\n", c.Temperature)
 	fmt.Printf("topp: %f\n", c.TopP)
@@ -146,6 +148,7 @@ func loadConfig() {
 		//ToolsInline:     vip.GetBool("toolsinline"),
 		SessionDuration: vip.GetDuration("sessionduration"),
 		APIKey:          vip.GetString("openaikey"),
+		Stream:          vip.GetBool("stream"),
 		Model:           vip.GetString("model"),
 		Temperature:     float32(vip.GetFloat64("temperature")),
 		TopP:            float32(vip.GetFloat64("top_p")),
@@ -224,6 +227,7 @@ func InitializeConfig() {
 	root.PersistentFlags().Float32("temperature", 0.7, "temperature for the completion")
 	root.PersistentFlags().Float32("top_p", 1, "top P value for the completion")
 	root.PersistentFlags().Bool("tools", false, "enable tool use")
+	root.PersistentFlags().Bool("stream", true, "enable streaming completion")
 	//root.PersistentFlags().Bool("toolsinline", false, "enable inline tool use")
 	root.PersistentFlags().String("toolsdir", "examples/tools", "directory to load tools from")
 	root.PersistentFlags().String("tooltag", "tool_call", "tag llm uses for inline tool commands")

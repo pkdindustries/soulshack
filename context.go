@@ -9,6 +9,27 @@ import (
 	ai "github.com/sashabaranov/go-openai"
 )
 
+// ChatContextInterface defines the methods needed for interaction within the chat context.
+type ChatContextInterface interface {
+	context.Context
+	GetSession() *Session
+	GetClient() *girc.Client
+	GetAI() *ai.Client
+	IsAddressed() bool
+	IsAdmin() bool
+	Reply(string)
+	Valid() bool
+	IsPrivate() bool
+	GetCommand() string
+	GetEvent() *girc.Event
+	GetSource() string
+	GetArgs() []string
+	Join(string) bool
+	Part(string) bool
+	Nick(string) bool
+	Action(string, string)
+}
+
 type ChatContext struct {
 	context.Context
 	AI      *ai.Client
@@ -18,7 +39,9 @@ type ChatContext struct {
 	Args    []string
 }
 
-func NewChatContext(parentctx context.Context, aiclient *ai.Client, ircclient *girc.Client, e *girc.Event) (ChatContext, context.CancelFunc) {
+var _ ChatContextInterface = (*ChatContext)(nil)
+
+func NewChatContext(parentctx context.Context, aiclient *ai.Client, ircclient *girc.Client, e *girc.Event) (ChatContextInterface, context.CancelFunc) {
 	timedctx, cancel := context.WithTimeout(parentctx, Config.ClientTimeout)
 
 	ctx := ChatContext{
@@ -51,8 +74,46 @@ func (s ChatContext) IsAddressed() bool {
 	return strings.HasPrefix(s.Event.Last(), s.Client.GetNick())
 }
 
-func (c ChatContext) IsAdmin() bool {
+func (c ChatContext) Nick(nickname string) bool {
+	c.Client.Cmd.Nick(nickname)
+	return true
+}
 
+func (c ChatContext) Join(channel string) bool {
+	c.Client.Cmd.Join(channel)
+	return true
+}
+
+func (c ChatContext) Part(channel string) bool {
+	c.Client.Cmd.Part(channel)
+	return true
+}
+
+func (c ChatContext) GetArgs() []string {
+	return c.Args
+}
+
+func (c ChatContext) GetSession() *Session {
+	return c.Session
+}
+
+func (c ChatContext) GetClient() *girc.Client {
+	return c.Client
+}
+
+func (c ChatContext) GetEvent() *girc.Event {
+	return c.Event
+}
+
+func (c ChatContext) GetSource() string {
+	return c.Event.Source.Name
+}
+
+func (c ChatContext) GetAI() *ai.Client {
+	return c.AI
+}
+
+func (c ChatContext) IsAdmin() bool {
 	hostmask := c.Event.Source.String()
 	log.Println("checking hostmask:", hostmask)
 	// XXX: if no admins are configured, all hostmasks are admins
@@ -69,9 +130,12 @@ func (c ChatContext) IsAdmin() bool {
 	return false
 }
 
-func (c ChatContext) Reply(message string) ChatContext {
+func (c ChatContext) Reply(message string) {
 	c.Client.Cmd.Reply(*c.Event, message)
-	return c
+}
+
+func (c ChatContext) Action(target string, message string) {
+	c.Client.Cmd.Action(target, message)
 }
 
 // checks if the message is valid for processing

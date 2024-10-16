@@ -14,7 +14,7 @@ import (
 
 type SoulShackTool interface {
 	GetTool() (ai.Tool, error)
-	Execute(ctx ChatContext, tool ai.ToolCall) (ai.ChatCompletionMessage, error)
+	Execute(ctx ChatContextInterface, tool ai.ToolCall) (ai.ChatCompletionMessage, error)
 }
 
 type ToolRegistry struct {
@@ -161,8 +161,8 @@ func (s *ShellTool) GetTool() (ai.Tool, error) {
 	}, nil
 }
 
-func (s *ShellTool) Execute(ctx ChatContext, tool ai.ToolCall) (ai.ChatCompletionMessage, error) {
-	log.Printf("executing shell tool: %s", s.Command)
+func (s *ShellTool) Execute(ctx ChatContextInterface, tool ai.ToolCall) (ai.ChatCompletionMessage, error) {
+	log.Printf("shelltool cmd: %s", s.Command)
 
 	// arguments are passed as a JSON string, parse it
 	var args json.RawMessage
@@ -174,12 +174,11 @@ func (s *ShellTool) Execute(ctx ChatContext, tool ai.ToolCall) (ai.ChatCompletio
 	cmd := exec.Command(s.Command, "--execute", string(args))
 	output, err := cmd.CombinedOutput()
 
-	if err != nil {
-		log.Println("error executing tool:", err)
-		log.Println("tool output:", string(output))
-	}
+	log.Println("shelltool usr:", cmd.ProcessState.UserTime())
+	log.Println("shelltool sys:", cmd.ProcessState.SystemTime())
+	log.Println("shelltool rc:", cmd.ProcessState.ExitCode())
 
-	outputStr := strings.TrimSpace(string(output))
-	msg := ai.ChatCompletionMessage{ToolCallID: tool.ID, Name: s.Name, Role: ai.ChatMessageRoleTool, Content: outputStr}
+	out := strings.TrimSpace(string(output))
+	msg := ai.ChatCompletionMessage{ToolCallID: tool.ID, Name: s.Name, Role: ai.ChatMessageRoleTool, Content: out}
 	return msg, err
 }

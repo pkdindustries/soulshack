@@ -44,7 +44,7 @@ func (t *IrcOpTool) GetTool() (ai.Tool, error) {
 		}}, nil
 }
 
-func (t *IrcOpTool) Execute(ctx ChatContext, tool ai.ToolCall) (ai.ChatCompletionMessage, error) {
+func (t *IrcOpTool) Execute(ctx ChatContextInterface, tool ai.ToolCall) (ai.ChatCompletionMessage, error) {
 	type kickRequest struct {
 		Nick string `json:"nick"`
 		Op   bool   `json:"op"`
@@ -75,7 +75,7 @@ func (t *IrcOpTool) Execute(ctx ChatContext, tool ai.ToolCall) (ai.ChatCompletio
 		opcmd = "+o"
 	}
 
-	ctx.Client.Cmd.Mode(Config.Channel, opcmd, req.Nick)
+	ctx.GetClient().Cmd.Mode(Config.Channel, opcmd, req.Nick)
 
 	return ai.ChatCompletionMessage{
 		Role:       ai.ChatMessageRoleTool,
@@ -111,7 +111,7 @@ func (t *IrcKickTool) GetTool() (ai.Tool, error) {
 		}}, nil
 }
 
-func (t *IrcKickTool) Execute(ctx ChatContext, tool ai.ToolCall) (ai.ChatCompletionMessage, error) {
+func (t *IrcKickTool) Execute(ctx ChatContextInterface, tool ai.ToolCall) (ai.ChatCompletionMessage, error) {
 	type kickRequest struct {
 		Nick   string `json:"nick"`
 		Reason string `json:"reason"`
@@ -133,11 +133,11 @@ func (t *IrcKickTool) Execute(ctx ChatContext, tool ai.ToolCall) (ai.ChatComplet
 			Role:       ai.ChatMessageRoleTool,
 			Name:       tool.Function.Name,
 			ToolCallID: tool.ID,
-			Content:    ctx.Event.Source.Name + "doesn't have admin permission to perform this action.",
+			Content:    ctx.GetSource() + "doesn't have admin permission to perform this action.",
 		}, fmt.Errorf("unauthorized")
 	}
 
-	ctx.Client.Cmd.Kick(Config.Channel, req.Nick, req.Reason)
+	ctx.GetClient().Cmd.Kick(Config.Channel, req.Nick, req.Reason)
 
 	return ai.ChatCompletionMessage{
 		Role:       ai.ChatMessageRoleTool,
@@ -169,7 +169,7 @@ func (t *IrcTopicTool) GetTool() (ai.Tool, error) {
 		}}, nil
 }
 
-func (t *IrcTopicTool) Execute(ctx ChatContext, tool ai.ToolCall) (ai.ChatCompletionMessage, error) {
+func (t *IrcTopicTool) Execute(ctx ChatContextInterface, tool ai.ToolCall) (ai.ChatCompletionMessage, error) {
 	type topicRequest struct {
 		Topic string `json:"topic"`
 	}
@@ -191,11 +191,11 @@ func (t *IrcTopicTool) Execute(ctx ChatContext, tool ai.ToolCall) (ai.ChatComple
 			Role:       ai.ChatMessageRoleTool,
 			ToolCallID: tool.ID,
 			Name:       tool.Function.Name,
-			Content:    ctx.Event.Source.Name + " has no admin permission to perform this action.",
+			Content:    ctx.GetSource() + " has no admin permission to perform this action.",
 		}, fmt.Errorf("unauthorized")
 	}
 
-	ctx.Client.Cmd.Topic(Config.Channel, req.Topic)
+	ctx.GetClient().Cmd.Topic(Config.Channel, req.Topic)
 	return ai.ChatCompletionMessage{
 		Role:       ai.ChatMessageRoleTool,
 		Content:    "success",
@@ -226,7 +226,7 @@ func (t *IrcOperTool) GetTool() (ai.Tool, error) {
 		}}, nil
 }
 
-func (t *IrcOperTool) Execute(ctx ChatContext, tool ai.ToolCall) (ai.ChatCompletionMessage, error) {
+func (t *IrcOperTool) Execute(ctx ChatContextInterface, tool ai.ToolCall) (ai.ChatCompletionMessage, error) {
 	type operRequest struct {
 		Password string `json:"password"`
 	}
@@ -243,7 +243,7 @@ func (t *IrcOperTool) Execute(ctx ChatContext, tool ai.ToolCall) (ai.ChatComplet
 		}, err
 	}
 
-	ctx.Client.Cmd.Oper(Config.Nick, req.Password)
+	ctx.GetClient().Cmd.Oper(Config.Nick, req.Password)
 
 	return ai.ChatCompletionMessage{
 		Role:       ai.ChatMessageRoleTool,
@@ -275,7 +275,7 @@ func (t *IrcActionTool) GetTool() (ai.Tool, error) {
 		}}, nil
 }
 
-func (t *IrcActionTool) Execute(ctx ChatContext, tool ai.ToolCall) (ai.ChatCompletionMessage, error) {
+func (t *IrcActionTool) Execute(ctx ChatContextInterface, tool ai.ToolCall) (ai.ChatCompletionMessage, error) {
 	type actionRequest struct {
 		Message string `json:"message"`
 	}
@@ -292,7 +292,7 @@ func (t *IrcActionTool) Execute(ctx ChatContext, tool ai.ToolCall) (ai.ChatCompl
 		}, err
 	}
 
-	ctx.Client.Cmd.Action(Config.Channel, req.Message)
+	ctx.Action(Config.Channel, req.Message)
 
 	return ai.ChatCompletionMessage{
 		Role:       ai.ChatMessageRoleTool,

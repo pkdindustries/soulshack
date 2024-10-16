@@ -11,31 +11,31 @@ import (
 	ai "github.com/sashabaranov/go-openai"
 )
 
-func greeting(ctx ChatContext) {
-	outch := Complete(ctx, ai.ChatCompletionMessage{
-		Role:    ai.ChatMessageRoleAssistant,
-		Content: Config.Greeting,
+func greeting(ctx ChatContextInterface) {
+	outch := Complete(ctx, ChatText{
+		Role: ai.ChatMessageRoleAssistant,
+		Text: Config.Greeting,
 	})
 
 	res := <-outch
-	switch res.Message.Delta.Role {
+	switch res.Role {
 	case ai.ChatMessageRoleAssistant:
-		ctx.Reply(res.String())
+		ctx.Reply(res.Text)
 	}
 }
 
-func slashSet(ctx ChatContext) {
+func slashSet(ctx ChatContextInterface) {
 	if !ctx.IsAdmin() {
 		ctx.Reply("You don't have permission to perform this action.")
 		return
 	}
 
-	if len(ctx.Args) < 3 {
+	if len(ctx.GetArgs()) < 3 {
 		ctx.Reply(fmt.Sprintf("Usage: /set <key> <value>. Available keys: %s", strings.Join(ModifiableConfigKeys, ", ")))
 		return
 	}
 
-	param, v := ctx.Args[1], ctx.Args[2:]
+	param, v := ctx.GetArgs()[1], ctx.GetArgs()[2:]
 	value := strings.Join(v, " ")
 
 	if !contains(ModifiableConfigKeys, param) {
@@ -60,11 +60,11 @@ func slashSet(ctx ChatContext) {
 		ctx.Reply(fmt.Sprintf("%s set to: %s", param, Config.Model))
 	case "nick":
 		Config.Nick = value
-		ctx.Client.Cmd.Nick(value)
+		ctx.Nick(value)
 	case "channel":
 		Config.Channel = value
-		ctx.Client.Cmd.Part(Config.Channel)
-		ctx.Client.Cmd.Join(value)
+		ctx.Part(Config.Channel)
+		ctx.Join(value)
 	case "maxtokens":
 		maxTokens, err := strconv.Atoi(value)
 		if err != nil {
@@ -113,17 +113,17 @@ func slashSet(ctx ChatContext) {
 		ctx.Reply(fmt.Sprintf("%s set to: %t", param, Config.Tools))
 	}
 
-	ctx.Session.Reset()
+	ctx.GetSession().Reset()
 }
 
-func slashGet(ctx ChatContext) {
+func slashGet(ctx ChatContextInterface) {
 
-	if len(ctx.Args) < 2 {
+	if len(ctx.GetArgs()) < 2 {
 		ctx.Reply(fmt.Sprintf("Usage: /get <key>. Available keys: %s", strings.Join(ModifiableConfigKeys, ", ")))
 		return
 	}
 
-	param := ctx.Args[1]
+	param := ctx.GetArgs()[1]
 	if !contains(ModifiableConfigKeys, param) {
 		ctx.Reply(fmt.Sprintf("Unknown key %s. Available keys: %s", param, strings.Join(ModifiableConfigKeys, ", ")))
 		return
@@ -164,7 +164,7 @@ func contains(slice []string, item string) bool {
 	return false
 }
 
-func slashLeave(ctx ChatContext) {
+func slashLeave(ctx ChatContextInterface) {
 
 	if !ctx.IsAdmin() {
 		ctx.Reply("You don't have permission to perform this action.")
@@ -178,19 +178,19 @@ func slashLeave(ctx ChatContext) {
 	}()
 }
 
-func completionResponse(ctx ChatContext) {
-	msg := strings.Join(ctx.Args, " ")
-	nick := ctx.Event.Source.Name
+func completionResponse(ctx ChatContextInterface) {
+	msg := strings.Join(ctx.GetArgs(), " ")
+	nick := ctx.GetSource()
 
-	outch := Complete(ctx, ai.ChatCompletionMessage{
-		Role:    ai.ChatMessageRoleUser,
-		Content: fmt.Sprintf("(nick:%s) %s", nick, msg),
+	outch := Complete(ctx, ChatText{
+		Role: ai.ChatMessageRoleUser,
+		Text: fmt.Sprintf("(nick:%s) %s", nick, msg),
 	})
 
 	for res := range outch {
-		switch res.Message.Delta.Role {
+		switch res.Role {
 		case ai.ChatMessageRoleAssistant:
-			ctx.Reply(res.String())
+			ctx.Reply(res.Text)
 		default:
 			log.Println("non-assistant response:", res)
 		}

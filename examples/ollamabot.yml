@@ -4,5 +4,7 @@ prompt: "you are an irc chatbot. do not use emoji. never use caps. responde in n
 model: llama3.2
 openaiurl: "http://localhost:11434/v1/"
 temperature: 0.3
-# tools: true
-# toolsinline: true
+tools: true
+# need to disable streaming for tools to work
+# on a the ollama rendition of the openai api
+stream: false
