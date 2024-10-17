@@ -143,13 +143,14 @@ func ChatCompletionTask(ctx ChatContextInterface, req *CompletionRequest) <-chan
 					ToolCalls: message.ToolCalls,
 				},
 			}}
-			messageChannel <- StreamResponse{Message: ai.ChatCompletionStreamChoice{
-				Delta: ai.ChatCompletionStreamChoiceDelta{
-					Role:    ai.ChatMessageRoleAssistant,
-					Content: "\n",
-				},
-			}}
 		}
+		messageChannel <- StreamResponse{Message: ai.ChatCompletionStreamChoice{
+			Delta: ai.ChatCompletionStreamChoiceDelta{
+				Role:    ai.ChatMessageRoleAssistant,
+				Content: "\n",
+			},
+		}}
+
 	}()
 	return messageChannel
 }

@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"log"
 	"time"
@@ -174,63 +173,4 @@ func (c *Chunker) sentenceBoundary(s []byte) int {
 		return sentences[0].End
 	}
 	return -1
-}
-
-// or we just wait for https://github.com/ollama/ollama/issues/6790
-func (c *Chunker) processInlineTools(_ <-chan StreamResponse, _ chan<- []byte, _ chan<- ai.ToolCall) {
-	log.Fatalf("processInlineTools: not implemented")
-}
-
-func createStartTag(baseName string) string {
-	return "<" + baseName + ">"
-}
-
-func createEndTag(baseName string) string {
-	return "</" + baseName + ">"
-}
-
-func toolCallFromBuffer(buffer *bytes.Buffer) (*ai.ToolCall, error) {
-	tool := map[string]interface{}{}
-	err := json.Unmarshal(buffer.Bytes(), &tool)
-	if err != nil {
-		return nil, fmt.Errorf("toolcallFromBuffer: map tool: %v", err)
-	}
-
-	toolCall := ai.ToolCall{}
-	if name, exists := tool["name"].(string); exists {
-		toolCall.Function.Name = name
-	} else {
-		return nil, fmt.Errorf("toolcallFromBuffer: failed to get name: %v", err)
-	}
-
-	if id, exists := tool["id"].(string); exists {
-		toolCall.ID = id
-	} else {
-		log.Printf("toolcallFromBuffer: failed get id: %v", err)
-	}
-
-	// Extract the params field as a JSON string
-	params, paramexists := tool["parameters"]
-	args, argsexists := tool["arguments"]
-
-	if !paramexists && !argsexists {
-		return nil, fmt.Errorf("toolcallFromBuffer: tool failed to get arguments")
-	}
-	// Use the parameters field if it exists, otherwise use the arguments field
-	var finalargs any
-	if paramexists {
-		finalargs = params
-	} else {
-		finalargs = args
-	}
-
-	argumentsJSON, err := json.Marshal(finalargs)
-	if err != nil {
-		return nil, fmt.Errorf("toolcallFromBuffer: failed to marshal arguments: %v", err)
-	}
-
-	toolCall.Function.Arguments = string(argumentsJSON)
-
-	log.Printf("callfrombuffer: buffer tool call assembled: %v\n", toolCall)
-	return &toolCall, nil
 }
