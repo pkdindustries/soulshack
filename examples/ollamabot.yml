@@ -1,9 +1,10 @@
 # connect to a local ollama server via openai compatible API
 nick: ollamabot
-prompt: "you are an irc chatbot. do not use emoji. never use caps. responde in no more than 3 lines."
+prompt: "you are an irc chatbot. never use emoji. never use markdown. never use caps. always use short compact responses. reply in no more than 3 lines."
 model: llama3.2
 openaiurl: "http://localhost:11434/v1/"
-temperature: 0.3
+temperature: 0.5
+maxtokens: 64
 tools: true
 # need to disable streaming for tools to work
 # on a the ollama rendition of the openai api
