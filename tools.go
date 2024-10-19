@@ -18,7 +18,8 @@ type SoulShackTool interface {
 }
 
 type ToolRegistry struct {
-	Tools map[string]SoulShackTool
+	Tools       map[string]SoulShackTool
+	Definitions []ai.Tool
 }
 
 func NewToolRegistry(toolsDir string) (*ToolRegistry, error) {
@@ -76,16 +77,19 @@ func (r *ToolRegistry) GetToolByName(name string) (SoulShackTool, error) {
 }
 
 func (r *ToolRegistry) GetToolDefinitions() []ai.Tool {
-	tools := make([]ai.Tool, 0, len(r.Tools))
+	if len(r.Definitions) > 0 {
+		return r.Definitions
+	}
+
 	for _, tool := range r.Tools {
 		definition, err := tool.GetTool()
 		if err != nil {
 			log.Printf("failed to get tool definition: %v", err)
 			continue
 		}
-		tools = append(tools, definition)
+		r.Definitions = append(r.Definitions, definition)
 	}
-	return tools
+	return r.Definitions
 }
 
 // generic tool that can be configured to execute binaries or scripts.

@@ -6,8 +6,6 @@ import (
 	"math/rand"
 	"testing"
 	"time"
-
-	"github.com/neurosnap/sentences/english"
 )
 
 func TestChunker_Chunk(t *testing.T) {
@@ -25,9 +23,9 @@ func TestChunker_Chunk(t *testing.T) {
 		},
 		{
 			name:     "chunk on buffer size",
-			input:    "Hello",
-			size:     5,
-			expected: "Hello",
+			input:    "Hello there",
+			size:     7,
+			expected: "Hello t",
 		},
 		{
 			name:     "no chunk",
@@ -39,6 +37,7 @@ func TestChunker_Chunk(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+
 			c := &Chunker{
 				Length: tt.size,
 				Last:   time.Now(),
@@ -52,32 +51,6 @@ func TestChunker_Chunk(t *testing.T) {
 				t.Errorf("Chunk() got = %v, want = %v", chunk, tt.expected)
 			}
 		})
-	}
-}
-
-// // Test for chunking based on timeout
-func TestChunker_Chunk_Sentence(t *testing.T) {
-	timeout := 100 * time.Millisecond
-	tokenizer, err := english.NewSentenceTokenizer(nil)
-	if err != nil {
-		t.Fatalf("failed to create sentence tokenizer: %v", err)
-	}
-	c := &Chunker{
-		Length:    50,
-		Last:      time.Now(),
-		buffer:    &bytes.Buffer{},
-		Delay:     timeout,
-		Tokenizer: tokenizer,
-	}
-	c.buffer.WriteString("Hello world, Dr. Mike here! How are you?")
-
-	// Wait for timeout duration
-	time.Sleep(500 * time.Millisecond)
-
-	chunk, chunked := c.chunk()
-	expected := []byte("Hello world, Dr. Mike here!")
-	if chunked && string(chunk) != string(expected) {
-		t.Errorf("Chunk() got = %v, want = %v", string(chunk), string(expected))
 	}
 }
 
@@ -99,15 +72,13 @@ func BenchmarkChunker_StressTest(b *testing.B) {
 		// Generate random text
 		text := generateRandomText(bufSize)
 		b.ResetTimer()
-		tokenizer, _ := english.NewSentenceTokenizer(nil)
 		b.Run(fmt.Sprintf("StressTest_BufferSize_%d", bufSize), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				c := &Chunker{
-					Length:    50,
-					Last:      time.Now(),
-					buffer:    &bytes.Buffer{},
-					Delay:     timeout,
-					Tokenizer: tokenizer,
+					Length: 50,
+					Last:   time.Now(),
+					buffer: &bytes.Buffer{},
+					Delay:  timeout,
 				}
 				c.buffer.WriteString(text)
 

@@ -2,124 +2,142 @@ package main
 
 import (
 	"bytes"
-	"fmt"
 	"log"
 	"time"
 
-	"github.com/neurosnap/sentences"
 	ai "github.com/sashabaranov/go-openai"
 )
 
 type Chunker struct {
-	Delay  time.Duration
-	Length int
-	Last   time.Time
-	// enable streaming input
-	Stream bool
-	// enable tool calls
-	Tools bool
-	// ToolsInline     bool
-	// ToolTag         string
-	Tokenizer       *sentences.DefaultSentenceTokenizer
+	Delay           time.Duration
+	Length          int
+	Last            time.Time
+	Stream          bool
 	buffer          *bytes.Buffer
 	toolBuffer      *bytes.Buffer
 	partialToolCall *ai.ToolCall
 }
 
-// NewChunker creates a new Chunker instance.
-func NewChunker() *Chunker {
-	log.Println("chunk: creating new chunker")
+func NewChunker(config *Configuration) *Chunker {
 	return &Chunker{
-		Length: Config.ChunkMax,
-		Delay:  Config.ChunkDelay,
-		Last:   time.Now(),
-		Tools:  Config.Tools,
-		Stream: Config.Stream,
-		// ToolTag: Config.ToolTag,
-		// ToolsInline: Config.ToolsInline,
-		Tokenizer:  Config.Tokenizer,
+		Length:     config.Session.ChunkMax,
+		Delay:      config.Session.ChunkDelay,
+		Last:       time.Now(),
+		Stream:     config.API.Stream,
 		buffer:     &bytes.Buffer{},
 		toolBuffer: &bytes.Buffer{},
 	}
 }
 
-// FilterTask reads from the input channel and returns two channels:
-// one with chunked responses and one with tool calls.
 func (c *Chunker) FilterTask(msgChan <-chan StreamResponse) (<-chan ChatText, <-chan ai.ToolCall) {
-	chunkedChan := make(chan ChatText, 1000)
-	toolChan := make(chan ai.ToolCall, 1000)
-	textChan := make(chan []byte, 1000)
+	var byteChan <-chan []byte
+	var toolChan <-chan ai.ToolCall
 
-	go c.processToolCalls(msgChan, textChan, toolChan)
-	go c.processChunks(textChan, chunkedChan)
+	if c.Stream {
+		byteChan, toolChan = c.streamTask(msgChan)
+	} else {
+		byteChan, toolChan = c.nonStreamTask(msgChan)
+	}
 
-	return chunkedChan, toolChan
+	chatChan := c.chunkTask(byteChan)
+	return chatChan, toolChan
 }
 
-func (c *Chunker) processToolCalls(messageChan <-chan StreamResponse, contentChan chan<- []byte, toolChan chan<- ai.ToolCall) {
-	defer close(toolChan)
-	defer close(contentChan)
+func (c *Chunker) streamTask(chatChan <-chan StreamResponse) (chan []byte, chan ai.ToolCall) {
+	toolChan := make(chan ai.ToolCall, 1000)
+	byteChan := make(chan []byte, 1000)
 
-	log.Println("chunk: processing tool calls &")
-	for val := range messageChan {
-		if val.Err != nil {
-			contentChan <- []byte(fmt.Sprintf("%s\n", val.Err.Error()))
-			continue
-		}
-		choice := val.Message
+	go func() {
+		defer close(toolChan)
+		defer close(byteChan)
 
-		if c.Stream {
-			if len(choice.Delta.ToolCalls) > 0 {
-				toolCall := &choice.Delta.ToolCalls[0]
+		log.Println("streamTask: start")
+		for val := range chatChan {
+
+			if len(val.Delta.ToolCalls) > 0 {
+				toolCall := &val.Delta.ToolCalls[0]
 				if c.partialToolCall == nil {
-					// Begin assembling a new tool call
 					c.partialToolCall = toolCall
 					c.toolBuffer.Reset()
 				}
-				// Write tool call arguments as bytes
 				c.toolBuffer.Write([]byte(toolCall.Function.Arguments))
 			}
 
-			if choice.Delta.Content != "" {
-				// Send content as bytes
-				contentChan <- []byte(choice.Delta.Content)
-			}
+			byteChan <- []byte(val.Delta.Content)
 
-			if choice.FinishReason == ai.FinishReasonToolCalls {
-				// Tool call is fully assembled
+			if val.FinishReason == ai.FinishReasonToolCalls {
+				log.Println("streamTask: tool call assembled")
 				c.partialToolCall.Function.Arguments = c.toolBuffer.String()
 				toolChan <- *c.partialToolCall
 				c.partialToolCall = nil
 				c.toolBuffer.Reset()
+			} else if val.FinishReason == ai.FinishReasonStop {
+				if c.partialToolCall != nil {
+					log.Println("streamTask: incomplete tool call")
+					c.partialToolCall = nil
+					c.toolBuffer.Reset()
+				}
 			}
-		} else {
-			for _, toolCall := range choice.Delta.ToolCalls {
-				toolChan <- toolCall
-			}
-			contentChan <- []byte(choice.Delta.Content)
 		}
-	}
+		log.Println("streamTask: done")
+	}()
 
+	return byteChan, toolChan
 }
 
-// processChunks reads data from contentChan, writes it to the buffer, and triggers chunking.
-func (c *Chunker) processChunks(contentChan <-chan []byte, chunkedChan chan<- ChatText) {
-	defer close(chunkedChan)
-	log.Println("chunk: processing byte chunks &")
+func (c *Chunker) nonStreamTask(chatChan <-chan StreamResponse) (chan []byte, chan ai.ToolCall) {
+	toolChan := make(chan ai.ToolCall, 1000)
+	byteChan := make(chan []byte, 1000)
 
-	for content := range contentChan {
-		c.buffer.Write(content)
-		for {
-			chunk, chunked := c.chunk()
-			if !chunked {
-				break
+	go func() {
+		defer close(toolChan)
+		defer close(byteChan)
+
+		log.Println("nonStreamTask: start")
+		for val := range chatChan {
+
+			for _, toolCall := range val.Delta.ToolCalls {
+				log.Println("nonStreamTask: tool call assembled")
+				toolChan <- toolCall
 			}
-			chunkedChan <- ChatText{
-				Text: string(chunk),
-				Role: ai.ChatMessageRoleAssistant,
+			byteChan <- []byte(val.Delta.Content)
+
+		}
+		log.Println("nonStreamTask: done")
+	}()
+
+	return byteChan, toolChan
+}
+
+// reads a channel of byte slices and chunks them into irc client sized ChatText messages
+func (c *Chunker) chunkTask(byteChan <-chan []byte) <-chan ChatText {
+	chatChan := make(chan ChatText, 1000)
+	log.Println("chunkTask: start")
+	go func() {
+		defer close(chatChan)
+		for content := range byteChan {
+			c.buffer.Write(content)
+			for {
+				chunk, chunked := c.chunk()
+				if !chunked {
+					break
+				}
+				log.Println("chunkTask: sending chunk")
+				chatChan <- ChatText{
+					Text: string(chunk),
+					Role: ai.ChatMessageRoleAssistant,
+				}
 			}
 		}
-	}
+		log.Println("chunkTask: flushing buffer")
+		chatChan <- ChatText{
+			Text: string(c.buffer.String()),
+			Role: ai.ChatMessageRoleAssistant,
+		}
+
+		log.Println("chunkTask: done")
+	}()
+	return chatChan
 }
 
 // chunk decides the method of chunking based on the current state of the buffer.
@@ -140,14 +158,6 @@ func (c *Chunker) chunk() ([]byte, bool) {
 		return c.readChunk(index + 1), true
 	}
 
-	// Attempt to chunk by sentence boundary if delay has passed.
-	if time.Since(c.Last) >= c.Delay {
-		index = c.sentenceBoundary(content)
-		if index != -1 {
-			return c.readChunk(index), true
-		}
-	}
-
 	// Chunk by maximum length if no other boundary is found.
 	if c.buffer.Len() >= c.Length {
 		return c.readChunk(c.Length), true
@@ -161,16 +171,4 @@ func (c *Chunker) readChunk(n int) []byte {
 	chunk := c.buffer.Next(n)
 	c.Last = time.Now()
 	return chunk
-}
-
-// sentenceBoundary finds the end index of the first sentence in the buffer.
-func (c *Chunker) sentenceBoundary(s []byte) int {
-	log.Println("chunk: attempting to chunk by sentence boundary")
-	text := string(s)
-	sentences := c.Tokenizer.Tokenize(text)
-	if len(sentences) > 1 {
-		// Use the End field to get the end index of the first sentence
-		return sentences[0].End
-	}
-	return -1
 }

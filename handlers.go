@@ -12,16 +12,21 @@ import (
 )
 
 func greeting(ctx ChatContextInterface) {
-	outch := Complete(ctx, ChatText{
+	config := ctx.GetConfig()
+	outch, err := CompleteWithText(ctx, ChatText{
 		Role: ai.ChatMessageRoleAssistant,
-		Text: Config.Greeting,
+		Text: config.Bot.Greeting,
 	})
 
-	res := <-outch
-	switch res.Role {
-	case ai.ChatMessageRoleAssistant:
+	if err != nil {
+		ctx.Reply(err.Error())
+		return
+	}
+
+	for res := range outch {
 		ctx.Reply(res.Text)
 	}
+
 }
 
 func slashSet(ctx ChatContextInterface) {
@@ -37,6 +42,7 @@ func slashSet(ctx ChatContextInterface) {
 
 	param, v := ctx.GetArgs()[1], ctx.GetArgs()[2:]
 	value := strings.Join(v, " ")
+	config := ctx.GetConfig()
 
 	if !contains(ModifiableConfigKeys, param) {
 		ctx.Reply(fmt.Sprintf("Available keys: %s", strings.Join(ModifiableConfigKeys, " ")))
@@ -50,37 +56,30 @@ func slashSet(ctx ChatContextInterface) {
 			ctx.Reply("Invalid value for addressed. Please provide 'true' or 'false'.")
 			return
 		}
-		Config.Addressed = addressed
-		ctx.Reply(fmt.Sprintf("%s set to: %t", param, Config.Addressed))
+		config.Bot.Addressed = addressed
+		ctx.Reply(fmt.Sprintf("%s set to: %t", param, config.Bot.Addressed))
 	case "prompt":
-		Config.Prompt = value
-		ctx.Reply(fmt.Sprintf("%s set to: %s", param, Config.Prompt))
+		config.Bot.Prompt = value
+		ctx.Reply(fmt.Sprintf("%s set to: %s", param, config.Bot.Prompt))
 	case "model":
-		Config.Model = value
-		ctx.Reply(fmt.Sprintf("%s set to: %s", param, Config.Model))
-	case "nick":
-		Config.Nick = value
-		ctx.Nick(value)
-	case "channel":
-		Config.Channel = value
-		ctx.Part(Config.Channel)
-		ctx.Join(value)
+		config.Model.Model = value
+		ctx.Reply(fmt.Sprintf("%s set to: %s", param, config.Model.Model))
 	case "maxtokens":
 		maxTokens, err := strconv.Atoi(value)
 		if err != nil {
 			ctx.Reply("Invalid value for maxtokens. Please provide a valid integer.")
 			return
 		}
-		Config.MaxTokens = maxTokens
-		ctx.Reply(fmt.Sprintf("%s set to: %d", param, Config.MaxTokens))
+		config.Model.MaxTokens = maxTokens
+		ctx.Reply(fmt.Sprintf("%s set to: %d", param, config.Model.MaxTokens))
 	case "temperature":
 		temperature, err := strconv.ParseFloat(value, 32)
 		if err != nil {
 			ctx.Reply("Invalid value for temperature. Please provide a valid float.")
 			return
 		}
-		Config.Temperature = float32(temperature)
-		ctx.Reply(fmt.Sprintf("%s set to: %f", param, Config.Temperature))
+		config.Model.Temperature = float32(temperature)
+		ctx.Reply(fmt.Sprintf("%s set to: %f", param, config.Model.Temperature))
 	case "top_p":
 		topP, err := strconv.ParseFloat(value, 32)
 		if err != nil {
@@ -91,8 +90,8 @@ func slashSet(ctx ChatContextInterface) {
 			ctx.Reply("Invalid value for top_p. Please provide a float between 0 and 1.")
 			return
 		}
-		Config.TopP = float32(topP)
-		ctx.Reply(fmt.Sprintf("%s set to: %f", param, Config.TopP))
+		config.Model.TopP = float32(topP)
+		ctx.Reply(fmt.Sprintf("%s set to: %f", param, config.Model.TopP))
 	case "admins":
 		admins := strings.Split(value, ",")
 		for _, admin := range admins {
@@ -101,19 +100,19 @@ func slashSet(ctx ChatContextInterface) {
 				return
 			}
 		}
-		Config.Admins = admins
-		ctx.Reply(fmt.Sprintf("%s set to: %s", param, strings.Join(Config.Admins, ", ")))
+		config.Bot.Admins = admins
+		ctx.Reply(fmt.Sprintf("%s set to: %s", param, strings.Join(config.Bot.Admins, ", ")))
 	case "tools":
 		toolUse, err := strconv.ParseBool(value)
 		if err != nil {
 			ctx.Reply("Invalid value for tools. Please provide 'true' or 'false'.")
 			return
 		}
-		Config.Tools = toolUse
-		ctx.Reply(fmt.Sprintf("%s set to: %t", param, Config.Tools))
+		config.Bot.Tools = toolUse
+		ctx.Reply(fmt.Sprintf("%s set to: %t", param, config.Bot.Tools))
 	}
 
-	ctx.GetSession().Reset()
+	ctx.GetSession().Clear()
 }
 
 func slashGet(ctx ChatContextInterface) {
@@ -128,30 +127,27 @@ func slashGet(ctx ChatContextInterface) {
 		ctx.Reply(fmt.Sprintf("Unknown key %s. Available keys: %s", param, strings.Join(ModifiableConfigKeys, ", ")))
 		return
 	}
+	config := ctx.GetConfig()
 
 	switch param {
 	case "addressed":
-		ctx.Reply(fmt.Sprintf("%s: %t", param, Config.Addressed))
+		ctx.Reply(fmt.Sprintf("%s: %t", param, config.Bot.Addressed))
 	case "prompt":
-		ctx.Reply(fmt.Sprintf("%s: %s", param, Config.Prompt))
+		ctx.Reply(fmt.Sprintf("%s: %s", param, config.Bot.Prompt))
 	case "model":
-		ctx.Reply(fmt.Sprintf("%s: %s", param, Config.Model))
-	case "nick":
-		ctx.Reply(fmt.Sprintf("%s: %s", param, Config.Nick))
-	case "channel":
-		ctx.Reply(fmt.Sprintf("%s: %s", param, Config.Channel))
+		ctx.Reply(fmt.Sprintf("%s: %s", param, config.Model.Model))
 	case "maxtokens":
-		ctx.Reply(fmt.Sprintf("%s: %d", param, Config.MaxTokens))
+		ctx.Reply(fmt.Sprintf("%s: %d", param, config.Model.MaxTokens))
 	case "temperature":
-		ctx.Reply(fmt.Sprintf("%s: %f", param, Config.Temperature))
+		ctx.Reply(fmt.Sprintf("%s: %f", param, config.Model.Temperature))
 	case "top_p":
-		ctx.Reply(fmt.Sprintf("%s: %f", param, Config.TopP))
+		ctx.Reply(fmt.Sprintf("%s: %f", param, config.Model.TopP))
 	case "admins":
-		if len(Config.Admins) == 0 {
+		if len(config.Bot.Admins) == 0 {
 			ctx.Reply("empty admin list, all nicks are permitted to use admin commands")
 			return
 		}
-		ctx.Reply(fmt.Sprintf("%s: %s", param, strings.Join(Config.Admins, ", ")))
+		ctx.Reply(fmt.Sprintf("%s: %s", param, strings.Join(config.Bot.Admins, ", ")))
 	}
 }
 
@@ -180,14 +176,20 @@ func slashLeave(ctx ChatContextInterface) {
 
 func completionResponse(ctx ChatContextInterface) {
 	msg := strings.Join(ctx.GetArgs(), " ")
-	nick := ctx.GetSource()
 
-	outch := Complete(ctx, ChatText{
+	outch, err := CompleteWithText(ctx, ChatText{
 		Role: ai.ChatMessageRoleUser,
-		Text: fmt.Sprintf("(nick:%s) %s", nick, msg),
+		Text: fmt.Sprintf("(nick:%s) %s", ctx.GetSource(), msg),
 	})
 
+	if err != nil {
+		log.Println("completionResponse:", err)
+		ctx.Reply(err.Error())
+		return
+	}
+
 	for res := range outch {
+		log.Println("completionResponse:", res)
 		switch res.Role {
 		case ai.ChatMessageRoleAssistant:
 			ctx.Reply(res.Text)

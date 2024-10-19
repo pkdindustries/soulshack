@@ -30,7 +30,7 @@ var root = &cobra.Command{
 
 func main() {
 	fmt.Printf("%s\n", getBanner())
-	InitializeConfig()
+	initializeConfig()
 
 	if err := root.Execute(); err != nil {
 		log.Fatal(err)
@@ -45,31 +45,32 @@ func getBanner() string {
 
 func runBot(r *cobra.Command, _ []string) {
 
+	config := NewConfig()
 	irc := girc.New(girc.Config{
-		Server:    Config.Server,
-		Port:      Config.Port,
-		Nick:      Config.Nick,
+		Server:    config.Server.Server,
+		Port:      config.Server.Port,
+		Nick:      config.Server.Nick,
 		User:      "soulshack",
 		Name:      "soulshack",
-		SSL:       Config.SSL,
-		TLSConfig: &tls.Config{InsecureSkipVerify: Config.TLSInsecure},
+		SSL:       config.Server.SSL,
+		TLSConfig: &tls.Config{InsecureSkipVerify: config.Server.TLSInsecure},
 	})
 
-	if Config.SASLNick != "" && Config.SASLPass != "" {
+	if config.Server.SASLNick != "" && config.Server.SASLPass != "" {
 		irc.Config.SASL = &girc.SASLPlain{
-			User: Config.SASLNick,
-			Pass: Config.SASLPass,
+			User: config.Server.SASLNick,
+			Pass: config.Server.SASLPass,
 		}
 	}
 
 	irc.Handlers.AddBg(girc.CONNECTED, func(irc *girc.Client, e girc.Event) {
-		log.Println("joining channel:", Config.Channel)
-		irc.Cmd.Join(Config.Channel)
+		log.Println("joining channel:", config.Server.Channel)
+		irc.Cmd.Join(config.Server.Channel)
 	})
 
 	irc.Handlers.AddBg(girc.JOIN, func(irc *girc.Client, e girc.Event) {
-		if e.Source.Name == Config.Nick {
-			ctx, cancel := NewChatContext(context.Background(), Config.OpenAiClient, irc, &e)
+		if e.Source.Name == config.Server.Nick {
+			ctx, cancel := NewChatContext(context.Background(), config, irc, &e)
 			defer cancel()
 			greeting(ctx)
 		}
@@ -77,7 +78,7 @@ func runBot(r *cobra.Command, _ []string) {
 
 	irc.Handlers.AddBg(girc.PRIVMSG, func(irc *girc.Client, e girc.Event) {
 
-		ctx, cancel := NewChatContext(context.Background(), Config.OpenAiClient, irc, &e)
+		ctx, cancel := NewChatContext(context.Background(), config, irc, &e)
 		defer cancel()
 
 		if ctx.Valid() {
@@ -104,7 +105,7 @@ func runBot(r *cobra.Command, _ []string) {
 	// Reconnect loop with a maximum retry limit
 	maxRetries := 5
 	for retries := 0; retries < maxRetries; retries++ {
-		log.Printf("connecting to server:%s, port:%d, tls:%t, sasl:%t, api:%s", irc.Config.Server, irc.Config.Port, irc.Config.SSL, irc.Config.SASL != nil, Config.OpenAIConfig.BaseURL)
+		log.Printf("connecting to server:%s, port:%d, tls:%t, sasl:%t, api:%s", irc.Config.Server, irc.Config.Port, irc.Config.SSL, irc.Config.SASL != nil, config.API.BaseURL)
 		if err := irc.Connect(); err != nil {
 			log.Println("connection error:", err)
 			log.Println("reconnecting in 5 seconds...")

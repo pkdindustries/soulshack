@@ -101,8 +101,9 @@ func TestIsAdmin(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Mock Config
-			Config = &Configuration{}
-			Config.Admins = tt.admins
+
+			Config := NewConfig()
+			Config.Bot.Admins = tt.admins
 
 			// Mock Event
 			event := &girc.Event{
@@ -113,7 +114,8 @@ func TestIsAdmin(t *testing.T) {
 
 			// Create ChatContext
 			ctx := &ChatContext{
-				Event: event,
+				event:  event,
+				Config: Config,
 			}
 
 			// Test IsAdmin

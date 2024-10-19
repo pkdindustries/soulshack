@@ -66,7 +66,7 @@ func (t *IrcOpTool) Execute(ctx ChatContextInterface, tool ai.ToolCall) (ai.Chat
 			Role:       ai.ChatMessageRoleTool,
 			ToolCallID: tool.ID,
 			Name:       tool.Function.Name,
-			Content:    req.Nick + "doesn't have admin permission to perform this action."}, fmt.Errorf("unauthorized")
+			Content:    ctx.GetSource() + "doesn't have admin permission to perform this action."}, fmt.Errorf("unauthorized")
 	}
 
 	// set opcmd to the appropriate value
@@ -75,7 +75,7 @@ func (t *IrcOpTool) Execute(ctx ChatContextInterface, tool ai.ToolCall) (ai.Chat
 		opcmd = "+o"
 	}
 
-	ctx.GetClient().Cmd.Mode(Config.Channel, opcmd, req.Nick)
+	ctx.Mode(ctx.GetConfig().Server.Channel, opcmd, req.Nick)
 
 	return ai.ChatCompletionMessage{
 		Role:       ai.ChatMessageRoleTool,
@@ -137,7 +137,7 @@ func (t *IrcKickTool) Execute(ctx ChatContextInterface, tool ai.ToolCall) (ai.Ch
 		}, fmt.Errorf("unauthorized")
 	}
 
-	ctx.GetClient().Cmd.Kick(Config.Channel, req.Nick, req.Reason)
+	ctx.Kick(ctx.GetConfig().Server.Channel, req.Nick, req.Reason)
 
 	return ai.ChatCompletionMessage{
 		Role:       ai.ChatMessageRoleTool,
@@ -195,7 +195,7 @@ func (t *IrcTopicTool) Execute(ctx ChatContextInterface, tool ai.ToolCall) (ai.C
 		}, fmt.Errorf("unauthorized")
 	}
 
-	ctx.GetClient().Cmd.Topic(Config.Channel, req.Topic)
+	ctx.Topic(ctx.GetConfig().Server.Channel, req.Topic)
 	return ai.ChatCompletionMessage{
 		Role:       ai.ChatMessageRoleTool,
 		Content:    "success",
@@ -216,19 +216,19 @@ func (t *IrcOperTool) GetTool() (ai.Tool, error) {
 			Parameters: jsonschema.Definition{
 				Type: jsonschema.Object,
 				Properties: map[string]jsonschema.Definition{
-					"password": {
+					"reason": {
 						Type:        jsonschema.String,
-						Description: "the irc operator password",
+						Description: "the reason for the chatbot asking for operator status",
 					},
 				},
-				Required: []string{"password"},
+				Required: []string{"reason"},
 			},
 		}}, nil
 }
 
 func (t *IrcOperTool) Execute(ctx ChatContextInterface, tool ai.ToolCall) (ai.ChatCompletionMessage, error) {
 	type operRequest struct {
-		Password string `json:"password"`
+		Reason string `json:"reason"`
 	}
 
 	var req operRequest
@@ -243,7 +243,7 @@ func (t *IrcOperTool) Execute(ctx ChatContextInterface, tool ai.ToolCall) (ai.Ch
 		}, err
 	}
 
-	ctx.GetClient().Cmd.Oper(Config.Nick, req.Password)
+	ctx.Oper("", "")
 
 	return ai.ChatCompletionMessage{
 		Role:       ai.ChatMessageRoleTool,
@@ -261,7 +261,7 @@ func (t *IrcActionTool) GetTool() (ai.Tool, error) {
 		Type: ai.ToolTypeFunction,
 		Function: &ai.FunctionDefinition{
 			Name:        "irc_action",
-			Description: "sends an irc action message (/me) to the channel",
+			Description: "sends an irc action message to the channel",
 			Parameters: jsonschema.Definition{
 				Type: jsonschema.Object,
 				Properties: map[string]jsonschema.Definition{
@@ -292,7 +292,7 @@ func (t *IrcActionTool) Execute(ctx ChatContextInterface, tool ai.ToolCall) (ai.
 		}, err
 	}
 
-	ctx.Action(Config.Channel, req.Message)
+	ctx.Action(ctx.GetConfig().Server.Channel, req.Message)
 
 	return ai.ChatCompletionMessage{
 		Role:       ai.ChatMessageRoleTool,
