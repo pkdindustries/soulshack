@@ -22,8 +22,8 @@ import (
 )
 
 var root = &cobra.Command{
-	Use:     "soulshack --channel <channel> [--nick <nickname>] [--server <server>] [--port <port>] [--tls] [--openaikey <key>]",
-	Example: "soulshack --nick chatbot --server irc.freenode.net --port 6697 --channel '#soulshack' --tls --openaikey ****************",
+	Use:     "soulshack --channel <channel> [--nick <nickname>] [--server <server>] [--port <port>] [--tls] [--apikey <key>]",
+	Example: "soulshack --nick chatbot --server irc.freenode.net --port 6697 --channel '#soulshack' --tls --apikey ****************",
 	Run:     runBot,
 	Version: "0.7 - http://github.com/pkdindustries/soulshack",
 }
@@ -105,7 +105,7 @@ func runBot(r *cobra.Command, _ []string) {
 	// Reconnect loop with a maximum retry limit
 	maxRetries := 5
 	for retries := 0; retries < maxRetries; retries++ {
-		log.Printf("connecting to server:%s, port:%d, tls:%t, sasl:%t, api:%s", irc.Config.Server, irc.Config.Port, irc.Config.SSL, irc.Config.SASL != nil, config.API.BaseURL)
+		log.Printf("connecting to server:%s, port:%d, tls:%t, sasl:%t, api:%s", irc.Config.Server, irc.Config.Port, irc.Config.SSL, irc.Config.SASL != nil, config.API.URL)
 		if err := irc.Connect(); err != nil {
 			log.Println("connection error:", err)
 			log.Println("reconnecting in 5 seconds...")

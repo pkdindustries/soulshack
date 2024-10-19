@@ -12,8 +12,8 @@ soulshack is an irc chat bot that utilizes an openai api endpoint to generate hu
 - connects to an irc server and joins a specified channel
 - utilizes the openai api and compatible endpoints like ollama
 - allows dynamic configuration of bot settings through commands
-- supports ssl and SASL
-- tool calling (on openai models)
+- supports ssl and SASL authentication for irc servers
+- tool calling, example tools, channel management tools
 
 ## building
 
@@ -28,7 +28,7 @@ docker build . -t soulshack:dev
 ## usage
 
 ```bash
-soulshack --nick chatbot --server irc.freenode.net --port 6697 --channel '#soulshack' --ssl --openaikey ****************
+soulshack --nick chatbot --server irc.freenode.net --port 6697 --channel '#soulshack' --ssl --apikey ****************
 ```
 
 ## configuration
@@ -38,10 +38,10 @@ soulshack can be configured using command line flags, environment variables, or 
 ### flags
 ```
 Usage:
-  soulshack --channel <channel> [--nick <nickname>] [--server <server>] [--port <port>] [--tls] [--openaikey <key>] [flags]
+  soulshack --channel <channel> [--nick <nickname>] [--server <server>] [--port <port>] [--tls] [--apikey <key>] [flags]
 
 Examples:
-soulshack --nick chatbot --server irc.freenode.net --port 6697 --channel '#soulshack' --tls --openaikey ****************
+soulshack --nick chatbot --server irc.freenode.net --port 6697 --channel '#soulshack' --tls --apikey ****************
 
 Flags:
   -a, --addressed                  require bot be addressed by nick for response (default true)
@@ -56,8 +56,8 @@ Flags:
       --maxtokens int              maximum number of tokens to generate (default 512)
       --model string               model to be used for responses (default "gpt-4o")
   -n, --nick string                bot's nickname on the irc server (default "soulshack")
-      --openaikey string           openai api key
-      --openaiurl string           alternative base url to use instead of openai
+      --apikey string           openai api key
+      --apiurl string           alternative base url to use instead of openai
   -p, --port int                   irc server port (default 6667)
       --prompt string              initial system prompt (default "you are a helpful chatbot. do not use caps. do not use emoji.")
       --saslnick string            nick used for SASL

@@ -61,7 +61,7 @@ type APIConfig struct {
 	Key     string
 	Stream  bool
 	Timeout time.Duration
-	BaseURL string
+	URL     string
 }
 
 type Configuration struct {
@@ -99,11 +99,11 @@ func (c *Configuration) PrintConfig() {
 
 	fmt.Printf("sessionduration: %s\n", c.Session.SessionDuration)
 	if len(c.API.Key) > 3 && c.API.Key != "" {
-		fmt.Printf("openapikey: %s\n", strings.Repeat("*", len(c.API.Key)-3)+c.API.Key[len(c.API.Key)-3:])
+		fmt.Printf("apikey: %s\n", strings.Repeat("*", len(c.API.Key)-3)+c.API.Key[len(c.API.Key)-3:])
 	} else {
-		fmt.Printf("openapikey: %s\n", c.API.Key)
+		fmt.Printf("apikey: %s\n", c.API.Key)
 	}
-	fmt.Printf("openaiurl: %s\n", c.API.BaseURL)
+	fmt.Printf("apiurl: %s\n", c.API.URL)
 	fmt.Printf("streaming: %t\n", c.API.Stream)
 	fmt.Printf("model: %s\n", c.Model.Model)
 	fmt.Printf("temperature: %f\n", c.Model.Temperature)
@@ -160,7 +160,7 @@ func NewConfig() *Configuration {
 
 		API: APIConfig{
 			Timeout: vip.GetDuration("apitimeout"),
-			Key:     vip.GetString("openaikey"),
+			Key:     vip.GetString("apikey"),
 			Stream:  vip.GetBool("stream"),
 		},
 	}
@@ -168,7 +168,7 @@ func NewConfig() *Configuration {
 	// initialize the ai client
 	clientcfg := openai.DefaultConfig(config.API.Key)
 
-	baseurl := vip.GetString("openaiurl")
+	baseurl := vip.GetString("apiurl")
 	if baseurl != "" {
 		clientcfg.BaseURL = baseurl
 	}
@@ -213,10 +213,10 @@ func initializeConfig() {
 	cmd.PersistentFlags().BoolP("verbose", "v", false, "enable verbose logging of sessions and configuration")
 
 	// openai configuration
-	cmd.PersistentFlags().String("openaikey", "", "openai api key")
+	cmd.PersistentFlags().String("apikey", "", "api key")
 	cmd.PersistentFlags().Int("maxtokens", 512, "maximum number of tokens to generate")
 	cmd.PersistentFlags().String("model", openai.GPT4o, "model to be used for responses")
-	cmd.PersistentFlags().String("openaiurl", "", "alternative base url to use instead of openai")
+	cmd.PersistentFlags().String("apiurl", "", "alternative base url to use instead of openai")
 	cmd.PersistentFlags().DurationP("apitimeout", "t", time.Minute*5, "timeout for each completion request")
 	cmd.PersistentFlags().Float32("temperature", 0.7, "temperature for the completion")
 	cmd.PersistentFlags().Float32("top_p", 1, "top P value for the completion")

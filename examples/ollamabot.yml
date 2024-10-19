@@ -2,7 +2,7 @@
 nick: ollamabot
 prompt: "you are an irc chatbot. never use emoji. never use markdown. never use caps. always use short compact responses. reply in no more than 3 lines."
 model: llama3.2
-openaiurl: "http://localhost:11434/v1/"
+apiurl: "http://localhost:11434/v1/"
 temperature: 0.5
 maxtokens: 64
 tools: true
