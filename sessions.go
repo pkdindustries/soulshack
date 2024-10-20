@@ -37,7 +37,7 @@ var _ SessionStore = (*SyncMapSessionStore)(nil)
 var _ Session = (*LocalSession)(nil)
 
 func NewSessionStore(config *Configuration) SessionStore {
-	log.Printf("new session backend: %s", "syncmap")
+	log.Printf("sessionstore: %s", "syncmap")
 
 	store := &SyncMapSessionStore{
 		config: config,
@@ -45,7 +45,7 @@ func NewSessionStore(config *Configuration) SessionStore {
 	// start expiry goroutine
 	go func() {
 		for {
-			time.Sleep(config.Session.SessionDuration)
+			time.Sleep(config.Session.TTL)
 			config.Store.Expire()
 		}
 	}()
@@ -55,8 +55,8 @@ func NewSessionStore(config *Configuration) SessionStore {
 func (sessions *SyncMapSessionStore) Expire() {
 	sessions.Range(func(key, value interface{}) bool {
 		session := value.(*LocalSession)
-		if time.Since(session.last) > sessions.config.Session.SessionDuration {
-			log.Printf("syncmapsessionstore: %s expired after %f seconds", key, sessions.config.Session.SessionDuration.Seconds())
+		if time.Since(session.last) > sessions.config.Session.TTL {
+			log.Printf("syncmapsessionstore: %s expired after %f seconds", key, sessions.config.Session.TTL.Seconds())
 			sessions.Delete(key)
 		}
 		return true
@@ -73,7 +73,7 @@ func (sessions *SyncMapSessionStore) Get(id string) Session {
 		last:   time.Now(),
 		config: sessions.config,
 	}
-
+	session.Clear()
 	sessions.Store(id, session)
 	return session
 }
@@ -91,10 +91,6 @@ func (s *LocalSession) GetHistory() []ai.ChatCompletionMessage {
 func (s *LocalSession) AddMessage(msg ai.ChatCompletionMessage) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
-	if len(s.history) == 0 {
-		s.history = append(s.history, ai.ChatCompletionMessage{Role: ai.ChatMessageRoleSystem, Content: s.config.Bot.Prompt})
-	}
 
 	s.history = append(s.history, msg)
 	s.last = time.Now()
@@ -119,5 +115,6 @@ func (s *LocalSession) Clear() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.history = s.history[:0]
+	s.history = append(s.history, ai.ChatCompletionMessage{Role: ai.ChatMessageRoleSystem, Content: s.config.Bot.Prompt})
 	s.last = time.Now()
 }

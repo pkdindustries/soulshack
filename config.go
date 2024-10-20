@@ -50,11 +50,9 @@ type ServerConfig struct {
 }
 
 type SessionConfig struct {
-	MaxHistory      int
-	SessionDuration time.Duration
-	ChunkDelay      time.Duration
-	ChunkMax        int
-	ChunkQuoted     bool
+	MaxHistory int
+	TTL        time.Duration
+	ChunkMax   int
 }
 
 type APIConfig struct {
@@ -88,16 +86,14 @@ func (c *Configuration) PrintConfig() {
 	fmt.Printf("admins: %v\n", c.Bot.Admins)
 	fmt.Printf("verbose: %t\n", c.Bot.Verbose)
 	fmt.Printf("addressed: %t\n", c.Bot.Addressed)
-	fmt.Printf("chunkdelay: %s\n", c.Session.ChunkDelay)
 	fmt.Printf("chunkmax: %d\n", c.Session.ChunkMax)
-	fmt.Printf("chunkquoted: %t\n", c.Session.ChunkQuoted)
 	fmt.Printf("clienttimeout: %s\n", c.API.Timeout)
 	fmt.Printf("maxhistory: %d\n", c.Session.MaxHistory)
 	fmt.Printf("maxtokens: %d\n", c.Model.MaxTokens)
 	fmt.Printf("tools: %t\n", c.Bot.Tools)
 	fmt.Printf("toolsdir: %s\n", c.Bot.ToolsDir)
 
-	fmt.Printf("sessionduration: %s\n", c.Session.SessionDuration)
+	fmt.Printf("sessionduration: %s\n", c.Session.TTL)
 	if len(c.API.Key) > 3 && c.API.Key != "" {
 		fmt.Printf("apikey: %s\n", strings.Repeat("*", len(c.API.Key)-3)+c.API.Key[len(c.API.Key)-3:])
 	} else {
@@ -117,7 +113,7 @@ func NewConfig() *Configuration {
 	if configfile != "" {
 		vip.SetConfigFile(configfile)
 		if err := vip.ReadInConfig(); err != nil {
-			log.Fatalf("config file %s not found", configfile)
+			log.Println("config file not found", configfile)
 		} else {
 			log.Println("using config file:", vip.ConfigFileUsed())
 		}
@@ -151,26 +147,24 @@ func NewConfig() *Configuration {
 		},
 
 		Session: SessionConfig{
-			ChunkDelay:      vip.GetDuration("chunkdelay"),
-			ChunkMax:        vip.GetInt("chunkmax"),
-			ChunkQuoted:     vip.GetBool("chunkquoted"),
-			MaxHistory:      vip.GetInt("sessionhistory"),
-			SessionDuration: vip.GetDuration("sessionduration"),
+			ChunkMax:   vip.GetInt("chunkmax"),
+			MaxHistory: vip.GetInt("sessionhistory"),
+			TTL:        vip.GetDuration("sessionduration"),
 		},
 
 		API: APIConfig{
 			Timeout: vip.GetDuration("apitimeout"),
 			Key:     vip.GetString("apikey"),
 			Stream:  vip.GetBool("stream"),
+			URL:     vip.GetString("apiurl"),
 		},
 	}
 
 	// initialize the ai client
 	clientcfg := openai.DefaultConfig(config.API.Key)
 
-	baseurl := vip.GetString("apiurl")
-	if baseurl != "" {
-		clientcfg.BaseURL = baseurl
+	if config.API.URL != "" {
+		clientcfg.BaseURL = config.API.URL
 	}
 	config.Client = openai.NewClientWithConfig(clientcfg)
 
@@ -223,13 +217,11 @@ func initializeConfig() {
 	cmd.PersistentFlags().Bool("tools", false, "enable tool use")
 	cmd.PersistentFlags().Bool("stream", true, "enable streaming completion")
 	cmd.PersistentFlags().String("toolsdir", "examples/tools", "directory to load tools from")
-	cmd.PersistentFlags().String("tooltag", "tool_call", "tag llm uses for inline tool commands")
 
 	// timeouts and behavior
 	cmd.PersistentFlags().BoolP("addressed", "a", true, "require bot be addressed by nick for response")
-	cmd.PersistentFlags().DurationP("sessionduration", "S", time.Minute*3, "duration for the chat session; message context will be cleared after this time")
+	cmd.PersistentFlags().DurationP("sessionduration", "S", time.Minute*3, "message context will be cleared after it is unused for this duration")
 	cmd.PersistentFlags().IntP("sessionhistory", "H", 250, "maximum number of lines of context to keep per session")
-	cmd.PersistentFlags().DurationP("chunkdelay", "C", time.Second*15, "after this delay, bot will look to split the incoming buffer on sentence boundaries")
 	cmd.PersistentFlags().IntP("chunkmax", "m", 350, "maximum number of characters to send as a single message")
 
 	// personality / prompting

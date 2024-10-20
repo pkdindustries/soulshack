@@ -7,16 +7,11 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	ai "github.com/sashabaranov/go-openai"
 )
 
 func greeting(ctx ChatContextInterface) {
 	config := ctx.GetConfig()
-	outch, err := CompleteWithText(ctx, ChatText{
-		Role: ai.ChatMessageRoleAssistant,
-		Text: config.Bot.Greeting,
-	})
+	outch, err := CompleteWithText(ctx, config.Bot.Greeting)
 
 	if err != nil {
 		ctx.Reply(err.Error())
@@ -24,7 +19,7 @@ func greeting(ctx ChatContextInterface) {
 	}
 
 	for res := range outch {
-		ctx.Reply(res.Text)
+		ctx.Reply(res)
 	}
 
 }
@@ -177,10 +172,7 @@ func slashLeave(ctx ChatContextInterface) {
 func completionResponse(ctx ChatContextInterface) {
 	msg := strings.Join(ctx.GetArgs(), " ")
 
-	outch, err := CompleteWithText(ctx, ChatText{
-		Role: ai.ChatMessageRoleUser,
-		Text: fmt.Sprintf("(nick:%s) %s", ctx.GetSource(), msg),
-	})
+	outch, err := CompleteWithText(ctx, fmt.Sprintf("(nick:%s) %s", ctx.GetSource(), msg))
 
 	if err != nil {
 		log.Println("completionResponse:", err)
@@ -189,14 +181,7 @@ func completionResponse(ctx ChatContextInterface) {
 	}
 
 	for res := range outch {
-		log.Println("completionResponse:", res)
-		switch res.Role {
-		case ai.ChatMessageRoleAssistant:
-			ctx.Reply(res.Text)
-		default:
-			log.Println("non-assistant response:", res)
-		}
-
+		ctx.Reply(res)
 	}
 
 }

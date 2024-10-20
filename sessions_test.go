@@ -24,7 +24,7 @@ func TestChatSession(t *testing.T) {
 
 	Config := NewConfig()
 	Config.Session.MaxHistory = 10
-	Config.Session.SessionDuration = 1 * time.Hour
+	Config.Session.TTL = 1 * time.Hour
 
 	Config.Store = NewSessionStore(Config)
 	//log.SetOutput(io.Discard)
@@ -42,8 +42,8 @@ func TestChatSession(t *testing.T) {
 func TestExpiry(t *testing.T) {
 	t.Log("Starting TestExpiry")
 	Config := NewConfig()
-	Config.Session.MaxHistory = 20
-	Config.Session.SessionDuration = 500 * time.Millisecond
+	Config.Session.MaxHistory = 3
+	Config.Session.TTL = 500 * time.Millisecond
 
 	Config.Store = NewSessionStore(Config)
 	t.Run("Test session expiration and trimming", func(t *testing.T) {
@@ -53,18 +53,26 @@ func TestExpiry(t *testing.T) {
 		session2.AddMessage(ai.ChatCompletionMessage{Role: ai.ChatMessageRoleAssistant, Content: "I'm doing great, thanks!"})
 		session2.AddMessage(ai.ChatCompletionMessage{Role: ai.ChatMessageRoleUser, Content: "What's your name?"})
 
-		time.Sleep(2 * time.Second)
+		time.Sleep(1 * time.Second)
 		session3 := Config.Store.Get("session2")
 
 		assert.NotEqual(t, session2, session3, "Expired session should not be reused")
-		assert.Len(t, session3.GetHistory(), 0, "New session history should be empty")
+		assert.Len(t, session3.GetHistory(), 1, "New session history should have one system message")
+		assert.Equal(t, session3.GetHistory()[0].Role, ai.ChatMessageRoleSystem, "First message should be a system message")
 
-		session3.AddMessage(ai.ChatCompletionMessage{Role: ai.ChatMessageRoleUser, Content: "Hello again!"})
+		session3.AddMessage(ai.ChatCompletionMessage{Role: ai.ChatMessageRoleUser, Content: "Hello again! I scroll off"})
 		session3.AddMessage(ai.ChatCompletionMessage{Role: ai.ChatMessageRoleAssistant, Content: "Hi! Nice to see you again!"})
 
 		assert.Len(t, session3.GetHistory(), 3, "History should include the latest 2 messages plus the initial system message")
-		assert.Equal(t, session3.GetHistory()[1].Content, "Hello again!")
+		assert.Equal(t, session3.GetHistory()[1].Content, "Hello again! I scroll off")
 		assert.Equal(t, session3.GetHistory()[2].Content, "Hi! Nice to see you again!")
+		assert.Equal(t, session3.GetHistory()[0].Role, ai.ChatMessageRoleSystem, "First message should be a system message")
+
+		session3.AddMessage(ai.ChatCompletionMessage{Role: ai.ChatMessageRoleUser, Content: "Hello again?"})
+		session3.AddMessage(ai.ChatCompletionMessage{Role: ai.ChatMessageRoleAssistant, Content: "WHAT?!"})
+
+		assert.Equal(t, session3.GetHistory()[2].Content, "Hello again?")
+		assert.Equal(t, session3.GetHistory()[3].Content, "WHAT?!")
 	})
 }
 
@@ -75,7 +83,7 @@ func TestSessionConcurrency(t *testing.T) {
 	log.SetOutput(io.Discard)
 	Config := NewConfig()
 	Config.Session.MaxHistory = 500 * 2000
-	Config.Session.SessionDuration = 1 * time.Hour
+	Config.Session.TTL = 1 * time.Hour
 	Config.Store = NewSessionStore(Config)
 	t.Run("Test session concurrency", func(t *testing.T) {
 
@@ -118,7 +126,7 @@ func TestSingleSessionConcurrency(t *testing.T) {
 	log.SetOutput(io.Discard)
 	Config := NewConfig()
 	Config.Session.MaxHistory = 500 * 2000
-	Config.Session.SessionDuration = 1 * time.Hour
+	Config.Session.TTL = 1 * time.Hour
 	Config.Store = NewSessionStore(Config)
 	t.Run("Test single session concurrency", func(t *testing.T) {
 
@@ -160,9 +168,8 @@ func TestSessionReapStress(t *testing.T) {
 	log.SetOutput(io.Discard)
 
 	Config := NewConfig()
-	Config.Session.SessionDuration = timeout
+	Config.Session.TTL = timeout
 	Config.Session.MaxHistory = 10
-	Config.Session.ChunkDelay = 200 * time.Millisecond
 	Config.Session.ChunkMax = 5
 
 	Config.Store = NewSessionStore(Config)
@@ -197,7 +204,7 @@ func TestSessionReapStress(t *testing.T) {
 	activeSessions := 0
 	Config.Store.Range(func(key, value interface{}) bool {
 		session := value.(*LocalSession)
-		if time.Since(session.last) <= Config.Session.SessionDuration {
+		if time.Since(session.last) <= Config.Session.TTL {
 			activeSessions++
 		}
 		return true
@@ -286,7 +293,7 @@ func BenchmarkTrim(b *testing.B) {
 func BenchmarkSessionStress(b *testing.B) {
 
 	Config := NewConfig()
-	Config.Session.SessionDuration = 1 * time.Second
+	Config.Session.TTL = 1 * time.Second
 	Config.Session.MaxHistory = 5
 	Config.Store = NewSessionStore(Config)
 	log.SetOutput(io.Discard)

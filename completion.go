@@ -24,7 +24,7 @@ type CompletionRequest struct {
 	Stream       bool
 }
 
-func NewCompletionRequest(session Session, config Configuration) *CompletionRequest {
+func NewCompletionRequest(session Session, config *Configuration) *CompletionRequest {
 	return &CompletionRequest{
 		Client:       config.Client,
 		Timeout:      config.API.Timeout,
@@ -45,13 +45,13 @@ type StreamResponse struct {
 
 type ChatText struct {
 	Role string
-	Text string
+	Text []byte
 }
 
-func CompleteWithText(ctx ChatContextInterface, msg ChatText) (<-chan ChatText, error) {
+func CompleteWithText(ctx ChatContextInterface, msg string) (<-chan string, error) {
 	cmsg := ai.ChatCompletionMessage{
-		Role:    msg.Role,
-		Content: msg.Text,
+		Role:    ai.ChatMessageRoleUser,
+		Content: msg,
 	}
 	log.Printf("complete: %s %.64s...", cmsg.Role, cmsg.Content)
 	ctx.GetSession().AddMessage(cmsg)
@@ -59,8 +59,10 @@ func CompleteWithText(ctx ChatContextInterface, msg ChatText) (<-chan ChatText, 
 	return complete(ctx)
 }
 
-func complete(ctx ChatContextInterface) (<-chan ChatText, error) {
-	request := NewCompletionRequest(ctx.GetSession(), *ctx.GetConfig())
+func complete(ctx ChatContextInterface) (<-chan string, error) {
+	session := ctx.GetSession()
+	config := ctx.GetConfig()
+	request := NewCompletionRequest(session, config)
 	var respChan <-chan StreamResponse
 	var err error
 	if request.Stream {
@@ -74,8 +76,9 @@ func complete(ctx ChatContextInterface) (<-chan ChatText, error) {
 		return nil, err
 	}
 
-	textChan, toolChan := NewChunker(ctx.GetConfig()).FilterTask(respChan)
-	outputChan := make(chan ChatText, 10)
+	textChan, toolChan, msgChan := NewChunker(config).FilterTask(respChan)
+
+	outputChan := make(chan string, 10)
 
 	go func() {
 		defer close(outputChan)
@@ -86,17 +89,22 @@ func complete(ctx ChatContextInterface) (<-chan ChatText, error) {
 				if !ok {
 					toolChan = nil
 				} else {
-					handleToolCall(ctx, toolCall, outputChan)
+					toolch, _ := handleToolCall(ctx, toolCall)
+					for r := range toolch {
+						outputChan <- string(r)
+					}
 				}
 			case reply, ok := <-textChan:
 				if !ok {
 					textChan = nil
 				} else {
-					request.Session.AddMessage(ai.ChatCompletionMessage{
-						Role:    reply.Role,
-						Content: reply.Text,
-					})
-					outputChan <- reply
+					outputChan <- string(reply)
+				}
+			case msg, ok := <-msgChan:
+				if !ok {
+					msgChan = nil
+				} else {
+					request.Session.AddMessage(*msg)
 				}
 			}
 
@@ -109,29 +117,26 @@ func complete(ctx ChatContextInterface) (<-chan ChatText, error) {
 	return outputChan, nil
 }
 
-func handleToolCall(ctx ChatContextInterface, toolCall ai.ToolCall, textChan chan<- ChatText) {
+func handleToolCall(ctx ChatContextInterface, toolCall *ai.ToolCall) (<-chan string, error) {
 	log.Printf("Tool Call Received: %v", toolCall)
 	config := ctx.GetConfig()
 	soultool, err := config.ToolRegistry.GetToolByName(toolCall.Function.Name)
 	if err != nil {
 		log.Printf("Error getting tool registration: %v", err)
-		return
+		return nil, err
 	}
 
-	toolmsg, err := soultool.Execute(ctx, toolCall)
+	toolmsg, err := soultool.Execute(ctx, *toolCall)
 	if err != nil {
 		log.Printf("error executing tool: %v", err)
 	}
 
 	ctx.GetSession().AddMessage(ai.ChatCompletionMessage{
 		Role:      ai.ChatMessageRoleAssistant,
-		ToolCalls: []ai.ToolCall{toolCall},
+		ToolCalls: []ai.ToolCall{*toolCall},
 	})
 	ctx.GetSession().AddMessage(toolmsg)
-	ch, _ := complete(ctx)
-	for response := range ch {
-		textChan <- response
-	}
+	return complete(ctx)
 }
 
 func ChatCompletionTask(ctx context.Context, req *CompletionRequest) (<-chan StreamResponse, error) {
@@ -139,7 +144,7 @@ func ChatCompletionTask(ctx context.Context, req *CompletionRequest) (<-chan Str
 	timeout, cancel := context.WithTimeout(ctx, req.Timeout)
 	defer close(respChannel)
 	defer cancel()
-
+	log.Println("completionTask: start")
 	response, err := req.Client.CreateChatCompletion(timeout, ai.ChatCompletionRequest{
 		MaxCompletionTokens: req.MaxTokens,
 		Model:               req.Model,
@@ -159,7 +164,6 @@ func ChatCompletionTask(ctx context.Context, req *CompletionRequest) (<-chan Str
 		return nil, fmt.Errorf("empty completion response")
 	}
 
-	log.Println("completionTask:", response.Choices[0].Message)
 	msgs := make([]ai.ChatCompletionMessage, 0)
 	msg := ai.ChatCompletionMessage{
 		Role:       response.Choices[0].Message.Role,
@@ -181,6 +185,7 @@ func ChatCompletionTask(ctx context.Context, req *CompletionRequest) (<-chan Str
 			},
 		}
 	}
+	log.Println("completionTask: done")
 	return respChannel, nil
 }
 
