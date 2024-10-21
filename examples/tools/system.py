@@ -59,9 +59,8 @@ def execute(resource_json):
         if resource_type == "processes" or resource_type == "all":
             # Get process information using ps command, including system and user time
             try:
-                result = subprocess.run(["ps", "-eo", "pid,ppid,user,args,%mem,%cpu,etime,time"], capture_output=True, text=True, check=True)
+                result = subprocess.run(["ps", "-eo", "pid,ppid,user,args,%mem,%cpu"], capture_output=True, text=True, check=True)
                 if result.stdout:
-                    print("PID PPID USER COMMAND %MEM %CPU ELAPSED_TIME TIME")
                     print(result.stdout.strip())
                 else:
                     print("No processes found.")
