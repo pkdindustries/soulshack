@@ -104,12 +104,11 @@ func (c *Chunker) nonStreamTask(chatChan <-chan StreamResponse) (chan []byte, ch
 		log.Println("nonStreamTask: start")
 		for val := range chatChan {
 
-			// xxx execute tool calls
 			for _, toolCall := range val.Delta.ToolCalls {
 				log.Println("nonStreamTask: tool call assembled")
 				toolChan <- &toolCall
 			}
-			// xxx addmsg
+
 			if val.Delta.Content != "" {
 				byteChan <- []byte(val.Delta.Content)
 				ccmChan <- &ai.ChatCompletionMessage{

@@ -43,11 +43,6 @@ type StreamResponse struct {
 	ai.ChatCompletionStreamChoice
 }
 
-type ChatText struct {
-	Role string
-	Text []byte
-}
-
 func CompleteWithText(ctx ChatContextInterface, msg string) (<-chan string, error) {
 	cmsg := ai.ChatCompletionMessage{
 		Role:    ai.ChatMessageRoleUser,
@@ -91,7 +86,7 @@ func complete(ctx ChatContextInterface) (<-chan string, error) {
 				} else {
 					toolch, _ := handleToolCall(ctx, toolCall)
 					for r := range toolch {
-						outputChan <- string(r)
+						outputChan <- r
 					}
 				}
 			case reply, ok := <-textChan:
