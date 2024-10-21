@@ -4,7 +4,7 @@ prompt: "you are an irc chatbot. never use emoji. never use markdown. never use 
 model: llama3.2
 apiurl: "http://localhost:11434/v1/"
 temperature: 0.5
-maxtokens: 64
+sessionhistory: 150
 tools: true
 # need to disable streaming for tools to work
 # on a the ollama rendition of the openai api
