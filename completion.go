@@ -2,22 +2,25 @@ package main
 
 import (
 	"context"
-	"errors"
-	"fmt"
-	"io"
 	"log"
 	"time"
 
 	ai "github.com/sashabaranov/go-openai"
 )
 
+type LLM interface {
+	ChatCompletionTask(context.Context, *CompletionRequest) (<-chan StreamResponse, error)
+	ChatCompletionStreamTask(context.Context, *CompletionRequest) (<-chan StreamResponse, error)
+}
+
 type CompletionRequest struct {
+	APIKey       string
+	BaseURL      string
 	Timeout      time.Duration
 	Temperature  float32
 	TopP         float32
 	Model        string
 	MaxTokens    int
-	Client       *ai.Client
 	Session      Session
 	ToolRegistry *ToolRegistry
 	Tools        bool
@@ -26,7 +29,8 @@ type CompletionRequest struct {
 
 func NewCompletionRequest(session Session, config *Configuration) *CompletionRequest {
 	return &CompletionRequest{
-		Client:       config.Client,
+		APIKey:       config.API.Key,
+		BaseURL:      config.API.URL,
 		Timeout:      config.API.Timeout,
 		Model:        config.Model.Model,
 		MaxTokens:    config.Model.MaxTokens,
@@ -57,13 +61,15 @@ func CompleteWithText(ctx ChatContextInterface, msg string) (<-chan string, erro
 func complete(ctx ChatContextInterface) (<-chan string, error) {
 	session := ctx.GetSession()
 	config := ctx.GetConfig()
-	request := NewCompletionRequest(session, config)
+	req := NewCompletionRequest(session, config)
+	llm := config.LLM
+
 	var respChan <-chan StreamResponse
 	var err error
-	if request.Stream {
-		respChan, err = ChatCompletionStreamTask(ctx, request)
+	if req.Stream {
+		respChan, err = llm.ChatCompletionStreamTask(ctx, req)
 	} else {
-		respChan, err = ChatCompletionTask(ctx, request)
+		respChan, err = llm.ChatCompletionTask(ctx, req)
 	}
 
 	if err != nil {
@@ -99,7 +105,7 @@ func complete(ctx ChatContextInterface) (<-chan string, error) {
 				if !ok {
 					msgChan = nil
 				} else {
-					request.Session.AddMessage(*msg)
+					session.AddMessage(*msg)
 				}
 			}
 
@@ -132,116 +138,4 @@ func handleToolCall(ctx ChatContextInterface, toolCall *ai.ToolCall) (<-chan str
 	})
 	ctx.GetSession().AddMessage(toolmsg)
 	return complete(ctx)
-}
-
-func ChatCompletionTask(ctx context.Context, req *CompletionRequest) (<-chan StreamResponse, error) {
-	respChannel := make(chan StreamResponse, 10)
-	timeout, cancel := context.WithTimeout(ctx, req.Timeout)
-	defer close(respChannel)
-	defer cancel()
-	log.Println("completionTask: start")
-	response, err := req.Client.CreateChatCompletion(timeout, ai.ChatCompletionRequest{
-		MaxCompletionTokens: req.MaxTokens,
-		Model:               req.Model,
-		Messages:            req.Session.GetHistory(),
-		Temperature:         req.Temperature,
-		TopP:                req.TopP,
-		Tools:               req.ToolRegistry.GetToolDefinitions(),
-		ParallelToolCalls:   false,
-	})
-
-	if err != nil {
-		log.Println("completionTask: failed to create chat completion:", err)
-		return nil, fmt.Errorf("failed to create chat completion: %w", err)
-	}
-
-	if len(response.Choices) == 0 {
-		return nil, fmt.Errorf("empty completion response")
-	}
-
-	msgs := make([]ai.ChatCompletionMessage, 0)
-	msg := ai.ChatCompletionMessage{
-		Role:       response.Choices[0].Message.Role,
-		Content:    response.Choices[0].Message.Content,
-		ToolCalls:  response.Choices[0].Message.ToolCalls,
-		ToolCallID: response.Choices[0].Message.ToolCallID,
-	}
-
-	msgs = append(msgs, msg)
-
-	for _, message := range msgs {
-		respChannel <- StreamResponse{
-			ChatCompletionStreamChoice: ai.ChatCompletionStreamChoice{
-				Delta: ai.ChatCompletionStreamChoiceDelta{
-					Role:      message.Role,
-					Content:   message.Content,
-					ToolCalls: message.ToolCalls,
-				},
-			},
-		}
-	}
-	log.Println("completionTask: done")
-	return respChannel, nil
-}
-
-func ChatCompletionStreamTask(ctx ChatContextInterface, req *CompletionRequest) (<-chan StreamResponse, error) {
-	messageChannel := make(chan StreamResponse, 10)
-	err := completionStream(ctx, req, messageChannel)
-	return messageChannel, err
-}
-
-func completionStream(ctx ChatContextInterface, req *CompletionRequest, respChan chan<- StreamResponse) error {
-
-	timeout, cancel := context.WithTimeout(ctx, req.Timeout)
-
-	stream, err := req.Client.CreateChatCompletionStream(timeout, ai.ChatCompletionRequest{
-		MaxCompletionTokens: req.MaxTokens,
-		Model:               req.Model,
-		Messages:            req.Session.GetHistory(),
-		Temperature:         req.Temperature,
-		TopP:                req.TopP,
-		Stream:              true,
-		Tools:               req.ToolRegistry.GetToolDefinitions(),
-		ParallelToolCalls:   false,
-	})
-
-	if err != nil {
-		log.Println("completionStreamTask: failed to create chat completion stream:", err)
-		cancel()
-		return err
-	}
-
-	go func() {
-		defer stream.Close()
-		defer close(respChan)
-		defer cancel()
-		log.Println("completionStreamTask: start")
-		for {
-			select {
-			case <-timeout.Done():
-				log.Println("completionStreamTask: context canceled")
-				return
-			default:
-				response, err := stream.Recv()
-				if err != nil {
-					log.Println("completionstreamTask: error", err)
-					if errors.Is(err, io.EOF) {
-						log.Println("completionstreamTask: stream closed")
-						return
-					}
-				}
-
-				if len(response.Choices) > 0 {
-					choice := response.Choices[0]
-					respChan <- StreamResponse{ChatCompletionStreamChoice: choice}
-					if choice.FinishReason != "" {
-						log.Println("completionstreamTask:", choice.FinishReason)
-						return
-					}
-				}
-
-			}
-		}
-	}()
-	return nil
 }

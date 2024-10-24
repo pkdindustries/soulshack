@@ -56,6 +56,7 @@ type SessionConfig struct {
 }
 
 type APIConfig struct {
+	Type    string
 	Key     string
 	Stream  bool
 	Timeout time.Duration
@@ -70,7 +71,7 @@ type Configuration struct {
 	API     APIConfig
 
 	Store        SessionStore
-	Client       *openai.Client
+	LLM          LLM
 	ToolRegistry *ToolRegistry
 }
 
@@ -100,6 +101,7 @@ func (c *Configuration) PrintConfig() {
 		fmt.Printf("apikey: %s\n", c.API.Key)
 	}
 	fmt.Printf("apiurl: %s\n", c.API.URL)
+	fmt.Printf("apitype: %s\n", c.API.Type)
 	fmt.Printf("streaming: %t\n", c.API.Stream)
 	fmt.Printf("model: %s\n", c.Model.Model)
 	fmt.Printf("temperature: %f\n", c.Model.Temperature)
@@ -157,16 +159,9 @@ func NewConfig() *Configuration {
 			Key:     vip.GetString("apikey"),
 			Stream:  vip.GetBool("stream"),
 			URL:     vip.GetString("apiurl"),
+			Type:    vip.GetString("apitype"),
 		},
 	}
-
-	// initialize the ai client
-	clientcfg := openai.DefaultConfig(config.API.Key)
-
-	if config.API.URL != "" {
-		clientcfg.BaseURL = config.API.URL
-	}
-	config.Client = openai.NewClientWithConfig(clientcfg)
 
 	// initialize tools
 	if config.Bot.Tools {
@@ -179,6 +174,16 @@ func NewConfig() *Configuration {
 			RegisterIrcTools(registry)
 			config.ToolRegistry = registry
 		}
+	} else {
+		log.Println("tools are disabled")
+		config.ToolRegistry = &ToolRegistry{}
+	}
+
+	// initialize the api for completions
+	if config.API.Type == "openai" {
+		config.LLM = NewOpenAIClient(config.API)
+	} else if config.API.Type == "anthropic" {
+		config.LLM = NewAnthropicClient(config.API)
 	}
 
 	// initialize sessions
@@ -208,9 +213,10 @@ func initializeConfig() {
 
 	// openai configuration
 	cmd.PersistentFlags().String("apikey", "", "api key")
+	cmd.PersistentFlags().String("apiurl", "", "alternative base url to use instead of openai")
+	cmd.PersistentFlags().String("apitype", "openai", "api type to use for completion requests")
 	cmd.PersistentFlags().Int("maxtokens", 512, "maximum number of tokens to generate")
 	cmd.PersistentFlags().String("model", openai.GPT4o, "model to be used for responses")
-	cmd.PersistentFlags().String("apiurl", "", "alternative base url to use instead of openai")
 	cmd.PersistentFlags().DurationP("apitimeout", "t", time.Minute*5, "timeout for each completion request")
 	cmd.PersistentFlags().Float32("temperature", 0.7, "temperature for the completion")
 	cmd.PersistentFlags().Float32("top_p", 1, "top P value for the completion")

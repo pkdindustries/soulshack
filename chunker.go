@@ -56,10 +56,15 @@ func (c *Chunker) streamTask(respChan <-chan StreamResponse) (chan []byte, chan 
 		for val := range respChan {
 
 			if len(val.Delta.ToolCalls) > 0 {
+				if len(val.Delta.ToolCalls) > 1 {
+					log.Printf("streamTask: WARNING - dropping %d additional tool calls", len(val.Delta.ToolCalls)-1)
+				}
+
 				toolCall := &val.Delta.ToolCalls[0]
 				if c.partialToolCall == nil {
 					c.partialToolCall = toolCall
 					c.toolBuffer.Reset()
+					log.Printf("streamTask: starting new tool call assembly: %s", toolCall.Function.Name)
 				}
 				c.toolBuffer.Write([]byte(toolCall.Function.Arguments))
 			}

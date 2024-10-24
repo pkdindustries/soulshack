@@ -60,7 +60,6 @@ func NewChatContext(parentctx context.Context, config *Configuration, ircclient 
 
 	ctx := ChatContext{
 		Context: timedctx,
-		AI:      config.Client,
 		Config:  config,
 		client:  ircclient,
 		event:   e,
