@@ -32,7 +32,6 @@ type Server interface {
 
 type System interface {
 	GetSession() Session
-	GetAI() *ai.Client
 	GetConfig() *Configuration
 }
 
@@ -136,10 +135,6 @@ func (c ChatContext) GetClient() *girc.Client {
 
 func (c ChatContext) GetSource() string {
 	return c.event.Source.Name
-}
-
-func (c ChatContext) GetAI() *ai.Client {
-	return c.AI
 }
 
 func (c ChatContext) IsAdmin() bool {

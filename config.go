@@ -29,13 +29,13 @@ type ModelConfig struct {
 }
 
 type BotConfig struct {
-	Admins    []string
-	Verbose   bool
-	Addressed bool
-	Prompt    string
-	Greeting  string
-	ToolsDir  string
-	Tools     bool
+	Admins       []string
+	Verbose      bool
+	Addressed    bool
+	Prompt       string
+	Greeting     string
+	ToolsDir     string
+	ToolsEnabled bool
 }
 
 type ServerConfig struct {
@@ -70,9 +70,44 @@ type Configuration struct {
 	Session SessionConfig
 	API     APIConfig
 
-	Store        SessionStore
-	LLM          LLM
-	ToolRegistry *ToolRegistry
+	Store SessionStore
+	LLM   LLM
+	Tools *ToolRegistry
+}
+
+func (c *Configuration) GetSystem() {
+	var Store SessionStore
+	var LLM LLM
+	var Tools *ToolRegistry
+	// initialize tools
+	if c.Bot.ToolsEnabled {
+		toolsDir := vip.GetString("toolsdir")
+		registry, err := NewToolRegistry(toolsDir)
+		if err != nil {
+			log.Println("config: failed to initialize tools:", err)
+			c.Bot.ToolsEnabled = false
+		} else {
+			RegisterIrcTools(registry)
+			Tools = registry
+		}
+	} else {
+		log.Println("config: tools are disabled")
+		Tools = &ToolRegistry{}
+	}
+
+	// initialize the api for completions
+	if c.API.Type == "openai" {
+		LLM = NewOpenAIClient(c.API)
+	} else if c.API.Type == "anthropic" {
+		LLM = NewAnthropicClient(c.API)
+	} else {
+		log.Fatal("config: unknown api type:", c.API.Type)
+	}
+
+	// initialize sessions
+	Store = NewSessionStore(c)
+	_, _, _ = Store, LLM, Tools
+	//return nil
 }
 
 func (c *Configuration) PrintConfig() {
@@ -91,7 +126,7 @@ func (c *Configuration) PrintConfig() {
 	fmt.Printf("clienttimeout: %s\n", c.API.Timeout)
 	fmt.Printf("maxhistory: %d\n", c.Session.MaxHistory)
 	fmt.Printf("maxtokens: %d\n", c.Model.MaxTokens)
-	fmt.Printf("tools: %t\n", c.Bot.Tools)
+	fmt.Printf("tools: %t\n", c.Bot.ToolsEnabled)
 	fmt.Printf("toolsdir: %s\n", c.Bot.ToolsDir)
 
 	fmt.Printf("sessionduration: %s\n", c.Session.TTL)
@@ -115,9 +150,9 @@ func NewConfig() *Configuration {
 	if configfile != "" {
 		vip.SetConfigFile(configfile)
 		if err := vip.ReadInConfig(); err != nil {
-			log.Println("config file not found", configfile)
+			log.Fatal("config: config file not found", configfile)
 		} else {
-			log.Println("using config file:", vip.ConfigFileUsed())
+			log.Println("config: using config file:", vip.ConfigFileUsed())
 		}
 	}
 
@@ -133,13 +168,13 @@ func NewConfig() *Configuration {
 			SASLPass:    vip.GetString("saslpass"),
 		},
 		Bot: BotConfig{
-			Admins:    vip.GetStringSlice("admins"),
-			Verbose:   vip.GetBool("verbose"),
-			Addressed: vip.GetBool("addressed"),
-			Prompt:    vip.GetString("prompt"),
-			Greeting:  vip.GetString("greeting"),
-			Tools:     vip.GetBool("tools"),
-			ToolsDir:  vip.GetString("toolsdir"),
+			Admins:       vip.GetStringSlice("admins"),
+			Verbose:      vip.GetBool("verbose"),
+			Addressed:    vip.GetBool("addressed"),
+			Prompt:       vip.GetString("prompt"),
+			Greeting:     vip.GetString("greeting"),
+			ToolsEnabled: vip.GetBool("tools"),
+			ToolsDir:     vip.GetString("toolsdir"),
 		},
 		Model: ModelConfig{
 			Model:       vip.GetString("model"),
@@ -164,19 +199,19 @@ func NewConfig() *Configuration {
 	}
 
 	// initialize tools
-	if config.Bot.Tools {
+	if config.Bot.ToolsEnabled {
 		toolsDir := vip.GetString("toolsdir")
 		registry, err := NewToolRegistry(toolsDir)
 		if err != nil {
-			log.Println("failed to initialize tools:", err)
-			config.Bot.Tools = false
+			log.Println("config: failed to initialize tools:", err)
+			config.Bot.ToolsEnabled = false
 		} else {
 			RegisterIrcTools(registry)
-			config.ToolRegistry = registry
+			config.Tools = registry
 		}
 	} else {
-		log.Println("tools are disabled")
-		config.ToolRegistry = &ToolRegistry{}
+		log.Println("config: tools are disabled")
+		config.Tools = &ToolRegistry{}
 	}
 
 	// initialize the api for completions
@@ -184,6 +219,8 @@ func NewConfig() *Configuration {
 		config.LLM = NewOpenAIClient(config.API)
 	} else if config.API.Type == "anthropic" {
 		config.LLM = NewAnthropicClient(config.API)
+	} else {
+		log.Fatal("config: unknown api type:", config.API.Type)
 	}
 
 	// initialize sessions

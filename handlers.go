@@ -103,8 +103,8 @@ func slashSet(ctx ChatContextInterface) {
 			ctx.Reply("Invalid value for tools. Please provide 'true' or 'false'.")
 			return
 		}
-		config.Bot.Tools = toolUse
-		ctx.Reply(fmt.Sprintf("%s set to: %t", param, config.Bot.Tools))
+		config.Bot.ToolsEnabled = toolUse
+		ctx.Reply(fmt.Sprintf("%s set to: %t", param, config.Bot.ToolsEnabled))
 	}
 
 	ctx.GetSession().Clear()

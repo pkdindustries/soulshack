@@ -23,7 +23,7 @@ type CompletionRequest struct {
 	MaxTokens    int
 	Session      Session
 	ToolRegistry *ToolRegistry
-	Tools        bool
+	ToolsEnabled bool
 	Stream       bool
 }
 
@@ -37,8 +37,8 @@ func NewCompletionRequest(session Session, config *Configuration) *CompletionReq
 		Session:      session,
 		Temperature:  config.Model.Temperature,
 		TopP:         config.Model.TopP,
-		Tools:        config.Bot.Tools,
-		ToolRegistry: config.ToolRegistry,
+		ToolsEnabled: config.Bot.ToolsEnabled,
+		ToolRegistry: config.Tools,
 		Stream:       config.API.Stream,
 	}
 }
@@ -121,7 +121,7 @@ func complete(ctx ChatContextInterface) (<-chan string, error) {
 func handleToolCall(ctx ChatContextInterface, toolCall *ai.ToolCall) (<-chan string, error) {
 	log.Printf("Tool Call Received: %v", toolCall)
 	config := ctx.GetConfig()
-	soultool, err := config.ToolRegistry.GetToolByName(toolCall.Function.Name)
+	soultool, err := config.Tools.GetToolByName(toolCall.Function.Name)
 	if err != nil {
 		log.Printf("Error getting tool registration: %v", err)
 		return nil, err
