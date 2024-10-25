@@ -45,7 +45,9 @@ func getBanner() string {
 
 func runBot(r *cobra.Command, _ []string) {
 
-	config := NewConfig()
+	config := NewConfiguration()
+	sys := NewSystem(config)
+
 	irc := girc.New(girc.Config{
 		Server:    config.Server.Server,
 		Port:      config.Server.Port,
@@ -70,17 +72,15 @@ func runBot(r *cobra.Command, _ []string) {
 
 	irc.Handlers.AddBg(girc.JOIN, func(irc *girc.Client, e girc.Event) {
 		if e.Source.Name == config.Server.Nick {
-			ctx, cancel := NewChatContext(context.Background(), config, irc, &e)
+			ctx, cancel := NewChatContext(context.Background(), config, sys, irc, &e)
 			defer cancel()
 			greeting(ctx)
 		}
 	})
 
 	irc.Handlers.AddBg(girc.PRIVMSG, func(irc *girc.Client, e girc.Event) {
-
-		ctx, cancel := NewChatContext(context.Background(), config, irc, &e)
+		ctx, cancel := NewChatContext(context.Background(), config, sys, irc, &e)
 		defer cancel()
-
 		if ctx.Valid() {
 			log.Println(">>", strings.Join(e.Params[1:], " "))
 			switch ctx.GetCommand() {

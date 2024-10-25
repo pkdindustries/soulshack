@@ -102,7 +102,7 @@ func TestIsAdmin(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Mock Config
 
-			Config := NewConfig()
+			Config := NewConfiguration()
 			Config.Bot.Admins = tt.admins
 
 			// Mock Event

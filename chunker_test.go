@@ -65,7 +65,7 @@ func generateRandomText(size int) string {
 func BenchmarkFilter_StressTest(b *testing.B) {
 	// Test with different buffer sizes
 	bufferSizes := []int{1000, 10000, 10000}
-	Config := NewConfig()
+	Config := NewConfiguration()
 	for _, bufSize := range bufferSizes {
 		// Generate random text
 		text := generateRandomText(bufSize)

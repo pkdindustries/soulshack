@@ -63,19 +63,21 @@ type AnthropicClient struct {
 
 // ChatCompletionTask implements LLM.
 func (c *AnthropicClient) ChatCompletionTask(context.Context, *CompletionRequest) (<-chan StreamResponse, error) {
-	panic("unimplemented")
+	panic("only streaming implemented for anthropic")
 }
 
 func NewAnthropicClient(api APIConfig) *AnthropicClient {
 	return &AnthropicClient{
-		Client: http.Client{},
+		Client: http.Client{
+			Timeout: api.Timeout,
+		},
 	}
 }
 
-func prettyPrint(i map[string]any) string {
-	s, _ := json.MarshalIndent(i["messages"], "", " ")
-	return string(s)
-}
+// func prettyPrint(i map[string]any) string {
+// 	s, _ := json.MarshalIndent(i["messages"], "", " ")
+// 	return string(s)
+// }
 
 func (c *AnthropicClient) ChatCompletionStreamTask(ctx context.Context, request *CompletionRequest) (<-chan StreamResponse, error) {
 	respChan := make(chan StreamResponse, 10)
@@ -99,7 +101,7 @@ func (c *AnthropicClient) ChatCompletionStreamTask(ctx context.Context, request 
 		log.Printf("anthropicclient: request with %d tools", len(anthropicTools))
 	} else {
 		reqBody = map[string]interface{}{
-			"model":      "claude-3-5-sonnet-20241022",
+			"model":      request.Model,
 			"messages":   anthropicMessages,
 			"stream":     true,
 			"max_tokens": 4096,
@@ -111,8 +113,7 @@ func (c *AnthropicClient) ChatCompletionStreamTask(ctx context.Context, request 
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	// XXX
-	log.Printf("anthropicrequest: %s", prettyPrint(reqBody))
+	//log.Printf("anthropicrequest: %s", prettyPrint(reqBody))
 
 	req, err := http.NewRequestWithContext(ctx, "POST", request.BaseURL+"/v1/messages", strings.NewReader(string(reqJSON)))
 	if err != nil {
@@ -139,16 +140,15 @@ func (c *AnthropicClient) ChatCompletionStreamTask(ctx context.Context, request 
 		defer close(respChan)
 
 		reader := bufio.NewReader(resp.Body)
+
 		for {
 			line, err := reader.ReadString('\n')
 			if err != nil {
-				if err != io.EOF {
-					log.Printf("Error reading stream: %v", err)
-				}
+				log.Printf("reading stream: %v", err)
 				break
 			}
 
-			line = strings.TrimSpace(line)
+			//line = strings.TrimSpace(line)
 			if line == "" || line == "data: {\"type\": \"ping\"}" {
 				continue
 			}
@@ -171,6 +171,7 @@ func (c *AnthropicClient) ChatCompletionStreamTask(ctx context.Context, request 
 			switch event.Type {
 			case "content_block_start":
 				if event.ContentBlock != nil && event.ContentBlock.Type == "tool_use" {
+					log.Printf("tool_use start: %s", event.ContentBlock.Name)
 					respChan <- StreamResponse{
 						ChatCompletionStreamChoice: ai.ChatCompletionStreamChoice{
 							Delta: ai.ChatCompletionStreamChoiceDelta{
@@ -188,6 +189,7 @@ func (c *AnthropicClient) ChatCompletionStreamTask(ctx context.Context, request 
 
 			case "content_block_delta":
 				if event.Delta.Type == "input_json_delta" {
+					log.Printf("input_json_delta: %d", len(event.Delta.PartialJSON))
 					respChan <- StreamResponse{
 						ChatCompletionStreamChoice: ai.ChatCompletionStreamChoice{
 							Delta: ai.ChatCompletionStreamChoiceDelta{
@@ -223,7 +225,7 @@ func (c *AnthropicClient) ChatCompletionStreamTask(ctx context.Context, request 
 				}
 
 			case "message_stop":
-				log.Printf("Message stop: %s", event.Delta.StopReason)
+				log.Printf("message_stop: %s", event.Delta.StopReason)
 				respChan <- StreamResponse{
 					ChatCompletionStreamChoice: ai.ChatCompletionStreamChoice{
 						FinishReason: "stop",

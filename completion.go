@@ -27,18 +27,20 @@ type CompletionRequest struct {
 	Stream       bool
 }
 
-func NewCompletionRequest(session Session, config *Configuration) *CompletionRequest {
+func NewCompletionRequest(ctx ChatContextInterface) *CompletionRequest {
+	config := ctx.GetConfig()
+
 	return &CompletionRequest{
 		APIKey:       config.API.Key,
 		BaseURL:      config.API.URL,
 		Timeout:      config.API.Timeout,
 		Model:        config.Model.Model,
 		MaxTokens:    config.Model.MaxTokens,
-		Session:      session,
+		Session:      ctx.GetSession(),
 		Temperature:  config.Model.Temperature,
 		TopP:         config.Model.TopP,
 		ToolsEnabled: config.Bot.ToolsEnabled,
-		ToolRegistry: config.Tools,
+		ToolRegistry: ctx.GetSystem().GetToolRegistry(),
 		Stream:       config.API.Stream,
 	}
 }
@@ -61,8 +63,9 @@ func CompleteWithText(ctx ChatContextInterface, msg string) (<-chan string, erro
 func complete(ctx ChatContextInterface) (<-chan string, error) {
 	session := ctx.GetSession()
 	config := ctx.GetConfig()
-	req := NewCompletionRequest(session, config)
-	llm := config.LLM
+	sys := ctx.GetSystem()
+	req := NewCompletionRequest(ctx)
+	llm := sys.GetLLM()
 
 	var respChan <-chan StreamResponse
 	var err error
@@ -78,7 +81,6 @@ func complete(ctx ChatContextInterface) (<-chan string, error) {
 	}
 
 	textChan, toolChan, msgChan := NewChunker(config).FilterTask(respChan)
-
 	outputChan := make(chan string, 10)
 
 	go func() {
@@ -120,8 +122,8 @@ func complete(ctx ChatContextInterface) (<-chan string, error) {
 
 func handleToolCall(ctx ChatContextInterface, toolCall *ai.ToolCall) (<-chan string, error) {
 	log.Printf("Tool Call Received: %v", toolCall)
-	config := ctx.GetConfig()
-	soultool, err := config.Tools.GetToolByName(toolCall.Function.Name)
+	sys := ctx.GetSystem()
+	soultool, err := sys.GetToolRegistry().GetToolByName(toolCall.Function.Name)
 	if err != nil {
 		log.Printf("Error getting tool registration: %v", err)
 		return nil, err

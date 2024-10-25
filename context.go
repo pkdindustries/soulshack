@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/lrstanley/girc"
-	ai "github.com/sashabaranov/go-openai"
 )
 
 type Message interface {
@@ -31,20 +30,23 @@ type Server interface {
 }
 
 type System interface {
-	GetSession() Session
-	GetConfig() *Configuration
+	GetLLM() LLM
+	GetToolRegistry() *ToolRegistry
+	GetSessionStore() SessionStore
 }
 
 type ChatContextInterface interface {
 	context.Context
-	System
+	GetSession() Session
+	GetConfig() *Configuration
+	GetSystem() System
 	Message
 	Server
 }
 
 type ChatContext struct {
 	context.Context
-	AI      *ai.Client
+	Sys     System
 	Session Session
 	Config  *Configuration
 	client  *girc.Client
@@ -54,12 +56,13 @@ type ChatContext struct {
 
 var _ ChatContextInterface = (*ChatContext)(nil)
 
-func NewChatContext(parentctx context.Context, config *Configuration, ircclient *girc.Client, e *girc.Event) (ChatContextInterface, context.CancelFunc) {
+func NewChatContext(parentctx context.Context, config *Configuration, system System, ircclient *girc.Client, e *girc.Event) (ChatContextInterface, context.CancelFunc) {
 	timedctx, cancel := context.WithTimeout(parentctx, config.API.Timeout)
 
 	ctx := ChatContext{
 		Context: timedctx,
 		Config:  config,
+		Sys:     system,
 		client:  ircclient,
 		event:   e,
 		args:    strings.Fields(e.Last()),
@@ -79,8 +82,12 @@ func NewChatContext(parentctx context.Context, config *Configuration, ircclient 
 	if !girc.IsValidChannel(key) {
 		key = e.Source.Name
 	}
-	ctx.Session = config.Store.Get(key)
+	ctx.Session = ctx.Sys.GetSessionStore().Get(key)
 	return ctx, cancel
+}
+
+func (c ChatContext) GetSystem() System {
+	return c.Sys
 }
 
 func (c ChatContext) GetConfig() *Configuration {

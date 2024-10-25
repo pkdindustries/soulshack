@@ -8,21 +8,20 @@ urllib3.disable_warnings()
 
 def print_schema():
     schema = {
-        "name": "get_document_summary",
-        "description": "provides a short summaries of recent news, articles, documents, and links",
+        "name": "get_news_summary",
+        "description": "provides a short summary of recent news",
         "type": "object",
         "properties": {
             "user": {
                 "type": "string",
                 "description": "The user requesting the summary"
             },
-            "term": {
+            "topic": {
                 "type": "string",
-                "description": "news, articles, documents, links",
-                "enum": ["news", "articles", "documents", "links"]
+                "description": "topic",
             },
         },
-        "required": ["user", "term"],
+        "required": ["user", "topic"],
         "additionalProperties": False,
     }
     print(json.dumps(schema, indent=2))
@@ -31,7 +30,7 @@ def print_schema():
 DOCUMENT_URL = "https://hnrss.org/frontpage.jsonfeed?points=150&count=3"  
 DOCUMENT_KEY = ""  
 
-def getsummary(user,term):
+def getsummary(user,topic):
     headers = {
         'Authorization': f'Bearer {DOCUMENT_KEY}',
         'User-Agent': 'document_script',
@@ -68,7 +67,7 @@ def main():
         try:
             data = json.loads(sys.argv[2])
             user = data.get("user")
-            term = data.get("term")
+            term = data.get("topic")
             result = getsummary(user,term)
             print(result)
         except json.JSONDecodeError:

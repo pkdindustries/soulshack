@@ -46,7 +46,7 @@ func NewSessionStore(config *Configuration) SessionStore {
 	go func() {
 		for {
 			time.Sleep(config.Session.TTL)
-			config.Store.Expire()
+			store.Expire()
 		}
 	}()
 	return store

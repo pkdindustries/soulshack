@@ -64,21 +64,33 @@ type APIConfig struct {
 }
 
 type Configuration struct {
-	Server  ServerConfig
-	Bot     BotConfig
-	Model   ModelConfig
-	Session SessionConfig
-	API     APIConfig
+	Server  *ServerConfig
+	Bot     *BotConfig
+	Model   *ModelConfig
+	Session *SessionConfig
+	API     *APIConfig
+}
 
+type SystemImpl struct {
 	Store SessionStore
 	LLM   LLM
 	Tools *ToolRegistry
 }
 
-func (c *Configuration) GetSystem() {
-	var Store SessionStore
-	var LLM LLM
-	var Tools *ToolRegistry
+func (s SystemImpl) GetLLM() LLM {
+	return s.LLM
+}
+
+func (s SystemImpl) GetToolRegistry() *ToolRegistry {
+	return s.Tools
+}
+
+func (s SystemImpl) GetSessionStore() SessionStore {
+	return s.Store
+}
+
+func NewSystem(c *Configuration) System {
+	s := SystemImpl{}
 	// initialize tools
 	if c.Bot.ToolsEnabled {
 		toolsDir := vip.GetString("toolsdir")
@@ -88,26 +100,25 @@ func (c *Configuration) GetSystem() {
 			c.Bot.ToolsEnabled = false
 		} else {
 			RegisterIrcTools(registry)
-			Tools = registry
+			s.Tools = registry
 		}
 	} else {
 		log.Println("config: tools are disabled")
-		Tools = &ToolRegistry{}
+		s.Tools = &ToolRegistry{}
 	}
 
 	// initialize the api for completions
 	if c.API.Type == "openai" {
-		LLM = NewOpenAIClient(c.API)
+		s.LLM = NewOpenAIClient(*c.API)
 	} else if c.API.Type == "anthropic" {
-		LLM = NewAnthropicClient(c.API)
+		s.LLM = NewAnthropicClient(*c.API)
 	} else {
 		log.Fatal("config: unknown api type:", c.API.Type)
 	}
 
 	// initialize sessions
-	Store = NewSessionStore(c)
-	_, _, _ = Store, LLM, Tools
-	//return nil
+	s.Store = NewSessionStore(c)
+	return s
 }
 
 func (c *Configuration) PrintConfig() {
@@ -145,7 +156,7 @@ func (c *Configuration) PrintConfig() {
 	fmt.Printf("greeting: %s\n", c.Bot.Greeting)
 }
 
-func NewConfig() *Configuration {
+func NewConfiguration() *Configuration {
 	configfile := vip.GetString("config")
 	if configfile != "" {
 		vip.SetConfigFile(configfile)
@@ -157,7 +168,7 @@ func NewConfig() *Configuration {
 	}
 
 	config := &Configuration{
-		Server: ServerConfig{
+		Server: &ServerConfig{
 			Nick:        vip.GetString("nick"),
 			Server:      vip.GetString("server"),
 			Port:        vip.GetInt("port"),
@@ -167,7 +178,7 @@ func NewConfig() *Configuration {
 			SASLNick:    vip.GetString("saslnick"),
 			SASLPass:    vip.GetString("saslpass"),
 		},
-		Bot: BotConfig{
+		Bot: &BotConfig{
 			Admins:       vip.GetStringSlice("admins"),
 			Verbose:      vip.GetBool("verbose"),
 			Addressed:    vip.GetBool("addressed"),
@@ -176,20 +187,20 @@ func NewConfig() *Configuration {
 			ToolsEnabled: vip.GetBool("tools"),
 			ToolsDir:     vip.GetString("toolsdir"),
 		},
-		Model: ModelConfig{
+		Model: &ModelConfig{
 			Model:       vip.GetString("model"),
 			MaxTokens:   vip.GetInt("maxtokens"),
 			Temperature: float32(vip.GetFloat64("temperature")),
 			TopP:        float32(vip.GetFloat64("top_p")),
 		},
 
-		Session: SessionConfig{
+		Session: &SessionConfig{
 			ChunkMax:   vip.GetInt("chunkmax"),
 			MaxHistory: vip.GetInt("sessionhistory"),
 			TTL:        vip.GetDuration("sessionduration"),
 		},
 
-		API: APIConfig{
+		API: &APIConfig{
 			Timeout: vip.GetDuration("apitimeout"),
 			Key:     vip.GetString("apikey"),
 			Stream:  vip.GetBool("stream"),
@@ -197,34 +208,6 @@ func NewConfig() *Configuration {
 			Type:    vip.GetString("apitype"),
 		},
 	}
-
-	// initialize tools
-	if config.Bot.ToolsEnabled {
-		toolsDir := vip.GetString("toolsdir")
-		registry, err := NewToolRegistry(toolsDir)
-		if err != nil {
-			log.Println("config: failed to initialize tools:", err)
-			config.Bot.ToolsEnabled = false
-		} else {
-			RegisterIrcTools(registry)
-			config.Tools = registry
-		}
-	} else {
-		log.Println("config: tools are disabled")
-		config.Tools = &ToolRegistry{}
-	}
-
-	// initialize the api for completions
-	if config.API.Type == "openai" {
-		config.LLM = NewOpenAIClient(config.API)
-	} else if config.API.Type == "anthropic" {
-		config.LLM = NewAnthropicClient(config.API)
-	} else {
-		log.Fatal("config: unknown api type:", config.API.Type)
-	}
-
-	// initialize sessions
-	config.Store = NewSessionStore(config)
 
 	return config
 }
