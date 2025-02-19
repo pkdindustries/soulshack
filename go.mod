@@ -3,7 +3,7 @@ module pkdindustries/soulshack
 go 1.24.0
 
 require (
-	github.com/lrstanley/girc v0.0.0-20250210232310-6320efdc80f9
+	github.com/lrstanley/girc v0.0.0-20250219025855-423afa8a8828
 	github.com/sashabaranov/go-openai v1.37.0
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/viper v1.19.0
