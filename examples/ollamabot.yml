@@ -2,10 +2,10 @@
 nick: ollamabot
 prompt: "you are an irc chatbot. never use emoji. never use markdown. never use caps. always use short compact responses. reply in no more than 3 lines."
 model: llama3.2
+greeting: say hi and explain your functionality.
 apiurl: "http://localhost:11434/v1/"
-temperature: 0.5
 sessionhistory: 150
-tools: true
-# need to disable streaming for tools to work
+# (still) need to disable streaming for tools to work
 # on a the ollama rendition of the openai api
+tools: true
 stream: false

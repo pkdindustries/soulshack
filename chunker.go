@@ -40,8 +40,7 @@ func (c *Chunker) FilterTask(msgChan <-chan StreamResponse) (<-chan []byte, <-ch
 		byteChan, toolChan, ccmChan = c.nonStreamTask(msgChan)
 	}
 
-	chatChan := c.chunkTask(byteChan)
-	return chatChan, toolChan, ccmChan
+	return c.chunkTask(byteChan), toolChan, ccmChan
 }
 
 func (c *Chunker) streamTask(respChan <-chan StreamResponse) (chan []byte, chan *ai.ToolCall, chan *ai.ChatCompletionMessage) {
@@ -54,7 +53,6 @@ func (c *Chunker) streamTask(respChan <-chan StreamResponse) (chan []byte, chan 
 		defer close(ccmChan)
 		log.Println("streamTask: start")
 		for val := range respChan {
-
 			if len(val.Delta.ToolCalls) > 0 {
 				if len(val.Delta.ToolCalls) > 1 {
 					log.Printf("streamTask: WARNING - dropping %d additional tool calls", len(val.Delta.ToolCalls)-1)

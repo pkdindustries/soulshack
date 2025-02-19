@@ -5,6 +5,8 @@ import (
 	"sync"
 	"time"
 
+	"slices"
+
 	ai "github.com/sashabaranov/go-openai"
 )
 
@@ -16,7 +18,7 @@ type Session interface {
 
 type SessionStore interface {
 	Get(string) Session
-	Range(func(key, value interface{}) bool)
+	Range(func(key, value any) bool)
 	Expire()
 }
 
@@ -53,10 +55,10 @@ func NewSessionStore(config *Configuration) SessionStore {
 }
 
 func (sessions *SyncMapSessionStore) Expire() {
-	sessions.Range(func(key, value interface{}) bool {
+	sessions.Range(func(key, value any) bool {
 		session := value.(*LocalSession)
 		if time.Since(session.last) > sessions.config.Session.TTL {
-			log.Printf("syncmapsessionstore: %s expired after %f seconds", key, sessions.config.Session.TTL.Seconds())
+			log.Printf("sessionstore: expiring session '%s' last active %v ago", key, time.Since(session.last))
 			sessions.Delete(key)
 		}
 		return true
@@ -65,7 +67,11 @@ func (sessions *SyncMapSessionStore) Expire() {
 
 func (sessions *SyncMapSessionStore) Get(id string) Session {
 	if value, ok := sessions.Load(id); ok {
-		return value.(*LocalSession)
+		session := value.(*LocalSession)
+		session.mu.Lock()
+		session.last = time.Now()
+		session.mu.Unlock()
+		return session
 	}
 
 	session := &LocalSession{
@@ -107,7 +113,7 @@ func (s *LocalSession) trimHistory() {
 	// if the second oldest message is a tool, remove it
 	// (the first message is the system message)
 	if s.history[1].Role == ai.ChatMessageRoleTool {
-		s.history = append(s.history[:1], s.history[2:]...)
+		s.history = slices.Delete(s.history, 1, 2)
 	}
 }
 

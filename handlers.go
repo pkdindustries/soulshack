@@ -105,6 +105,9 @@ func slashSet(ctx ChatContextInterface) {
 		}
 		config.Bot.ToolsEnabled = toolUse
 		ctx.Reply(fmt.Sprintf("%s set to: %t", param, config.Bot.ToolsEnabled))
+	case "apiurl":
+		config.API.URL = value
+		ctx.Reply(fmt.Sprintf("%s set to: %s", param, config.API.URL))
 	}
 
 	ctx.GetSession().Clear()
@@ -143,6 +146,10 @@ func slashGet(ctx ChatContextInterface) {
 			return
 		}
 		ctx.Reply(fmt.Sprintf("%s: %s", param, strings.Join(config.Bot.Admins, ", ")))
+	case "apiurl":
+		ctx.Reply(fmt.Sprintf("%s: %s", param, config.API.URL))
+	case "tools":
+		ctx.Reply(fmt.Sprintf("%s: %t", param, config.Bot.ToolsEnabled))
 	}
 }
 

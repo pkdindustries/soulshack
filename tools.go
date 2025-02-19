@@ -22,6 +22,14 @@ type ToolRegistry struct {
 	Definitions []ai.Tool
 }
 
+func (t *ToolRegistry) GetToolsList() []string {
+	toolList := make([]string, 0, len(t.Tools))
+	for _, tool := range t.GetToolDefinitions() {
+		toolList = append(toolList, tool.Function.Name)
+	}
+	return toolList
+}
+
 func NewToolRegistry(toolsDir string) (*ToolRegistry, error) {
 	toolRegistry := &ToolRegistry{
 		Tools: make(map[string]SoulShackTool),

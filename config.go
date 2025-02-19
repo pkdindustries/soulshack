@@ -19,6 +19,7 @@ var ModifiableConfigKeys = []string{
 	"top_p",
 	"admins",
 	"tools",
+	"apiurl",
 }
 
 type ModelConfig struct {
@@ -77,15 +78,19 @@ type SystemImpl struct {
 	Tools *ToolRegistry
 }
 
-func (s SystemImpl) GetLLM() LLM {
+func (s *SystemImpl) GetLLM() LLM {
 	return s.LLM
 }
 
-func (s SystemImpl) GetToolRegistry() *ToolRegistry {
+func (s *SystemImpl) GetToolRegistry() *ToolRegistry {
 	return s.Tools
 }
 
-func (s SystemImpl) GetSessionStore() SessionStore {
+func (s *SystemImpl) SetToolRegistry(reg *ToolRegistry) {
+	s.Tools = reg
+}
+
+func (s *SystemImpl) GetSessionStore() SessionStore {
 	return s.Store
 }
 
@@ -110,15 +115,13 @@ func NewSystem(c *Configuration) System {
 	// initialize the api for completions
 	if c.API.Type == "openai" {
 		s.LLM = NewOpenAIClient(*c.API)
-	} else if c.API.Type == "anthropic" {
-		s.LLM = NewAnthropicClient(*c.API)
 	} else {
 		log.Fatal("config: unknown api type:", c.API.Type)
 	}
 
 	// initialize sessions
 	s.Store = NewSessionStore(c)
-	return s
+	return &s
 }
 
 func (c *Configuration) PrintConfig() {
