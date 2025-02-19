@@ -28,31 +28,46 @@ func NewOpenAIClient(api APIConfig) *OpenAIClient {
 	}
 }
 
-func (o OpenAIClient) ChatCompletionStreamTask(ctx context.Context, req *CompletionRequest) (<-chan StreamResponse, error) {
+func (o OpenAIClient) ChatCompletionTask(ctx context.Context, req *CompletionRequest, chunker *Chunker) (<-chan []byte, <-chan *ai.ToolCall, <-chan *ai.ChatCompletionMessage) {
 	messageChannel := make(chan StreamResponse, 10)
-	err := o.completionStream(ctx, req, messageChannel)
-	return messageChannel, err
+	if chunker.Stream {
+		o.completionStream(ctx, req, messageChannel)
+	} else {
+		o.completion(ctx, req, messageChannel)
+	}
+
+	return chunker.FilterTask(messageChannel)
 }
 
 func (o OpenAIClient) completionStream(ctx context.Context, req *CompletionRequest, respChan chan<- StreamResponse) error {
 
 	timeout, cancel := context.WithTimeout(ctx, req.Timeout)
 
-	stream, err := o.Client.CreateChatCompletionStream(timeout, ai.ChatCompletionRequest{
+	ccr := ai.ChatCompletionRequest{
 		MaxCompletionTokens: req.MaxTokens,
 		Model:               req.Model,
 		Messages:            req.Session.GetHistory(),
 		Temperature:         req.Temperature,
 		TopP:                req.TopP,
 		Stream:              true,
-		Tools:               req.ToolRegistry.GetToolDefinitions(),
-		ParallelToolCalls:   false,
-	})
+	}
+
+	if req.ToolsEnabled {
+		ccr.Tools = req.ToolRegistry.GetToolDefinitions()
+	}
+
+	stream, err := o.Client.CreateChatCompletionStream(timeout, ccr)
 
 	if err != nil {
 		log.Println("completionStreamTask: failed to create chat completion stream:", err)
+		respChan <- StreamResponse{
+			ai.ChatCompletionStreamChoice{
+				Delta: ai.ChatCompletionStreamChoiceDelta{Content: "failed to create chat completion stream: " + err.Error()}},
+		}
+		//stream.Close()
+		close(respChan)
 		cancel()
-		return err
+		return fmt.Errorf("failed to create chat completion stream: %w", err)
 	}
 
 	go func() {
@@ -90,29 +105,37 @@ func (o OpenAIClient) completionStream(ctx context.Context, req *CompletionReque
 	return nil
 }
 
-func (o OpenAIClient) ChatCompletionTask(ctx context.Context, req *CompletionRequest) (<-chan StreamResponse, error) {
-	respChannel := make(chan StreamResponse, 10)
+func (o OpenAIClient) completion(ctx context.Context, req *CompletionRequest, respChannel chan<- StreamResponse) error {
 	timeout, cancel := context.WithTimeout(ctx, req.Timeout)
 	defer close(respChannel)
 	defer cancel()
 	log.Println("completionTask: start")
-	response, err := o.Client.CreateChatCompletion(timeout, ai.ChatCompletionRequest{
+
+	ccr := ai.ChatCompletionRequest{
 		MaxCompletionTokens: req.MaxTokens,
 		Model:               req.Model,
 		Messages:            req.Session.GetHistory(),
 		Temperature:         req.Temperature,
 		TopP:                req.TopP,
-		Tools:               req.ToolRegistry.GetToolDefinitions(),
-		ParallelToolCalls:   false,
-	})
+	}
+
+	if req.ToolsEnabled {
+		ccr.Tools = req.ToolRegistry.GetToolDefinitions()
+	}
+
+	response, err := o.Client.CreateChatCompletion(timeout, ccr)
 
 	if err != nil {
 		log.Println("completionTask: failed to create chat completion:", err)
-		return nil, fmt.Errorf("failed to create chat completion: %w", err)
+		respChannel <- StreamResponse{
+			ai.ChatCompletionStreamChoice{
+				Delta: ai.ChatCompletionStreamChoiceDelta{Content: "failed to create chat completion: " + err.Error()}},
+		}
+		return err
 	}
 
 	if len(response.Choices) == 0 {
-		return nil, fmt.Errorf("empty completion response")
+		return fmt.Errorf("empty completion response")
 	}
 
 	msgs := make([]ai.ChatCompletionMessage, 0)
@@ -137,5 +160,5 @@ func (o OpenAIClient) ChatCompletionTask(ctx context.Context, req *CompletionReq
 		}
 	}
 	log.Println("completionTask: done")
-	return respChannel, nil
+	return nil
 }

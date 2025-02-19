@@ -56,8 +56,8 @@ Flags:
       --maxtokens int              maximum number of tokens to generate (default 512)
       --model string               model to be used for responses (default "gpt-4o")
   -n, --nick string                bot's nickname on the irc server (default "soulshack")
-      --apikey string           openai api key
-      --apiurl string           alternative base url to use instead of openai
+      --apikey string              openai api key
+      --apiurl string              alternative base url to use instead of openai
   -p, --port int                   irc server port (default 6667)
       --prompt string              initial system prompt (default "you are a helpful chatbot. do not use caps. do not use emoji.")
       --saslnick string            nick used for SASL

@@ -104,7 +104,7 @@ func runBot(r *cobra.Command, _ []string) {
 
 	// Reconnect loop with a maximum retry limit
 	maxRetries := 5
-	for retries := 0; retries < maxRetries; retries++ {
+	for range maxRetries {
 		log.Printf("connecting to server:%s, port:%d, tls:%t, sasl:%t, api:%s", irc.Config.Server, irc.Config.Port, irc.Config.SSL, irc.Config.SASL != nil, config.API.URL)
 		if err := irc.Connect(); err != nil {
 			log.Println("connection error:", err)
