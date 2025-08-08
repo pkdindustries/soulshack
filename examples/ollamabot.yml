@@ -5,6 +5,4 @@ model: ollama/llama3.2
 greeting: say hi and explain your functionality.
 # ollamaurl defaults to http://localhost:11434 if not specified
 # ollamaurl: "http://localhost:11434"
-sessionhistory: 150
-# tools now work properly without streaming
 tools: true
