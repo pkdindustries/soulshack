@@ -148,16 +148,23 @@ func (g *GeminiClient) ChatCompletionTask(ctx context.Context, req *CompletionRe
 			model.SystemInstruction = &genai.Content{Parts: []genai.Part{genai.Text("Use available function tools when appropriate.")}}
 		}
 
-		// Add tool support if enabled
-		if req.ToolsEnabled && len(req.Tools) > 0 {
-			var geminiTools []*genai.Tool
-			for _, tool := range req.Tools {
-				geminiTools = append(geminiTools, ConvertToGemini(tool.GetSchema()))
-			}
-			model.Tools = geminiTools
-			// Allow the model to use tools
-			model.ToolConfig = &genai.ToolConfig{FunctionCallingConfig: &genai.FunctionCallingConfig{Mode: genai.FunctionCallingAuto}}
-		}
+        // Add tool support if enabled
+        if req.ToolsEnabled && len(req.Tools) > 0 {
+            // Gemini works best when all function declarations are grouped
+            // under a single Tool entry. Aggregate all declarations into one.
+            var fdecls []*genai.FunctionDeclaration
+            for _, tool := range req.Tools {
+                t := ConvertToGemini(tool.GetSchema())
+                if t != nil && len(t.FunctionDeclarations) > 0 {
+                    fdecls = append(fdecls, t.FunctionDeclarations[0])
+                }
+            }
+            if len(fdecls) > 0 {
+                model.Tools = []*genai.Tool{{FunctionDeclarations: fdecls}}
+                // Allow the model to use tools
+                model.ToolConfig = &genai.ToolConfig{FunctionCallingConfig: &genai.FunctionCallingConfig{Mode: genai.FunctionCallingAuto}}
+            }
+        }
 
 		log.Printf("gemini: sending request to model %s", req.Model)
 
