@@ -143,7 +143,7 @@ func handleToolCall(ctx ChatContextInterface, toolCall *ToolCall) (<-chan string
 		contextualTool.SetContext(ctx)
 	}
 
-	result, err := tool.Execute(toolCall.Args)
+	result, err := tool.Execute(ctx, toolCall.Args)
 	if err != nil {
 		log.Printf("error executing tool %s: %v", toolCall.Name, err)
 		result = fmt.Sprintf("Error: %v", err)

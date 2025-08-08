@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"testing"
 
 	"github.com/lrstanley/girc"
@@ -68,8 +69,9 @@ func TestShellTool_Execute(t *testing.T) {
 		"format": "+%A %B %d %T %Y",
 	}
 
-	// Execute the tool
-	result, err := tool.Execute(args)
+	// Execute the tool with context
+	ctx := context.Background()
+	result, err := tool.Execute(ctx, args)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, result)
 

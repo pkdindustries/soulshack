@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -11,7 +12,7 @@ import (
 // Tool is the generic interface for all tools
 type Tool interface {
 	GetSchema() ToolSchema
-	Execute(args map[string]interface{}) (string, error)
+	Execute(ctx context.Context, args map[string]interface{}) (string, error)
 }
 
 // ToolSchema represents a tool's definition in a provider-agnostic way
@@ -151,15 +152,15 @@ func (s *ShellTool) GetSchema() ToolSchema {
 }
 
 // Execute runs the tool with the given arguments
-func (s *ShellTool) Execute(args map[string]interface{}) (string, error) {
+func (s *ShellTool) Execute(ctx context.Context, args map[string]interface{}) (string, error) {
 	// Convert args to JSON
 	argsJSON, err := json.Marshal(args)
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal arguments: %v", err)
 	}
 
-	// Run command with --execute
-	cmd := exec.Command(s.Command, "--execute", string(argsJSON))
+	// Run command with --execute using context for timeout
+	cmd := exec.CommandContext(ctx, s.Command, "--execute", string(argsJSON))
 	output, err := cmd.CombinedOutput()
 
 	// Log execution details

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 )
@@ -58,7 +59,7 @@ func (t *IrcOpTool) GetSchema() ToolSchema {
 	}
 }
 
-func (t *IrcOpTool) Execute(args map[string]interface{}) (string, error) {
+func (t *IrcOpTool) Execute(ctx context.Context, args map[string]interface{}) (string, error) {
 	if t.ctx == nil {
 		return "", fmt.Errorf("no IRC context available")
 	}
@@ -119,7 +120,7 @@ func (t *IrcKickTool) GetSchema() ToolSchema {
 	}
 }
 
-func (t *IrcKickTool) Execute(args map[string]interface{}) (string, error) {
+func (t *IrcKickTool) Execute(ctx context.Context, args map[string]interface{}) (string, error) {
 	if t.ctx == nil {
 		return "", fmt.Errorf("no IRC context available")
 	}
@@ -171,7 +172,7 @@ func (t *IrcTopicTool) GetSchema() ToolSchema {
 	}
 }
 
-func (t *IrcTopicTool) Execute(args map[string]interface{}) (string, error) {
+func (t *IrcTopicTool) Execute(ctx context.Context, args map[string]interface{}) (string, error) {
 	if t.ctx == nil {
 		return "", fmt.Errorf("no IRC context available")
 	}
@@ -218,7 +219,7 @@ func (t *IrcActionTool) GetSchema() ToolSchema {
 	}
 }
 
-func (t *IrcActionTool) Execute(args map[string]interface{}) (string, error) {
+func (t *IrcActionTool) Execute(ctx context.Context, args map[string]interface{}) (string, error) {
 	if t.ctx == nil {
 		return "", fmt.Errorf("no IRC context available")
 	}
