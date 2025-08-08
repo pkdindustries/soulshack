@@ -46,7 +46,7 @@ func (o OpenAIClient) completion(ctx context.Context, req *CompletionRequest, re
 		TopP:                req.TopP,
 	}
 
-	if req.ToolsEnabled && len(req.Tools) > 0 {
+	if len(req.Tools) > 0 {
 		var openaiTools []ai.Tool
 		for _, tool := range req.Tools {
 			openaiTools = append(openaiTools, ConvertToOpenAI(tool.GetSchema()))

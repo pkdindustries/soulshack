@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"os"
 	"os/exec"
 	"strings"
 )
@@ -36,39 +35,37 @@ type ToolRegistry struct {
 	tools map[string]Tool
 }
 
-// NewToolRegistry creates a new tool registry
-func NewToolRegistry(toolsDir string) (*ToolRegistry, error) {
+// NewToolRegistry creates a new tool registry from a list of tools
+func NewToolRegistry(tools []Tool) *ToolRegistry {
 	registry := &ToolRegistry{
 		tools: make(map[string]Tool),
 	}
 
-	// Load shell tools from directory if provided
-	if toolsDir != "" {
-		log.Println("loading tools from:", toolsDir)
-		files, err := os.ReadDir(toolsDir)
-		if err != nil {
-			return nil, err
-		}
-
-		for _, file := range files {
-			if file.IsDir() {
-				continue
-			}
-
-			toolPath := toolsDir + "/" + file.Name()
-			shellTool, err := NewShellTool(toolPath)
-			if err != nil {
-				log.Printf("failed to load tool %s: %v", toolPath, err)
-				continue
-			}
-
-			schema := shellTool.GetSchema()
-			log.Println("registered tool:", schema.Name)
-			registry.tools[schema.Name] = shellTool
-		}
+	for _, tool := range tools {
+		schema := tool.GetSchema()
+		log.Printf("registered tool: %s", schema.Name)
+		registry.tools[schema.Name] = tool
 	}
 
-	return registry, nil
+	return registry
+}
+
+// LoadTools loads tools from the given file paths
+func LoadTools(paths []string) ([]Tool, error) {
+	var tools []Tool
+
+	for _, path := range paths {
+		log.Printf("loading tool from: %s", path)
+		shellTool, err := NewShellTool(path)
+		if err != nil {
+			log.Printf("failed to load tool %s: %v", path, err)
+			// Continue loading other tools even if one fails
+			continue
+		}
+		tools = append(tools, shellTool)
+	}
+
+	return tools, nil
 }
 
 // Register adds a tool to the registry
@@ -82,6 +79,27 @@ func (r *ToolRegistry) Register(tool Tool) {
 func (r *ToolRegistry) Get(name string) (Tool, bool) {
 	tool, ok := r.tools[name]
 	return tool, ok
+}
+
+// AddTool adds a single tool to the registry
+func (r *ToolRegistry) AddTool(tool Tool) {
+	schema := tool.GetSchema()
+	log.Printf("added tool: %s", schema.Name)
+	r.tools[schema.Name] = tool
+}
+
+// RemoveTool removes a tool by name from the registry
+func (r *ToolRegistry) RemoveTool(name string) {
+	if _, ok := r.tools[name]; ok {
+		delete(r.tools, name)
+		log.Printf("removed tool: %s", name)
+	}
+}
+
+// Clear removes all tools from the registry
+func (r *ToolRegistry) Clear() {
+	r.tools = make(map[string]Tool)
+	log.Printf("cleared all tools")
 }
 
 // All returns all registered tools

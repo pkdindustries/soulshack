@@ -135,21 +135,21 @@ func (g *GeminiClient) ChatCompletionTask(ctx context.Context, req *CompletionRe
 			}
 		}
 
-		// Set system instruction, augmenting with tool usage guidance if tools are enabled.
+		// Set system instruction, augmenting with tool usage guidance if tools are available.
 		if systemInstruction != "" {
-			if req.ToolsEnabled && len(req.Tools) > 0 {
+			if len(req.Tools) > 0 {
 				// Brief, provider-neutral nudge for tool use.
 				toolInfo := "\n\nYou have access to function tools. Prefer calling a tool when it can fulfill a user request."
 				systemInstruction += toolInfo
 			}
 			model.SystemInstruction = &genai.Content{Parts: []genai.Part{genai.Text(systemInstruction)}}
-		} else if req.ToolsEnabled && len(req.Tools) > 0 {
+		} else if len(req.Tools) > 0 {
 			// No system message present; still provide minimal instruction so Gemini is aware.
 			model.SystemInstruction = &genai.Content{Parts: []genai.Part{genai.Text("Use available function tools when appropriate.")}}
 		}
 
-		// Add tool support if enabled
-		if req.ToolsEnabled && len(req.Tools) > 0 {
+		// Add tool support if available
+		if len(req.Tools) > 0 {
 			// Gemini works best when all function declarations are grouped
 			// under a single Tool entry. Aggregate all declarations into one.
 			var fdecls []*genai.FunctionDeclaration

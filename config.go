@@ -17,9 +17,14 @@ var ModifiableConfigKeys = []string{
 	"temperature",
 	"top_p",
 	"admins",
-	"tools",
 	"openaiurl",
 	"ollamaurl",
+	"ollamakey",
+	"openaikey",
+	"anthropickey",
+	"geminikey",
+	"shelltools",
+	"irctools",
 }
 
 type ModelConfig struct {
@@ -30,13 +35,13 @@ type ModelConfig struct {
 }
 
 type BotConfig struct {
-	Admins       []string
-	Verbose      bool
-	Addressed    bool
-	Prompt       string
-	Greeting     string
-	ToolsDir     string
-	ToolsEnabled bool
+	Admins         []string
+	Verbose        bool
+	Addressed      bool
+	Prompt         string
+	Greeting       string
+	ShellToolPaths []string
+	IrcTools       []string // list of enabled IRC tools (default: all)
 }
 
 type ServerConfig struct {
@@ -62,6 +67,7 @@ type APIConfig struct {
 	AnthropicKey string
 	GeminiKey    string
 	OllamaURL    string
+	OllamaKey    string
 	Timeout      time.Duration
 }
 
@@ -98,21 +104,28 @@ func (s *SystemImpl) GetSessionStore() SessionStore {
 func NewSystem(c *Configuration) System {
 	s := SystemImpl{}
 	// initialize tools
-	if c.Bot.ToolsEnabled {
-		toolsDir := vip.GetString("toolsdir")
-		registry, err := NewToolRegistry(toolsDir)
+	var allTools []Tool
+	
+	// Load shell tools from paths
+	if len(c.Bot.ShellToolPaths) > 0 {
+		shellTools, err := LoadTools(c.Bot.ShellToolPaths)
 		if err != nil {
-			log.Println("config: failed to initialize tools:", err)
-			c.Bot.ToolsEnabled = false
-		} else {
-			// IRC tools will get context when executed
-			RegisterIrcTools(registry, nil)
-			s.Tools = registry
+			log.Printf("config: warning loading tools: %v", err)
 		}
-	} else {
-		log.Println("config: tools are disabled")
-		s.Tools = &ToolRegistry{}
+		allTools = append(allTools, shellTools...)
 	}
+	
+	// Add IRC tools based on configuration
+	ircTools := GetIrcTools(c.Bot.IrcTools)
+	allTools = append(allTools, ircTools...)
+	
+	if len(allTools) > 0 {
+		log.Printf("config: loaded %d tools", len(allTools))
+	} else {
+		log.Println("config: no tools loaded")
+	}
+	
+	s.Tools = NewToolRegistry(allTools)
 
 	// initialize the api for completions using MultiPass
 	s.LLM = NewMultiPass(*c.API)
@@ -138,8 +151,7 @@ func (c *Configuration) PrintConfig() {
 	fmt.Printf("clienttimeout: %s\n", c.API.Timeout)
 	fmt.Printf("maxhistory: %d\n", c.Session.MaxHistory)
 	fmt.Printf("maxtokens: %d\n", c.Model.MaxTokens)
-	fmt.Printf("tools: %t\n", c.Bot.ToolsEnabled)
-	fmt.Printf("toolsdir: %s\n", c.Bot.ToolsDir)
+	fmt.Printf("shelltools: %v\n", c.Bot.ShellToolPaths)
 
 	fmt.Printf("sessionduration: %s\n", c.Session.TTL)
 	if len(c.API.OpenAIKey) > 3 && c.API.OpenAIKey != "" {
@@ -189,13 +201,13 @@ func NewConfiguration() *Configuration {
 			SASLPass:    vip.GetString("saslpass"),
 		},
 		Bot: &BotConfig{
-			Admins:       vip.GetStringSlice("admins"),
-			Verbose:      vip.GetBool("verbose"),
-			Addressed:    vip.GetBool("addressed"),
-			Prompt:       vip.GetString("prompt"),
-			Greeting:     vip.GetString("greeting"),
-			ToolsEnabled: vip.GetBool("tools"),
-			ToolsDir:     vip.GetString("toolsdir"),
+			Admins:    vip.GetStringSlice("admins"),
+			Verbose:   vip.GetBool("verbose"),
+			Addressed: vip.GetBool("addressed"),
+			Prompt:    vip.GetString("prompt"),
+			Greeting:  vip.GetString("greeting"),
+			ShellToolPaths: vip.GetStringSlice("shelltools"),
+			IrcTools:  vip.GetStringSlice("irctools"),
 		},
 		Model: &ModelConfig{
 			Model:       vip.GetString("model"),
@@ -217,6 +229,7 @@ func NewConfiguration() *Configuration {
 			AnthropicKey: vip.GetString("anthropickey"),
 			GeminiKey:    vip.GetString("geminikey"),
 			OllamaURL:    vip.GetString("ollamaurl"),
+			OllamaKey:    vip.GetString("ollamakey"),
 		},
 	}
 
@@ -247,14 +260,15 @@ func initializeConfig() {
 	cmd.PersistentFlags().String("openaiurl", "", "OpenAI API URL (for custom endpoints)")
 	cmd.PersistentFlags().String("anthropickey", "", "Anthropic API key")
 	cmd.PersistentFlags().String("geminikey", "", "Google Gemini API key")
-	cmd.PersistentFlags().String("ollamaurl", "", "Ollama API URL (default: http://localhost:11434)")
+	cmd.PersistentFlags().String("ollamaurl", "http://localhost:11434", "Ollama API URL")
+	cmd.PersistentFlags().String("ollamakey", "", "Ollama API key (Bearer token for authentication)")
 	cmd.PersistentFlags().Int("maxtokens", 4096, "maximum number of tokens to generate")
 	cmd.PersistentFlags().String("model", "ollama/llama3.2", "model to be used for responses")
 	cmd.PersistentFlags().DurationP("apitimeout", "t", time.Minute*5, "timeout for each completion request")
 	cmd.PersistentFlags().Float32("temperature", 0.7, "temperature for the completion")
 	cmd.PersistentFlags().Float32("top_p", 1, "top P value for the completion")
-	cmd.PersistentFlags().Bool("tools", false, "enable tool use")
-	cmd.PersistentFlags().String("toolsdir", "examples/tools", "directory to load tools from")
+	cmd.PersistentFlags().StringSlice("shelltools", []string{}, "comma-separated list of shell tool paths to load")
+	cmd.PersistentFlags().StringSlice("irctools", []string{"irc_op", "irc_kick", "irc_topic", "irc_action"}, "comma-separated list of IRC tools to enable")
 
 	// timeouts and behavior
 	cmd.PersistentFlags().BoolP("addressed", "a", true, "require bot be addressed by nick for response")

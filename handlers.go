@@ -97,20 +97,101 @@ func slashSet(ctx ChatContextInterface) {
 		}
 		config.Bot.Admins = admins
 		ctx.Reply(fmt.Sprintf("%s set to: %s", param, strings.Join(config.Bot.Admins, ", ")))
-	case "tools":
-		toolUse, err := strconv.ParseBool(value)
-		if err != nil {
-			ctx.Reply("Invalid value for tools. Please provide 'true' or 'false'.")
-			return
-		}
-		config.Bot.ToolsEnabled = toolUse
-		ctx.Reply(fmt.Sprintf("%s set to: %t", param, config.Bot.ToolsEnabled))
 	case "openaiurl":
 		config.API.OpenAIURL = value
 		ctx.Reply(fmt.Sprintf("%s set to: %s", param, config.API.OpenAIURL))
 	case "ollamaurl":
 		config.API.OllamaURL = value
 		ctx.Reply(fmt.Sprintf("%s set to: %s", param, config.API.OllamaURL))
+	case "ollamakey":
+		config.API.OllamaKey = value
+		ctx.Reply(fmt.Sprintf("%s set to: %s", param, maskAPIKey(value)))
+	case "openaikey":
+		config.API.OpenAIKey = value
+		ctx.Reply(fmt.Sprintf("%s set to: %s", param, maskAPIKey(value)))
+	case "anthropickey":
+		config.API.AnthropicKey = value
+		ctx.Reply(fmt.Sprintf("%s set to: %s", param, maskAPIKey(value)))
+	case "geminikey":
+		config.API.GeminiKey = value
+		ctx.Reply(fmt.Sprintf("%s set to: %s", param, maskAPIKey(value)))
+	case "shelltools":
+		// Parse comma-separated shell tool paths
+		var toolPaths []string
+		if value != "" && value != "none" {
+			toolPaths = strings.Split(value, ",")
+			for i := range toolPaths {
+				toolPaths[i] = strings.TrimSpace(toolPaths[i])
+			}
+		}
+		config.Bot.ShellToolPaths = toolPaths
+		
+		// Get the tool registry
+		sys := ctx.GetSystem()
+		if sys != nil && sys.GetToolRegistry() != nil {
+			registry := sys.GetToolRegistry()
+			
+			// Clear non-IRC tools (keep IRC tools)
+			for _, tool := range registry.All() {
+				schema := tool.GetSchema()
+				if !strings.HasPrefix(schema.Name, "irc_") {
+					registry.RemoveTool(schema.Name)
+				}
+			}
+			
+			// Load and add new tools
+			if len(toolPaths) > 0 {
+				newTools, err := LoadTools(toolPaths)
+				if err != nil {
+					log.Printf("warning loading tools: %v", err)
+				}
+				for _, tool := range newTools {
+					registry.AddTool(tool)
+				}
+			}
+		}
+		
+		if len(toolPaths) == 0 {
+			ctx.Reply("shell tools disabled")
+		} else {
+			ctx.Reply(fmt.Sprintf("shell tools set to: %s", strings.Join(toolPaths, ", ")))
+		}
+	case "irctools":
+		// Parse comma-separated IRC tool names
+		var ircTools []string
+		if value != "" && value != "none" {
+			ircTools = strings.Split(value, ",")
+			for i := range ircTools {
+				ircTools[i] = strings.TrimSpace(ircTools[i])
+			}
+		}
+		config.Bot.IrcTools = ircTools
+		
+		// Get the tool registry
+		sys := ctx.GetSystem()
+		if sys != nil && sys.GetToolRegistry() != nil {
+			registry := sys.GetToolRegistry()
+			
+			// Remove all existing IRC tools
+			for _, tool := range registry.All() {
+				schema := tool.GetSchema()
+				if strings.HasPrefix(schema.Name, "irc_") {
+					registry.RemoveTool(schema.Name)
+				}
+			}
+			
+			// Add newly enabled IRC tools
+			newIrcTools := GetIrcTools(ircTools)
+			for _, tool := range newIrcTools {
+				registry.AddTool(tool)
+			}
+		}
+		
+		if len(ircTools) == 0 {
+			ctx.Reply("IRC tools disabled")
+		} else {
+			ctx.Reply(fmt.Sprintf("IRC tools set to: %s", strings.Join(ircTools, ", ")))
+		}
 	}
 
 	ctx.GetSession().Clear()
@@ -153,8 +234,30 @@ func slashGet(ctx ChatContextInterface) {
 		ctx.Reply(fmt.Sprintf("%s: %s", param, config.API.OpenAIURL))
 	case "ollamaurl":
 		ctx.Reply(fmt.Sprintf("%s: %s", param, config.API.OllamaURL))
-	case "tools":
-		ctx.Reply(fmt.Sprintf("%s: %t", param, config.Bot.ToolsEnabled))
+	case "ollamakey":
+		masked := maskAPIKey(config.API.OllamaKey)
+		ctx.Reply(fmt.Sprintf("%s: %s", param, masked))
+	case "openaikey":
+		masked := maskAPIKey(config.API.OpenAIKey)
+		ctx.Reply(fmt.Sprintf("%s: %s", param, masked))
+	case "anthropickey":
+		masked := maskAPIKey(config.API.AnthropicKey)
+		ctx.Reply(fmt.Sprintf("%s: %s", param, masked))
+	case "geminikey":
+		masked := maskAPIKey(config.API.GeminiKey)
+		ctx.Reply(fmt.Sprintf("%s: %s", param, masked))
+	case "shelltools":
+		if len(config.Bot.ShellToolPaths) == 0 {
+			ctx.Reply("shelltools: none")
+		} else {
+			ctx.Reply(fmt.Sprintf("shelltools: %s", strings.Join(config.Bot.ShellToolPaths, ", ")))
+		}
+	case "irctools":
+		if len(config.Bot.IrcTools) == 0 {
+			ctx.Reply("irctools: none")
+		} else {
+			ctx.Reply(fmt.Sprintf("irctools: %s", strings.Join(config.Bot.IrcTools, ", ")))
+		}
 	}
 }
 
@@ -165,6 +268,17 @@ func contains(slice []string, item string) bool {
 		}
 	}
 	return false
+}
+
+// maskAPIKey returns a masked version of an API key showing only first 4 chars
+func maskAPIKey(key string) string {
+	if key == "" {
+		return "(not set)"
+	}
+	if len(key) <= 4 {
+		return strings.Repeat("*", len(key))
+	}
+	return key[:4] + strings.Repeat("*", len(key)-4)
 }
 
 func slashLeave(ctx ChatContextInterface) {

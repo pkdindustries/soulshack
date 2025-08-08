@@ -14,31 +14,29 @@ type LLM interface {
 }
 
 type CompletionRequest struct {
-	APIKey       string
-	BaseURL      string
-	Timeout      time.Duration
-	Temperature  float32
-	TopP         float32
-	Model        string
-	MaxTokens    int
-	Session      Session
-	Tools        []Tool
-	ToolsEnabled bool
+	APIKey      string
+	BaseURL     string
+	Timeout     time.Duration
+	Temperature float32
+	TopP        float32
+	Model       string
+	MaxTokens   int
+	Session     Session
+	Tools       []Tool
 }
 
 func NewCompletionRequest(config *Configuration, session Session, tools []Tool) *CompletionRequest {
 
 	return &CompletionRequest{
-		APIKey:       config.API.OpenAIKey,
-		BaseURL:      config.API.OpenAIURL,
-		Timeout:      config.API.Timeout,
-		Model:        config.Model.Model,
-		MaxTokens:    config.Model.MaxTokens,
-		Session:      session,
-		Temperature:  config.Model.Temperature,
-		TopP:         config.Model.TopP,
-		ToolsEnabled: config.Bot.ToolsEnabled,
-		Tools:        tools,
+		APIKey:      config.API.OpenAIKey,
+		BaseURL:     config.API.OpenAIURL,
+		Timeout:     config.API.Timeout,
+		Model:       config.Model.Model,
+		MaxTokens:   config.Model.MaxTokens,
+		Session:     session,
+		Temperature: config.Model.Temperature,
+		TopP:        config.Model.TopP,
+		Tools:       tools,
 	}
 }
 
@@ -59,7 +57,7 @@ func complete(ctx ChatContextInterface) (<-chan string, error) {
 	sys := ctx.GetSystem()
 	// Get all tools from registry
 	var tools []Tool
-	if config.Bot.ToolsEnabled && sys.GetToolRegistry() != nil {
+	if sys.GetToolRegistry() != nil {
 		tools = sys.GetToolRegistry().All()
 	}
 	req := NewCompletionRequest(config, session, tools)

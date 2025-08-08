@@ -56,6 +56,12 @@ Quick examples (model must include provider prefix):
 
 See examples/chatbot.yml for a working config file (uses an anthropic/* model as an example).
 
+To enable shell tools, pass tool paths:
+```bash
+soulshack --channel '#soulshack' --model ollama/llama3.2 \
+  --shelltools examples/tools/datetime.sh,examples/tools/weather.py
+```
+
 ## configuration
 
 soulshack can be configured using command line flags, environment variables, or configuration files. 
@@ -85,14 +91,15 @@ LLM/API configuration:
       --openaiurl string           OpenAI API URL (for custom/compatible endpoints)
       --anthropickey string        Anthropic API key
       --geminikey string           Google Gemini API key
-      --ollamaurl string           Ollama API URL (default: http://localhost:11434)
+      --ollamaurl string           Ollama API URL (default "http://localhost:11434")
+      --ollamakey string           Ollama API key (Bearer token for authentication)
       --model string               model to be used (provider/name, default "ollama/llama3.2")
       --maxtokens int              maximum number of tokens to generate (default 4096)
   -t, --apitimeout duration        timeout for each completion request (default 5m0s)
       --temperature float32        temperature for the completion (default 0.7)
       --top_p float32              top P value for the completion (default 1)
-      --tools                      enable tool use (default false)
-      --toolsdir string            directory to load tools from (default "examples/tools")
+      --shelltools strings         comma-separated list of shell tool paths to load
+      --irctools strings           comma-separated list of IRC tools to enable (default: irc_op,irc_kick,irc_topic,irc_action)
 
 Behavior & session:
   -a, --addressed                  require bot be addressed by nick for response (default true)
@@ -118,15 +125,32 @@ configuration files use the yaml format. they can be loaded using the `--config`
 
 ## commands
 
-- `/set`: set a configuration parameter (e.g., `/set nick newnick`)
-- `/get`: get the current value of a configuration parameter (e.g., `/get nick`)
+- `/set <key> <value>`: set a configuration parameter (e.g., `/set model ollama/llama3.2`)
+- `/get <key>`: get the current value of a configuration parameter (e.g., `/get model`)
 - `/leave`: make the bot leave the channel and exit
 - `/help`: display help for available commands
+
+Modifiable parameters via `/set` and `/get`:
+- `model` - LLM model to use
+- `addressed` - require bot to be addressed by nick
+- `prompt` - system prompt for the bot
+- `maxtokens` - maximum tokens in response
+- `temperature` - LLM temperature (0.0-2.0)
+- `top_p` - top-p sampling parameter
+- `admins` - comma-separated admin hostmasks
+- `openaiurl` - OpenAI API endpoint
+- `ollamaurl` - Ollama API endpoint
+- `ollamakey` - Ollama API key (masked when reading)
+- `openaikey` - OpenAI API key (masked when reading)
+- `anthropickey` - Anthropic API key (masked when reading)
+- `geminikey` - Gemini API key (masked when reading)
+- `shelltools` - comma-separated shell tool paths
+- `irctools` - comma-separated IRC tools (irc_op, irc_kick, irc_topic, irc_action)
 
 
 ## tools
 
-put an executable or script in your tooldir location. in order for it to be registered it must respond to the following commands:
+Tools are enabled by providing paths to tool scripts via the `--shelltools` flag or configuration file. Each tool must be an executable that responds to the following commands:
 
 - --schema: Outputs a JSON schema describing the tool use.
 - --execute $json: Will be called with JSON matching your schema

@@ -11,18 +11,23 @@ type ContextualTool interface {
 	SetContext(ctx ChatContextInterface)
 }
 
-// RegisterIrcTools registers all IRC-related tools with context
-func RegisterIrcTools(registry *ToolRegistry, ctx ChatContextInterface) {
-	// Create tools with context
-	opTool := &IrcOpTool{ctx: ctx}
-	kickTool := &IrcKickTool{ctx: ctx}
-	topicTool := &IrcTopicTool{ctx: ctx}
-	actionTool := &IrcActionTool{ctx: ctx}
-
-	registry.Register(opTool)
-	registry.Register(kickTool)
-	registry.Register(topicTool)
-	registry.Register(actionTool)
+// GetIrcTools returns enabled IRC-related tools (context is set later via SetContext)
+func GetIrcTools(enabledTools []string) []Tool {
+	allTools := map[string]Tool{
+		"irc_op":     &IrcOpTool{},
+		"irc_kick":   &IrcKickTool{},
+		"irc_topic":  &IrcTopicTool{},
+		"irc_action": &IrcActionTool{},
+	}
+	
+	// Return only enabled tools
+	var tools []Tool
+	for _, name := range enabledTools {
+		if tool, ok := allTools[name]; ok {
+			tools = append(tools, tool)
+		}
+	}
+	return tools
 }
 
 // IrcOpTool grants or revokes operator status

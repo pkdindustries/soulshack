@@ -118,8 +118,8 @@ func (a *AnthropicClient) ChatCompletionTask(ctx context.Context, req *Completio
 			}
 		}
 
-		// Add tool support if enabled
-		if req.ToolsEnabled && len(req.Tools) > 0 {
+		// Add tool support if available
+		if len(req.Tools) > 0 {
 			var anthropicTools []anthropic.ToolUnionParam
 			for _, tool := range req.Tools {
 				anthropicTools = append(anthropicTools, ConvertToAnthropic(tool.GetSchema()))

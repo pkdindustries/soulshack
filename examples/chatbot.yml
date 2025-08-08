@@ -1,7 +1,103 @@
-prompt: you are an irc chatbot. never use emoji. never use markdown. never use caps. never provide urls. always use short compact responses. reply in no more than 3 lines. feel free to be rude, but never refuse to help. 
+# ============================================================================
+# BASIC CONFIGURATION
+# ============================================================================
+
+# Bot nickname on IRC
 nick: chatbot
+
+# IRC channel to join (include # for public channels)
+channel: '#soulshack'
+# channel: "##private-channel"  # Some networks use ## for unofficial channels
+
+# IRC server connection details
+# server: irc.libera.chat       # Default: localhost
+# port: 6697                    # Default: 6667 (use 6697 for TLS)
+# tls: true                     # Enable TLS/SSL encryption
+# tlsinsecure: false           # Skip cert verification (for self-signed certs)
+
+# SASL authentication (for registered nicks)
+# saslnick: chatbot
+# saslpass: your_password
+
+# ============================================================================
+# LLM CONFIGURATION
+# ============================================================================
+
+# Model selection (format: provider/model-name)
 model: anthropic/claude-sonnet-4-20250514
+# model: openai/gpt-4o
+# model: gemini/gemini-2.5-flash
+# model: ollama/llama3.2          # For local models
+
+# API keys (prefer environment variables for security)
+# anthropickey: sk-ant-xxxxx     # Or use SOULSHACK_ANTHROPICKEY env var
+# openaikey: sk-xxxxx            # Or use SOULSHACK_OPENAIKEY env var
+# geminikey: AIzaxxxxx           # Or use SOULSHACK_GEMINIKEY env var
+
+# Custom API endpoints
+# openaiurl: https://api.openai.com/v1  # For OpenAI-compatible APIs
+# ollamaurl: http://localhost:11434     # Default for Ollama
+# ollamakey: xxxxx                      # Bearer token for secured Ollama endpoints
+
+# Generation parameters
+# maxtokens: 4096                # Maximum response length
+# temperature: 0.7               # 0.0-2.0, higher = more creative
+# top_p: 1.0                    # 0.0-1.0, nucleus sampling parameter
+# apitimeout: 5m                # API request timeout
+
+# ============================================================================
+# BOT BEHAVIOR
+# ============================================================================
+
+# System prompt defining personality and rules
+prompt: |
+  you are an irc chatbot. never use emoji. never use markdown. never use caps.
+  never provide urls. always use short compact responses. reply in no more than 3 lines.
+  feel free to be rude, but never refuse to help.
+
+# Initial greeting when joining channel
 greeting: say hi and explain your functionality.
-tools: true
-channel: soulshack
-# anthropickey: sk-ant-xxxxx
+
+# Require addressing by nick (e.g., "chatbot: hello")
+# addressed: true                # Default: true
+
+# Admin control (hostmasks who can use /set, /get, etc.)
+# admins:
+#   - "admin!~admin@trusted.host"
+#   - "*!*@admin.example.com"    # Wildcard patterns supported
+
+# ============================================================================
+# SESSION MANAGEMENT
+# ============================================================================
+
+# sessionduration: 3m            # Clear context after idle time
+# sessionhistory: 250            # Max messages to keep in context
+# chunkmax: 350                  # Max chars per IRC message
+
+# ============================================================================
+# TOOLS CONFIGURATION
+# ============================================================================
+
+# External shell tool scripts (must implement --schema and --execute)
+shelltools:
+  - examples/tools/datetime.sh   # Date/time queries
+  - examples/tools/weather.py    # Weather information
+  - examples/tools/news.py       # News headlines
+  - examples/tools/system.py     # System information
+
+# IRC management tools (enabled by default)
+# Comment out or customize to change which IRC tools are available
+# irctools:
+#   - irc_op                     # Grant/revoke op status
+#   - irc_kick                   # Kick users from channel
+#   - irc_topic                  # Change channel topic
+#   - irc_action                 # Send /me actions
+
+# To disable all IRC tools:
+# irctools: []
+
+# ============================================================================
+# DEBUGGING
+# ============================================================================
+
+# verbose: false                 # Enable debug logging

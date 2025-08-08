@@ -17,21 +17,41 @@ type OllamaClient struct {
 	client *ollamaapi.Client
 }
 
+// authTransport adds Bearer token authentication to HTTP requests
+type authTransport struct {
+	Token string
+	Base  http.RoundTripper
+}
+
+func (t *authTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	req.Header.Set("Authorization", "Bearer "+t.Token)
+	return t.Base.RoundTrip(req)
+}
+
 func NewOllamaClient(config APIConfig) *OllamaClient {
-	// Default to localhost if not specified
 	ollamaURL := config.OllamaURL
-	if ollamaURL == "" {
-		ollamaURL = "http://localhost:11434"
-	}
 
 	// Parse URL and create client
 	u, err := url.Parse(ollamaURL)
 	if err != nil {
 		log.Printf("ollama: invalid URL %s: %v", ollamaURL, err)
+		// Fall back to default if parsing fails
 		u, _ = url.Parse("http://localhost:11434")
 	}
 
-	client := ollamaapi.NewClient(u, http.DefaultClient)
+	// Create HTTP client with optional Bearer token authentication
+	httpClient := http.DefaultClient
+	if config.OllamaKey != "" {
+		httpClient = &http.Client{
+			Transport: &authTransport{
+				Token: config.OllamaKey,
+				Base:  http.DefaultTransport,
+			},
+		}
+		log.Printf("ollama: using Bearer token authentication")
+	}
+
+	client := ollamaapi.NewClient(u, httpClient)
 
 	return &OllamaClient{
 		client: client,
@@ -101,8 +121,8 @@ func (o *OllamaClient) ChatCompletionTask(ctx context.Context, req *CompletionRe
 			},
 		}
 
-		// Add tool support if enabled
-		if req.ToolsEnabled && len(req.Tools) > 0 {
+		// Add tool support if available
+		if len(req.Tools) > 0 {
 			var ollamaTools []ollamaapi.Tool
 			for _, tool := range req.Tools {
 				ollamaTools = append(ollamaTools, ConvertToOllama(tool.GetSchema()))
