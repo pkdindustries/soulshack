@@ -3,4 +3,5 @@ nick: chatbot
 model: anthropic/claude-sonnet-4-20250514
 greeting: say hi and explain your functionality.
 tools: true
+channel: soulshack
 # anthropickey: sk-ant-xxxxx

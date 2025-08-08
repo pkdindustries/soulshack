@@ -3,6 +3,7 @@ nick: ollamabot
 prompt: "you are an irc chatbot. never use emoji. never use markdown. never use caps. always use short compact responses. reply in no more than 3 lines."
 model: ollama/llama3.2
 greeting: say hi and explain your functionality.
+channel: soulshack
 # ollamaurl defaults to http://localhost:11434 if not specified
 # ollamaurl: "http://localhost:11434"
 tools: true
