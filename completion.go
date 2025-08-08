@@ -149,6 +149,13 @@ func handleToolCall(ctx ChatContextInterface, toolCall *ToolCall) (<-chan string
 	if err != nil {
 		log.Printf("error executing tool %s: %v", toolCall.Name, err)
 		result = fmt.Sprintf("Error: %v", err)
+	} else {
+		// Log tool output (truncate if too long)
+		outputPreview := result
+		if len(outputPreview) > 200 {
+			outputPreview = outputPreview[:200] + "..."
+		}
+		log.Printf("Tool %s output: %s", toolCall.Name, outputPreview)
 	}
 
 	// Add tool result linked to the initiating assistant tool call.

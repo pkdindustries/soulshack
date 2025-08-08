@@ -74,7 +74,7 @@ func NewToolRegistry(toolsDir string) (*ToolRegistry, error) {
 // Register adds a tool to the registry
 func (r *ToolRegistry) Register(tool Tool) {
 	schema := tool.GetSchema()
-	log.Printf("registering tool: %s", schema.Name)
+	log.Printf("registered tool: %s", schema.Name)
 	r.tools[schema.Name] = tool
 }
 
