@@ -98,8 +98,12 @@ func (a *AnthropicClient) ChatCompletionTask(ctx context.Context, req *Completio
 			Model:       anthropic.Model(req.Model),
 			MaxTokens:   int64(req.MaxTokens),
 			Temperature: anthropic.Float(float64(req.Temperature)),
-			TopP:        anthropic.Float(float64(req.TopP)),
 			Messages:    messages,
+		}
+		
+		// Opus models don't support both temperature and top_p simultaneously
+		if !strings.Contains(strings.ToLower(req.Model), "opus") {
+			params.TopP = anthropic.Float(float64(req.TopP))
 		}
 
 		// Add system prompt if present
