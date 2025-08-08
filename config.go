@@ -105,7 +105,7 @@ func NewSystem(c *Configuration) System {
 	s := SystemImpl{}
 	// initialize tools
 	var allTools []Tool
-	
+
 	// Load shell tools from paths
 	if len(c.Bot.ShellToolPaths) > 0 {
 		shellTools, err := LoadTools(c.Bot.ShellToolPaths)
@@ -114,18 +114,16 @@ func NewSystem(c *Configuration) System {
 		}
 		allTools = append(allTools, shellTools...)
 	}
-	
+
 	// Add IRC tools based on configuration
 	ircTools := GetIrcTools(c.Bot.IrcTools)
 	allTools = append(allTools, ircTools...)
-	
+
+	s.Tools = NewToolRegistry(allTools)
+
 	if len(allTools) > 0 {
 		log.Printf("config: loaded %d tools", len(allTools))
-	} else {
-		log.Println("config: no tools loaded")
 	}
-	
-	s.Tools = NewToolRegistry(allTools)
 
 	// initialize the api for completions using MultiPass
 	s.LLM = NewMultiPass(*c.API)
@@ -201,13 +199,13 @@ func NewConfiguration() *Configuration {
 			SASLPass:    vip.GetString("saslpass"),
 		},
 		Bot: &BotConfig{
-			Admins:    vip.GetStringSlice("admins"),
-			Verbose:   vip.GetBool("verbose"),
-			Addressed: vip.GetBool("addressed"),
-			Prompt:    vip.GetString("prompt"),
-			Greeting:  vip.GetString("greeting"),
+			Admins:         vip.GetStringSlice("admins"),
+			Verbose:        vip.GetBool("verbose"),
+			Addressed:      vip.GetBool("addressed"),
+			Prompt:         vip.GetString("prompt"),
+			Greeting:       vip.GetString("greeting"),
 			ShellToolPaths: vip.GetStringSlice("shelltools"),
-			IrcTools:  vip.GetStringSlice("irctools"),
+			IrcTools:       vip.GetStringSlice("irctools"),
 		},
 		Model: &ModelConfig{
 			Model:       vip.GetString("model"),

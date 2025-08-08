@@ -33,7 +33,6 @@ func (c *Chunker) ProcessMessages(msgChan <-chan ai.ChatCompletionMessage) (<-ch
 		defer close(toolChan)
 		defer close(byteChan)
 		defer close(ccmChan)
-		log.Println("processMessages: start")
 
 		for msg := range msgChan {
 			// Handle tool calls
@@ -56,11 +55,8 @@ func (c *Chunker) ProcessMessages(msgChan <-chan ai.ChatCompletionMessage) (<-ch
 			}
 
 			// Pass through the complete message
-			log.Printf("processMessages: sending message to ccmChan, role: %s, content length: %d, tool calls: %d", 
-				msg.Role, len(msg.Content), len(msg.ToolCalls))
 			ccmChan <- &msg
 		}
-		log.Println("processMessages: done")
 	}()
 
 	return c.chunkTask(byteChan), toolChan, ccmChan
@@ -69,7 +65,6 @@ func (c *Chunker) ProcessMessages(msgChan <-chan ai.ChatCompletionMessage) (<-ch
 // reads a channel of byte slices and chunks them into irc client sized ChatText messages
 func (c *Chunker) chunkTask(byteChan <-chan []byte) <-chan []byte {
 	chatChan := make(chan []byte, 10)
-	log.Println("chunkTask: start")
 	go func() {
 		defer close(chatChan)
 		for content := range byteChan {
@@ -82,11 +77,9 @@ func (c *Chunker) chunkTask(byteChan <-chan []byte) <-chan []byte {
 				chatChan <- chunk
 			}
 		}
-		log.Println("chunkTask: flushing buffer")
 		if c.chunkBuffer.Len() > 0 {
 			chatChan <- c.chunkBuffer.Bytes()
 		}
-		log.Println("chunkTask: done")
 	}()
 	return chatChan
 }
