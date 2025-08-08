@@ -77,6 +77,25 @@ func (o OpenAIClient) completion(ctx context.Context, req *CompletionRequest, re
 	}
 
 	respChannel <- msg
-	log.Println("completionTask: done")
+	
+	// Log detailed response information
+	contentPreview := msg.Content
+	if len(contentPreview) > 200 {
+		contentPreview = contentPreview[:200] + "..."
+	}
+	
+	if len(msg.ToolCalls) > 0 {
+		toolInfo := make([]string, len(msg.ToolCalls))
+		for i, tc := range msg.ToolCalls {
+			toolInfo[i] = fmt.Sprintf("%s(%s)", tc.Function.Name, tc.Function.Arguments)
+		}
+		log.Printf("openai: completed, content: '%s' (%d chars), tool calls: %d %v", 
+			contentPreview, len(msg.Content), len(msg.ToolCalls), toolInfo)
+	} else if len(msg.Content) == 0 {
+		log.Printf("openai: completed, empty response (no content or tool calls)")
+	} else {
+		log.Printf("openai: completed, content: '%s' (%d chars)", 
+			contentPreview, len(msg.Content))
+	}
 	return nil
 }

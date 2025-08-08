@@ -223,7 +223,25 @@ func (g *GeminiClient) ChatCompletionTask(ctx context.Context, req *CompletionRe
 
 		messageChannel <- msg
 
-		log.Printf("gemini: completed, response length: %d", len(responseContent))
+		// Log detailed response information
+		contentPreview := responseContent
+		if len(contentPreview) > 200 {
+			contentPreview = contentPreview[:200] + "..."
+		}
+		
+		if len(toolCalls) > 0 {
+			toolInfo := make([]string, len(toolCalls))
+			for i, tc := range toolCalls {
+				toolInfo[i] = fmt.Sprintf("%s(%s)", tc.Function.Name, tc.Function.Arguments)
+			}
+			log.Printf("gemini: completed, content: '%s' (%d chars), tool calls: %d %v", 
+				contentPreview, len(responseContent), len(toolCalls), toolInfo)
+		} else if len(responseContent) == 0 {
+			log.Printf("gemini: completed, empty response (no content or tool calls)")
+		} else {
+			log.Printf("gemini: completed, content: '%s' (%d chars)", 
+				contentPreview, len(responseContent))
+		}
 	}()
 
 	return chunker.ProcessMessages(messageChannel)

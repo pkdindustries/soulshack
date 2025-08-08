@@ -65,65 +65,68 @@ func complete(ctx ChatContextInterface) (<-chan string, error) {
 	req := NewCompletionRequest(config, session, tools)
 	llm := sys.GetLLM()
 
-	textChan, toolChan, msgChan := llm.ChatCompletionTask(ctx, req, NewChunker(config))
+    textChan, toolChan, msgChan := llm.ChatCompletionTask(ctx, req, NewChunker(config))
 
 	outputChan := make(chan string, 10)
 
-	go func() {
-		defer close(outputChan)
+    go func() {
+        defer close(outputChan)
 
-		// Buffer tool calls until we've recorded the assistant message.
-		var pendingToolCalls []*ToolCall
+        for {
+            select {
+            case _, ok := <-toolChan:
+                // Consume toolChan to avoid blocking the producer; we will
+                // execute tool calls based on the assistant message we receive
+                // on msgChan which contains the authoritative ToolCalls.
+                if !ok {
+                    toolChan = nil
+                }
+            case reply, ok := <-textChan:
+                if !ok {
+                    textChan = nil
+                } else {
+                    outputChan <- string(reply)
+                }
+            case msg, ok := <-msgChan:
+                if !ok {
+                    msgChan = nil
+                } else {
+                    log.Printf("complete: received message from msgChan, role: %s, content length: %d, tool calls: %d", 
+                        msg.Role, len(msg.Content), len(msg.ToolCalls))
+                    // Persist the assistant message first.
+                    session.AddMessage(*msg)
 
-		for {
-			select {
-			case toolCall, ok := <-toolChan:
-				if !ok {
-					toolChan = nil
-				} else {
-					// Buffer the tool call; execute after assistant message is saved.
-					pendingToolCalls = append(pendingToolCalls, toolCall)
-				}
-			case reply, ok := <-textChan:
-				if !ok {
-					textChan = nil
-				} else {
-					outputChan <- string(reply)
-				}
-			case msg, ok := <-msgChan:
-				if !ok {
-					msgChan = nil
-				} else {
-					// Persist the assistant message first.
-					session.AddMessage(*msg)
+                    // If the assistant included content alongside tool calls,
+                    // emit that content before executing the tools to preserve
+                    // conversational order. For non-tool messages, content is
+                    // emitted via textChan already.
+                    if len(msg.ToolCalls) > 0 && msg.Content != "" {
+                        outputChan <- msg.Content
+                    }
 
-					// If the assistant included content alongside tool calls,
-					// emit that content before executing the tools to preserve
-					// conversational order. For non-tool messages, content is
-					// emitted via textChan already.
-					if len(msg.ToolCalls) > 0 && msg.Content != "" {
-						outputChan <- msg.Content
-					}
+                    // If the message included tool calls, execute them now based
+                    // on the tool call data embedded in the message itself. This
+                    // avoids races between toolChan and msgChan arrival order.
+                    if len(msg.ToolCalls) > 0 {
+                        for _, otc := range msg.ToolCalls {
+                            if tc, err := ParseOpenAIToolCall(otc); err == nil {
+                                toolch, _ := handleToolCall(ctx, tc)
+                                for r := range toolch {
+                                    outputChan <- r
+                                }
+                            } else {
+                                log.Printf("complete: failed to parse tool call: %v", err)
+                            }
+                        }
+                    }
+                }
+            }
 
-					// If the message included tool calls, execute pending calls now.
-					if len(msg.ToolCalls) > 0 {
-						for len(pendingToolCalls) > 0 {
-							tc := pendingToolCalls[0]
-							pendingToolCalls = pendingToolCalls[1:]
-							toolch, _ := handleToolCall(ctx, tc)
-							for r := range toolch {
-								outputChan <- r
-							}
-						}
-					}
-				}
-			}
-
-			if toolChan == nil && textChan == nil {
-				break
-			}
-		}
-	}()
+            if toolChan == nil && textChan == nil && msgChan == nil {
+                break
+            }
+        }
+    }()
 
 	return outputChan, nil
 }

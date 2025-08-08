@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"net/url"
@@ -55,10 +56,30 @@ func (o *OllamaClient) ChatCompletionTask(ctx context.Context, req *CompletionRe
 		// Convert messages to Ollama format
 		var messages []ollamaapi.Message
 		for _, msg := range req.Session.GetHistory() {
-			messages = append(messages, ollamaapi.Message{
+			ollamaMsg := ollamaapi.Message{
 				Role:    msg.Role,
 				Content: msg.Content,
-			})
+			}
+			
+			// Preserve tool calls in assistant messages
+			if msg.Role == ai.ChatMessageRoleAssistant && len(msg.ToolCalls) > 0 {
+				var ollamaToolCalls []ollamaapi.ToolCall
+				for _, tc := range msg.ToolCalls {
+					// Parse the arguments back to a map
+					var args map[string]interface{}
+					if err := json.Unmarshal([]byte(tc.Function.Arguments), &args); err == nil {
+						ollamaToolCalls = append(ollamaToolCalls, ollamaapi.ToolCall{
+							Function: ollamaapi.ToolCallFunction{
+								Name:      tc.Function.Name,
+								Arguments: args,
+							},
+						})
+					}
+				}
+				ollamaMsg.ToolCalls = ollamaToolCalls
+			}
+			
+			messages = append(messages, ollamaMsg)
 		}
 
 		// Create chat request
@@ -98,10 +119,11 @@ func (o *OllamaClient) ChatCompletionTask(ctx context.Context, req *CompletionRe
 			if len(resp.Message.ToolCalls) > 0 {
 				// Reset and capture the latest set of tool calls.
 				toolCalls = toolCalls[:0]
-				for _, tc := range resp.Message.ToolCalls {
+				for idx, tc := range resp.Message.ToolCalls {
 					if parsed := ParseOllamaToolCall(tc); parsed != nil {
 						// Convert back to OpenAI-structured tool call for the rest of the pipeline.
 						toolCalls = append(toolCalls, ai.ToolCall{
+							ID:   fmt.Sprintf("ollama-%d", idx),
 							Type: ai.ToolTypeFunction,
 							Function: ai.FunctionCall{
 								Name:      parsed.Name,
@@ -130,7 +152,25 @@ func (o *OllamaClient) ChatCompletionTask(ctx context.Context, req *CompletionRe
 			ToolCalls: toolCalls,
 		}
 
-		log.Printf("ollama: chat completed, response length: %d", len(responseContent))
+		// Log detailed response information
+	contentPreview := responseContent
+	if len(contentPreview) > 200 {
+		contentPreview = contentPreview[:200] + "..."
+	}
+	
+	if len(toolCalls) > 0 {
+		toolInfo := make([]string, len(toolCalls))
+		for i, tc := range toolCalls {
+			toolInfo[i] = fmt.Sprintf("%s(%s)", tc.Function.Name, tc.Function.Arguments)
+		}
+		log.Printf("ollama: completed, content: '%s' (%d chars), tool calls: %d %v", 
+			contentPreview, len(responseContent), len(toolCalls), toolInfo)
+	} else if len(responseContent) == 0 {
+		log.Printf("ollama: completed, empty response (no content or tool calls)")
+	} else {
+		log.Printf("ollama: completed, content: '%s' (%d chars)", 
+			contentPreview, len(responseContent))
+	}
 	}()
 
 	return chunker.ProcessMessages(messageChannel)

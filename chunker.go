@@ -56,6 +56,8 @@ func (c *Chunker) ProcessMessages(msgChan <-chan ai.ChatCompletionMessage) (<-ch
 			}
 
 			// Pass through the complete message
+			log.Printf("processMessages: sending message to ccmChan, role: %s, content length: %d, tool calls: %d", 
+				msg.Role, len(msg.Content), len(msg.ToolCalls))
 			ccmChan <- &msg
 		}
 		log.Println("processMessages: done")
