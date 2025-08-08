@@ -5,7 +5,7 @@
     // |____/   \___/   \__,_| |_| |____/  |_| |_|  \__,_|  \___| |_|\_\
     //  .  .  .  because  real  people  are  overrated
 
-soulshack is an irc chat bot that utilizes an openai api endpoint to generate human-like responses. 
+soulshack is an IRC chatbot that can talk in channels and call tools. It supports multiple LLM providers (OpenAI, Anthropic, Google Gemini, and Ollama) and generates human‑like responses.
 
 ## features
 
@@ -27,9 +27,34 @@ docker build . -t soulshack:dev
 
 ## usage
 
-```bash
-soulshack --nick chatbot --server irc.freenode.net --port 6697 --channel '#soulshack' --ssl --apikey ****************
-```
+Quick examples (model must include provider prefix):
+
+- OpenAI
+  ```bash
+  SOULSHACK_OPENAIKEY=sk-... \
+  soulshack --nick chatbot --server irc.example.net --port 6697 --tls \
+    --channel '#soulshack' \
+    --model openai/gpt-4o
+  ```
+
+- Anthropic
+  ```bash
+  SOULSHACK_ANTHROPICKEY=sk-ant-... \
+  soulshack --channel '#soulshack' --model anthropic/claude-3-7-sonnet-20250219
+  ```
+
+- Gemini
+  ```bash
+  SOULSHACK_GEMINIKEY=AIza... \
+  soulshack --channel '#soulshack' --model gemini/gemini-2.5-flash
+  ```
+
+- Ollama (local)
+  ```bash
+  soulshack --channel '#soulshack' --model ollama/llama3.2
+  ```
+
+See examples/chatbot.yml for a working config file (uses an anthropic/* model as an example).
 
 ## configuration
 
@@ -38,69 +63,58 @@ soulshack can be configured using command line flags, environment variables, or 
 ### flags
 ```
 Usage:
-  soulshack --channel <channel> [--nick <nickname>] [--server <server>] [--port <port>] [--tls] [--apikey <key>] [flags]
+  soulshack [flags]
 
-Examples:
-soulshack --nick chatbot --server irc.freenode.net --port 6697 --channel '#soulshack' --tls --apikey ****************
-
-Flags:
-  -a, --addressed                  require bot be addressed by nick for response (default true)
-  -A, --admins strings             comma-separated list of allowed hostmasks (e.g. alex!~alex@localhost, josh!~josh@localhost).
-  -t, --apitimeout duration        timeout for each completion request (default 5m0s)
-  -c, --channel string             irc channel to join
-  -C, --chunkdelay duration        after this delay, bot will look to split the incoming buffer on sentence boundaries (default 15s)
-  -m, --chunkmax int               maximum number of characters to send as a single message (default 350)
-  -b, --config string              use the named configuration file
-      --greeting string            prompt to be used when the bot joins the channel (default "hello.")
-  -h, --help                       help for soulshack
-      --maxtokens int              maximum number of tokens to generate (default 512)
-      --model string               model to be used for responses (default "gpt-4o")
-  -n, --nick string                bot's nickname on the irc server (default "soulshack")
-      --apikey string              openai api key
-      --apiurl string              alternative base url to use instead of openai
-  -p, --port int                   irc server port (default 6667)
-      --prompt string              initial system prompt (default "you are a helpful chatbot. do not use caps. do not use emoji.")
+Connection:
+  -n, --nick string                bot's nickname on the IRC server (default "soulshack")
+  -s, --server string              IRC server address (default "localhost")
+  -p, --port int                   IRC server port (default 6667)
+  -c, --channel string             IRC channel to join
       --saslnick string            nick used for SASL
-      --saslpass string            password for SASL plain
-  -s, --server string              irc server address (default "localhost")
-  -S, --sessionduration duration   duration for the chat session; message context will be cleared after this time (default 3m0s)
-  -H, --sessionhistory int         maximum number of lines of context to keep per session (default 50)
-      --temperature float32        temperature for the completion (default 0.7)
+      --saslpass string            password for SASL PLAIN
   -e, --tls                        enable TLS for the IRC connection
       --tlsinsecure                skip TLS certificate verification
-      --tools                      enable tool use (default false)
-      --toolsdir                   directory to load tools from (default "examples/tools")
-      --top_p float32              top P value for the completion (default 1)
+
+Config & logging:
+  -b, --config string              use the named configuration file (YAML)
+  -A, --admins strings             comma-separated list of allowed hostmasks to administrate the bot
   -v, --verbose                    enable verbose logging of sessions and configuration
-      --version                    version for soulshack
+
+LLM/API configuration:
+      --openaikey string           OpenAI API key
+      --openaiurl string           OpenAI API URL (for custom/compatible endpoints)
+      --anthropickey string        Anthropic API key
+      --geminikey string           Google Gemini API key
+      --ollamaurl string           Ollama API URL (default: http://localhost:11434)
+      --model string               model to be used (provider/name, default "ollama/llama3.2")
+      --maxtokens int              maximum number of tokens to generate (default 4096)
+  -t, --apitimeout duration        timeout for each completion request (default 5m0s)
+      --temperature float32        temperature for the completion (default 0.7)
+      --top_p float32              top P value for the completion (default 1)
+      --tools                      enable tool use (default false)
+      --toolsdir string            directory to load tools from (default "examples/tools")
+
+Behavior & session:
+  -a, --addressed                  require bot be addressed by nick for response (default true)
+  -S, --sessionduration duration   message context will be cleared after it is unused for this duration (default 3m0s)
+  -H, --sessionhistory int         maximum number of lines of context to keep per session (default 250)
+  -m, --chunkmax int               maximum number of characters to send as a single message (default 350)
+
+Prompting:
+      --greeting string            prompt to be used when the bot joins the channel (default "hello.")
+      --prompt string              initial system prompt (default "you are a helpful chatbot. do not use caps. do not use emoji.")
 ```
 
 ### environment variables
 
 all flags can also be set via environment variables with the prefix `soulshack_`. for example, `soulshack_server` for the `--server` flag.
 
+
 ### configuration files
 
 configuration files use the yaml format. they can be loaded using the `--config` flag. a configuration file can contain any of the settings that can be set via flags.
 
-# adding a config
 
-to use create a new configuration file, follow these steps:
-
-1. create a new yml file with the desired name (e.g., `marvin.yml`).
-2. add your desired settings to the yml file. for example:
-
-```yml
-nick: marvin
-greeting: "explain the size of your brain compared to common household objects."
-prompt: "you are marvin the paranoid android. respond with a short text message: "
-channel: "#marvinshouse"
-server: localhost
-```
-
-```bash
-soulshack --config /path/to/marvin.yml 
-```
 
 ## commands
 
@@ -176,8 +190,9 @@ fi
 
 # if no arguments, show usage
 # shellcheck disable=SC2140
-echo "Usage: currentdate.sh [--schema | --execute '{"format": "+%Y-%m-%d %H:%M:%S"}']"
+echo "Usage: currentdate.sh [--schema | --execute '{\"format\": \"+%Y-%m-%d %H:%M:%S\"}']"
 ```
+
 ![jacob, high five me](https://i.imgur.com/CDccJ5r.png)
 
 ## named as tribute to my old friend dayv, sp0t, who i think of often

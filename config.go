@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sashabaranov/go-openai"
 	vip "github.com/spf13/viper"
 )
 
@@ -19,7 +18,8 @@ var ModifiableConfigKeys = []string{
 	"top_p",
 	"admins",
 	"tools",
-	"apiurl",
+	"openaiurl",
+	"ollamaurl",
 }
 
 type ModelConfig struct {
@@ -57,11 +57,12 @@ type SessionConfig struct {
 }
 
 type APIConfig struct {
-	Type    string
-	Key     string
-	Stream  bool
-	Timeout time.Duration
-	URL     string
+	OpenAIKey    string
+	OpenAIURL    string
+	AnthropicKey string
+	GeminiKey    string
+	OllamaURL    string
+	Timeout      time.Duration
 }
 
 type Configuration struct {
@@ -104,7 +105,8 @@ func NewSystem(c *Configuration) System {
 			log.Println("config: failed to initialize tools:", err)
 			c.Bot.ToolsEnabled = false
 		} else {
-			RegisterIrcTools(registry)
+			// IRC tools will get context when executed
+			RegisterIrcTools(registry, nil)
 			s.Tools = registry
 		}
 	} else {
@@ -112,12 +114,8 @@ func NewSystem(c *Configuration) System {
 		s.Tools = &ToolRegistry{}
 	}
 
-	// initialize the api for completions
-	if c.API.Type == "openai" {
-		s.LLM = NewOpenAIClient(*c.API)
-	} else {
-		log.Fatal("config: unknown api type:", c.API.Type)
-	}
+	// initialize the api for completions using MultiPass
+	s.LLM = NewMultiPass(*c.API)
 
 	// initialize sessions
 	s.Store = NewSessionStore(c)
@@ -144,14 +142,23 @@ func (c *Configuration) PrintConfig() {
 	fmt.Printf("toolsdir: %s\n", c.Bot.ToolsDir)
 
 	fmt.Printf("sessionduration: %s\n", c.Session.TTL)
-	if len(c.API.Key) > 3 && c.API.Key != "" {
-		fmt.Printf("apikey: %s\n", strings.Repeat("*", len(c.API.Key)-3)+c.API.Key[len(c.API.Key)-3:])
+	if len(c.API.OpenAIKey) > 3 && c.API.OpenAIKey != "" {
+		fmt.Printf("openaikey: %s\n", strings.Repeat("*", len(c.API.OpenAIKey)-3)+c.API.OpenAIKey[len(c.API.OpenAIKey)-3:])
 	} else {
-		fmt.Printf("apikey: %s\n", c.API.Key)
+		fmt.Printf("openaikey: %s\n", c.API.OpenAIKey)
 	}
-	fmt.Printf("apiurl: %s\n", c.API.URL)
-	fmt.Printf("apitype: %s\n", c.API.Type)
-	fmt.Printf("streaming: %t\n", c.API.Stream)
+	if len(c.API.AnthropicKey) > 3 && c.API.AnthropicKey != "" {
+		fmt.Printf("anthropickey: %s\n", strings.Repeat("*", len(c.API.AnthropicKey)-3)+c.API.AnthropicKey[len(c.API.AnthropicKey)-3:])
+	} else {
+		fmt.Printf("anthropickey: %s\n", c.API.AnthropicKey)
+	}
+	if len(c.API.GeminiKey) > 3 && c.API.GeminiKey != "" {
+		fmt.Printf("geminikey: %s\n", strings.Repeat("*", len(c.API.GeminiKey)-3)+c.API.GeminiKey[len(c.API.GeminiKey)-3:])
+	} else {
+		fmt.Printf("geminikey: %s\n", c.API.GeminiKey)
+	}
+	fmt.Printf("openaiurl: %s\n", c.API.OpenAIURL)
+	fmt.Printf("ollamaurl: %s\n", c.API.OllamaURL)
 	fmt.Printf("model: %s\n", c.Model.Model)
 	fmt.Printf("temperature: %f\n", c.Model.Temperature)
 	fmt.Printf("topp: %f\n", c.Model.TopP)
@@ -204,11 +211,12 @@ func NewConfiguration() *Configuration {
 		},
 
 		API: &APIConfig{
-			Timeout: vip.GetDuration("apitimeout"),
-			Key:     vip.GetString("apikey"),
-			Stream:  vip.GetBool("stream"),
-			URL:     vip.GetString("apiurl"),
-			Type:    vip.GetString("apitype"),
+			Timeout:      vip.GetDuration("apitimeout"),
+			OpenAIKey:    vip.GetString("openaikey"),
+			OpenAIURL:    vip.GetString("openaiurl"),
+			AnthropicKey: vip.GetString("anthropickey"),
+			GeminiKey:    vip.GetString("geminikey"),
+			OllamaURL:    vip.GetString("ollamaurl"),
 		},
 	}
 
@@ -234,17 +242,18 @@ func initializeConfig() {
 	// informational
 	cmd.PersistentFlags().BoolP("verbose", "v", false, "enable verbose logging of sessions and configuration")
 
-	// openai configuration
-	cmd.PersistentFlags().String("apikey", "", "api key")
-	cmd.PersistentFlags().String("apiurl", "", "alternative base url to use instead of openai")
-	cmd.PersistentFlags().String("apitype", "openai", "api type to use for completion requests")
-	cmd.PersistentFlags().Int("maxtokens", 512, "maximum number of tokens to generate")
-	cmd.PersistentFlags().String("model", openai.GPT4o, "model to be used for responses")
+	// API configuration
+	cmd.PersistentFlags().String("openaikey", "", "OpenAI API key")
+	cmd.PersistentFlags().String("openaiurl", "", "OpenAI API URL (for custom endpoints)")
+	cmd.PersistentFlags().String("anthropickey", "", "Anthropic API key")
+	cmd.PersistentFlags().String("geminikey", "", "Google Gemini API key")
+	cmd.PersistentFlags().String("ollamaurl", "", "Ollama API URL (default: http://localhost:11434)")
+	cmd.PersistentFlags().Int("maxtokens", 4096, "maximum number of tokens to generate")
+	cmd.PersistentFlags().String("model", "ollama/llama3.2", "model to be used for responses")
 	cmd.PersistentFlags().DurationP("apitimeout", "t", time.Minute*5, "timeout for each completion request")
 	cmd.PersistentFlags().Float32("temperature", 0.7, "temperature for the completion")
 	cmd.PersistentFlags().Float32("top_p", 1, "top P value for the completion")
 	cmd.PersistentFlags().Bool("tools", false, "enable tool use")
-	cmd.PersistentFlags().Bool("stream", true, "enable streaming completion")
 	cmd.PersistentFlags().String("toolsdir", "examples/tools", "directory to load tools from")
 
 	// timeouts and behavior

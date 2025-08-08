@@ -9,122 +9,59 @@ import (
 )
 
 type Chunker struct {
-	Length          int
-	Last            time.Time
-	Stream          bool
-	chunkBuffer     *bytes.Buffer
-	toolBuffer      *bytes.Buffer
-	contentBuffer   *bytes.Buffer
-	partialToolCall *ai.ToolCall
+	Length        int
+	Last          time.Time
+	chunkBuffer   *bytes.Buffer
+	contentBuffer *bytes.Buffer
 }
 
 func NewChunker(config *Configuration) *Chunker {
 	return &Chunker{
 		Length:        config.Session.ChunkMax,
 		Last:          time.Now(),
-		Stream:        config.API.Stream,
 		chunkBuffer:   &bytes.Buffer{},
-		toolBuffer:    &bytes.Buffer{},
 		contentBuffer: &bytes.Buffer{},
 	}
 }
 
-func (c *Chunker) FilterTask(msgChan <-chan StreamResponse) (<-chan []byte, <-chan *ai.ToolCall, <-chan *ai.ChatCompletionMessage) {
-	var byteChan <-chan []byte
-	var toolChan <-chan *ai.ToolCall
-	var ccmChan <-chan *ai.ChatCompletionMessage
+func (c *Chunker) ProcessMessages(msgChan <-chan ai.ChatCompletionMessage) (<-chan []byte, <-chan *ToolCall, <-chan *ai.ChatCompletionMessage) {
+	toolChan := make(chan *ToolCall, 10)
+	byteChan := make(chan []byte, 10)
+	ccmChan := make(chan *ai.ChatCompletionMessage, 10)
 
-	if c.Stream {
-		byteChan, toolChan, ccmChan = c.streamTask(msgChan)
-	} else {
-		byteChan, toolChan, ccmChan = c.nonStreamTask(msgChan)
-	}
+	go func() {
+		defer close(toolChan)
+		defer close(byteChan)
+		defer close(ccmChan)
+		log.Println("processMessages: start")
+
+		for msg := range msgChan {
+			// Handle tool calls
+			for _, toolCall := range msg.ToolCalls {
+				log.Println("processMessages: tool call found")
+				// Convert OpenAI tool call to generic format
+				if tc, err := ParseOpenAIToolCall(toolCall); err == nil {
+					toolChan <- tc
+				} else {
+					log.Printf("processMessages: failed to parse tool call: %v", err)
+				}
+			}
+
+			// Handle content: if this message includes tool calls, defer
+			// content emission to the higher-level handler to preserve
+			// ordering (content first, then tool execution). Otherwise, emit
+			// the content normally for streaming/chunking.
+			if msg.Content != "" && len(msg.ToolCalls) == 0 {
+				byteChan <- []byte(msg.Content)
+			}
+
+			// Pass through the complete message
+			ccmChan <- &msg
+		}
+		log.Println("processMessages: done")
+	}()
 
 	return c.chunkTask(byteChan), toolChan, ccmChan
-}
-
-func (c *Chunker) streamTask(respChan <-chan StreamResponse) (chan []byte, chan *ai.ToolCall, chan *ai.ChatCompletionMessage) {
-	toolChan := make(chan *ai.ToolCall, 10)
-	byteChan := make(chan []byte, 10)
-	ccmChan := make(chan *ai.ChatCompletionMessage, 10)
-	go func() {
-		defer close(toolChan)
-		defer close(byteChan)
-		defer close(ccmChan)
-		log.Println("streamTask: start")
-		for val := range respChan {
-			if len(val.Delta.ToolCalls) > 0 {
-				if len(val.Delta.ToolCalls) > 1 {
-					log.Printf("streamTask: WARNING - dropping %d additional tool calls", len(val.Delta.ToolCalls)-1)
-				}
-
-				toolCall := &val.Delta.ToolCalls[0]
-				if c.partialToolCall == nil {
-					c.partialToolCall = toolCall
-					c.toolBuffer.Reset()
-					log.Printf("streamTask: starting new tool call assembly: %s", toolCall.Function.Name)
-				}
-				c.toolBuffer.Write([]byte(toolCall.Function.Arguments))
-			}
-
-			if val.Delta.Content != "" {
-				byteChan <- []byte(val.Delta.Content)
-				c.contentBuffer.Write([]byte(val.Delta.Content))
-			}
-
-			if val.FinishReason == ai.FinishReasonToolCalls {
-				log.Println("streamTask: tool call assembled")
-				c.partialToolCall.Function.Arguments = c.toolBuffer.String()
-				toolChan <- c.partialToolCall
-				c.partialToolCall = nil
-				c.toolBuffer.Reset()
-			} else if val.FinishReason == ai.FinishReasonStop {
-				if c.partialToolCall != nil {
-					log.Println("streamTask: incomplete tool call")
-					c.partialToolCall = nil
-					c.toolBuffer.Reset()
-				}
-				ccmChan <- &ai.ChatCompletionMessage{
-					Role:    ai.ChatMessageRoleAssistant,
-					Content: c.contentBuffer.String(),
-				}
-			}
-		}
-		log.Println("streamTask: done")
-	}()
-
-	return byteChan, toolChan, ccmChan
-}
-
-func (c *Chunker) nonStreamTask(chatChan <-chan StreamResponse) (chan []byte, chan *ai.ToolCall, chan *ai.ChatCompletionMessage) {
-	toolChan := make(chan *ai.ToolCall, 10)
-	byteChan := make(chan []byte, 10)
-	ccmChan := make(chan *ai.ChatCompletionMessage, 10)
-	go func() {
-		defer close(toolChan)
-		defer close(byteChan)
-		defer close(ccmChan)
-		log.Println("nonStreamTask: start")
-		for val := range chatChan {
-
-			for _, toolCall := range val.Delta.ToolCalls {
-				log.Println("nonStreamTask: tool call assembled")
-				toolChan <- &toolCall
-			}
-
-			if val.Delta.Content != "" {
-				byteChan <- []byte(val.Delta.Content)
-				ccmChan <- &ai.ChatCompletionMessage{
-					Role:      val.Delta.Role,
-					Content:   val.Delta.Content,
-					ToolCalls: val.Delta.ToolCalls,
-				}
-			}
-		}
-		log.Println("nonStreamTask: done")
-	}()
-
-	return byteChan, toolChan, ccmChan
 }
 
 // reads a channel of byte slices and chunks them into irc client sized ChatText messages
@@ -144,7 +81,9 @@ func (c *Chunker) chunkTask(byteChan <-chan []byte) <-chan []byte {
 			}
 		}
 		log.Println("chunkTask: flushing buffer")
-		chatChan <- c.chunkBuffer.Bytes()
+		if c.chunkBuffer.Len() > 0 {
+			chatChan <- c.chunkBuffer.Bytes()
+		}
 		log.Println("chunkTask: done")
 	}()
 	return chatChan

@@ -73,43 +73,34 @@ func BenchmarkFilter_StressTest(b *testing.B) {
 		b.Run(fmt.Sprintf("StressTest_BufferSize_%d", bufSize), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				Config.Session.ChunkMax = 50
-				Config.API.Stream = false
 				c := NewChunker(Config)
 
-				// create streamresponse
-				msgsr := StreamResponse{
-					ChatCompletionStreamChoice: ai.ChatCompletionStreamChoice{
-						Delta: ai.ChatCompletionStreamChoiceDelta{
-							Role:    ai.ChatMessageRoleUser,
-							Content: text,
-						},
-					},
+				// create chat completion message
+				msg := ai.ChatCompletionMessage{
+					Role:    ai.ChatMessageRoleAssistant,
+					Content: text,
 				}
 
-				// create tool streamresponse
-				toolsr := StreamResponse{
-					ChatCompletionStreamChoice: ai.ChatCompletionStreamChoice{
-						Delta: ai.ChatCompletionStreamChoiceDelta{
-							Role: ai.ChatMessageRoleAssistant,
-							ToolCalls: []ai.ToolCall{
-								{
-									Function: ai.FunctionCall{
-										Name:      "get_current_date_with_format",
-										Arguments: `{"format": "+%A %B %d %T %Y"}`,
-									},
-									ID: "12354",
-								},
+				// create tool message
+				toolMsg := ai.ChatCompletionMessage{
+					Role: ai.ChatMessageRoleAssistant,
+					ToolCalls: []ai.ToolCall{
+						{
+							Function: ai.FunctionCall{
+								Name:      "get_current_date_with_format",
+								Arguments: `{"format": "+%A %B %d %T %Y"}`,
 							},
+							ID: "12354",
 						},
 					},
 				}
 
-				respch := make(chan StreamResponse, 10)
+				respch := make(chan ai.ChatCompletionMessage, 10)
 
-				respch <- msgsr
-				respch <- msgsr
-				respch <- toolsr
-				cc, tc, ccm := c.FilterTask(respch)
+				respch <- msg
+				respch <- msg
+				respch <- toolMsg
+				cc, tc, ccm := c.ProcessMessages(respch)
 				close(respch)
 				ccount := 0
 				tcount := 0
@@ -126,8 +117,8 @@ func BenchmarkFilter_StressTest(b *testing.B) {
 					ccmcount++
 				}
 
-				if ccmcount != 2 {
-					b.Errorf("Expected 2 chat completion messages, got %d", ccmcount)
+				if ccmcount != 3 {
+					b.Errorf("Expected 3 chat completion messages, got %d", ccmcount)
 				}
 
 				if ccount < 1 {
