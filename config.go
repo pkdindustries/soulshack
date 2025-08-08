@@ -58,12 +58,12 @@ type SessionConfig struct {
 }
 
 type APIConfig struct {
-	OpenAIKey     string
-	OpenAIURL     string
-	AnthropicKey  string
-	GeminiKey     string
-	OllamaURL     string
-	Timeout       time.Duration
+	OpenAIKey    string
+	OpenAIURL    string
+	AnthropicKey string
+	GeminiKey    string
+	OllamaURL    string
+	Timeout      time.Duration
 }
 
 type Configuration struct {
@@ -106,7 +106,8 @@ func NewSystem(c *Configuration) System {
 			log.Println("config: failed to initialize tools:", err)
 			c.Bot.ToolsEnabled = false
 		} else {
-			RegisterIrcTools(registry)
+			// IRC tools will get context when executed
+			RegisterIrcTools(registry, nil)
 			s.Tools = registry
 		}
 	} else {

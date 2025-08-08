@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"time"
 
@@ -9,7 +10,7 @@ import (
 )
 
 type LLM interface {
-	ChatCompletionTask(context.Context, *CompletionRequest, *Chunker) (<-chan []byte, <-chan *ai.ToolCall, <-chan *ai.ChatCompletionMessage)
+	ChatCompletionTask(context.Context, *CompletionRequest, *Chunker) (<-chan []byte, <-chan *ToolCall, <-chan *ai.ChatCompletionMessage)
 }
 
 type CompletionRequest struct {
@@ -21,11 +22,11 @@ type CompletionRequest struct {
 	Model        string
 	MaxTokens    int
 	Session      Session
-	ToolRegistry *ToolRegistry
+	Tools        []Tool
 	ToolsEnabled bool
 }
 
-func NewCompletionRequest(config *Configuration, session Session, registry *ToolRegistry) *CompletionRequest {
+func NewCompletionRequest(config *Configuration, session Session, tools []Tool) *CompletionRequest {
 
 	return &CompletionRequest{
 		APIKey:       config.API.OpenAIKey,
@@ -37,7 +38,7 @@ func NewCompletionRequest(config *Configuration, session Session, registry *Tool
 		Temperature:  config.Model.Temperature,
 		TopP:         config.Model.TopP,
 		ToolsEnabled: config.Bot.ToolsEnabled,
-		ToolRegistry: registry,
+		Tools:        tools,
 	}
 }
 
@@ -56,7 +57,12 @@ func complete(ctx ChatContextInterface) (<-chan string, error) {
 	session := ctx.GetSession()
 	config := ctx.GetConfig()
 	sys := ctx.GetSystem()
-	req := NewCompletionRequest(config, session, sys.GetToolRegistry())
+	// Get all tools from registry
+	var tools []Tool
+	if config.Bot.ToolsEnabled && sys.GetToolRegistry() != nil {
+		tools = sys.GetToolRegistry().All()
+	}
+	req := NewCompletionRequest(config, session, tools)
 	llm := sys.GetLLM()
 
 	textChan, toolChan, msgChan := llm.ChatCompletionTask(ctx, req, NewChunker(config))
@@ -66,16 +72,17 @@ func complete(ctx ChatContextInterface) (<-chan string, error) {
 	go func() {
 		defer close(outputChan)
 
+		// Buffer tool calls until we've recorded the assistant message.
+		var pendingToolCalls []*ToolCall
+
 		for {
 			select {
 			case toolCall, ok := <-toolChan:
 				if !ok {
 					toolChan = nil
 				} else {
-					toolch, _ := handleToolCall(ctx, toolCall)
-					for r := range toolch {
-						outputChan <- r
-					}
+					// Buffer the tool call; execute after assistant message is saved.
+					pendingToolCalls = append(pendingToolCalls, toolCall)
 				}
 			case reply, ok := <-textChan:
 				if !ok {
@@ -87,7 +94,28 @@ func complete(ctx ChatContextInterface) (<-chan string, error) {
 				if !ok {
 					msgChan = nil
 				} else {
+					// Persist the assistant message first.
 					session.AddMessage(*msg)
+
+					// If the assistant included content alongside tool calls,
+					// emit that content before executing the tools to preserve
+					// conversational order. For non-tool messages, content is
+					// emitted via textChan already.
+					if len(msg.ToolCalls) > 0 && msg.Content != "" {
+						outputChan <- msg.Content
+					}
+
+					// If the message included tool calls, execute pending calls now.
+					if len(msg.ToolCalls) > 0 {
+						for len(pendingToolCalls) > 0 {
+							tc := pendingToolCalls[0]
+							pendingToolCalls = pendingToolCalls[1:]
+							toolch, _ := handleToolCall(ctx, tc)
+							for r := range toolch {
+								outputChan <- r
+							}
+						}
+					}
 				}
 			}
 
@@ -100,24 +128,31 @@ func complete(ctx ChatContextInterface) (<-chan string, error) {
 	return outputChan, nil
 }
 
-func handleToolCall(ctx ChatContextInterface, toolCall *ai.ToolCall) (<-chan string, error) {
-	log.Printf("Tool Call Received: %v", toolCall)
+func handleToolCall(ctx ChatContextInterface, toolCall *ToolCall) (<-chan string, error) {
+	log.Printf("Tool Call Received: %s(%v)", toolCall.Name, toolCall.Args)
 	sys := ctx.GetSystem()
-	soultool, err := sys.GetToolRegistry().GetToolByName(toolCall.Function.Name)
-	if err != nil {
-		log.Printf("Error getting tool registration: %v", err)
-		return nil, err
+	tool, ok := sys.GetToolRegistry().Get(toolCall.Name)
+	if !ok {
+		log.Printf("Tool not found: %s", toolCall.Name)
+		return nil, fmt.Errorf("tool not found: %s", toolCall.Name)
 	}
 
-	toolmsg, err := soultool.Execute(ctx, *toolCall)
-	if err != nil {
-		log.Printf("error executing tool: %v", err)
+	// Set context for contextual tools (like IRC tools)
+	if contextualTool, ok := tool.(ContextualTool); ok {
+		contextualTool.SetContext(ctx)
 	}
 
+	result, err := tool.Execute(toolCall.Args)
+	if err != nil {
+		log.Printf("error executing tool %s: %v", toolCall.Name, err)
+		result = fmt.Sprintf("Error: %v", err)
+	}
+
+	// Add tool result linked to the initiating assistant tool call.
 	ctx.GetSession().AddMessage(ai.ChatCompletionMessage{
-		Role:      ai.ChatMessageRoleAssistant,
-		ToolCalls: []ai.ToolCall{*toolCall},
+		Role:       ai.ChatMessageRoleTool,
+		Content:    result,
+		ToolCallID: toolCall.ID,
 	})
-	ctx.GetSession().AddMessage(toolmsg)
 	return complete(ctx)
 }

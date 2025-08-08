@@ -18,7 +18,7 @@ func NewMultiPass(config APIConfig) *MultiPass {
 	}
 }
 
-func (m *MultiPass) ChatCompletionTask(ctx context.Context, req *CompletionRequest, chunker *Chunker) (<-chan []byte, <-chan *ai.ToolCall, <-chan *ai.ChatCompletionMessage) {
+func (m *MultiPass) ChatCompletionTask(ctx context.Context, req *CompletionRequest, chunker *Chunker) (<-chan []byte, <-chan *ToolCall, <-chan *ai.ChatCompletionMessage) {
 	// Parse the model string to extract provider and actual model name
 	parts := strings.SplitN(req.Model, "/", 2)
 	if len(parts) != 2 {

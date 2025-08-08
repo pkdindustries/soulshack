@@ -1,307 +1,231 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
-
-	ai "github.com/sashabaranov/go-openai"
-	"github.com/sashabaranov/go-openai/jsonschema"
 )
 
+// ContextualTool is a tool that needs IRC context to execute
+type ContextualTool interface {
+	Tool
+	SetContext(ctx ChatContextInterface)
+}
+
+// RegisterIrcTools registers all IRC-related tools with context
+func RegisterIrcTools(registry *ToolRegistry, ctx ChatContextInterface) {
+	// Create tools with context
+	opTool := &IrcOpTool{ctx: ctx}
+	kickTool := &IrcKickTool{ctx: ctx}
+	topicTool := &IrcTopicTool{ctx: ctx}
+	actionTool := &IrcActionTool{ctx: ctx}
+
+	registry.Register(opTool)
+	registry.Register(kickTool)
+	registry.Register(topicTool)
+	registry.Register(actionTool)
+}
+
+// IrcOpTool grants or revokes operator status
 type IrcOpTool struct {
+	ctx ChatContextInterface
 }
 
-func RegisterIrcTools(registry *ToolRegistry) {
-	log.Println("registering irc tools")
-	registry.RegisterTool("irc_mode", &IrcOpTool{})
-	registry.RegisterTool("irc_kick", &IrcKickTool{})
-	registry.RegisterTool("irc_topic", &IrcTopicTool{})
-	registry.RegisterTool("irc_self_operator", &IrcOperTool{})
-	registry.RegisterTool("irc_action", &IrcActionTool{})
+func (t *IrcOpTool) SetContext(ctx ChatContextInterface) {
+	t.ctx = ctx
 }
 
-func (t *IrcOpTool) GetTool() (ai.Tool, error) {
-	return ai.Tool{
-		Type: ai.ToolTypeFunction,
-		Function: &ai.FunctionDefinition{
-			Name:        "irc_mode",
-			Description: "grants or removes irc ops to a nick",
-			Parameters: jsonschema.Definition{
-				Type: jsonschema.Object,
-				Properties: map[string]jsonschema.Definition{
-					"nick": {
-						Type:        jsonschema.String,
-						Description: "the irc nickname of the user to grant or revoke ops",
-					},
-					"op": {
-						Type:        jsonschema.Boolean,
-						Description: "determines if it is a grant or revoke of ops",
-					},
-				},
-				Required: []string{"nick", "op"},
+func (t *IrcOpTool) GetSchema() ToolSchema {
+	return ToolSchema{
+		Name:        "irc_op",
+		Description: "Grant or revoke IRC operator status",
+		Type:        "object",
+		Properties: map[string]interface{}{
+			"nick": map[string]interface{}{
+				"type":        "string",
+				"description": "The nick to op/deop",
 			},
-		}}, nil
+			"grant": map[string]interface{}{
+				"type":        "boolean",
+				"description": "true to grant op, false to revoke",
+			},
+		},
+		Required: []string{"nick", "grant"},
+	}
 }
 
-func (t *IrcOpTool) Execute(ctx ChatContextInterface, tool ai.ToolCall) (ai.ChatCompletionMessage, error) {
-	type kickRequest struct {
-		Nick string `json:"nick"`
-		Op   bool   `json:"op"`
-	}
-	var req kickRequest
-
-	err := json.Unmarshal([]byte(tool.Function.Arguments), &req)
-
-	if err != nil {
-		return ai.ChatCompletionMessage{
-			Role:       ai.ChatMessageRoleTool,
-			ToolCallID: tool.ID,
-			Content:    "failed to unmarshal arguments" + err.Error(),
-			Name:       tool.Function.Name}, err
+func (t *IrcOpTool) Execute(args map[string]interface{}) (string, error) {
+	if t.ctx == nil {
+		return "", fmt.Errorf("no IRC context available")
 	}
 
-	if !ctx.IsAdmin() {
-		return ai.ChatCompletionMessage{
-			Role:       ai.ChatMessageRoleTool,
-			ToolCallID: tool.ID,
-			Name:       tool.Function.Name,
-			Content:    ctx.GetSource() + "doesn't have admin permission to perform this action."}, fmt.Errorf("unauthorized")
+	// Check admin permission
+	if !t.ctx.IsAdmin() {
+		return "You are not authorized to use this tool", nil
 	}
 
-	// set opcmd to the appropriate value
-	opcmd := "-o"
-	if req.Op {
-		opcmd = "+o"
+	nick, ok := args["nick"].(string)
+	if !ok {
+		return "", fmt.Errorf("nick must be a string")
 	}
 
-	ctx.Mode(ctx.GetConfig().Server.Channel, opcmd, req.Nick)
+	grant, ok := args["grant"].(bool)
+	if !ok {
+		return "", fmt.Errorf("grant must be a boolean")
+	}
 
-	return ai.ChatCompletionMessage{
-		Role:       ai.ChatMessageRoleTool,
-		Content:    "success",
-		Name:       tool.Function.Name,
-		ToolCallID: tool.ID,
-	}, nil
+	mode := "-o"
+	if grant {
+		mode = "+o"
+	}
+
+	// Execute the IRC command
+	channel := t.ctx.GetConfig().Server.Channel
+	t.ctx.Mode(channel, mode, nick)
+
+	log.Printf("IRC OP: Set mode %s for %s in %s", mode, nick, channel)
+	return fmt.Sprintf("Set mode %s for %s", mode, nick), nil
 }
 
+// IrcKickTool kicks a user from the channel
 type IrcKickTool struct {
+	ctx ChatContextInterface
 }
 
-func (t *IrcKickTool) GetTool() (ai.Tool, error) {
-	return ai.Tool{
-		Type: ai.ToolTypeFunction,
-		Function: &ai.FunctionDefinition{
-			Name:        "irc_kick",
-			Description: "kicks a nick from the channel",
-			Parameters: jsonschema.Definition{
-				Type: jsonschema.Object,
-				Properties: map[string]jsonschema.Definition{
-					"nick": {
-						Type:        jsonschema.String,
-						Description: "the irc nickname to kick",
-					},
-					"reason": {
-						Type:        jsonschema.String,
-						Description: "the reason for the kick",
-					},
-				},
-				Required: []string{"nick", "reason"},
+func (t *IrcKickTool) SetContext(ctx ChatContextInterface) {
+	t.ctx = ctx
+}
+
+func (t *IrcKickTool) GetSchema() ToolSchema {
+	return ToolSchema{
+		Name:        "irc_kick",
+		Description: "Kick a user from the IRC channel",
+		Type:        "object",
+		Properties: map[string]interface{}{
+			"nick": map[string]interface{}{
+				"type":        "string",
+				"description": "The nick to kick",
 			},
-		}}, nil
+			"reason": map[string]interface{}{
+				"type":        "string",
+				"description": "The reason for kicking",
+			},
+		},
+		Required: []string{"nick", "reason"},
+	}
 }
 
-func (t *IrcKickTool) Execute(ctx ChatContextInterface, tool ai.ToolCall) (ai.ChatCompletionMessage, error) {
-	type kickRequest struct {
-		Nick   string `json:"nick"`
-		Reason string `json:"reason"`
-	}
-	var req kickRequest
-	err := json.Unmarshal([]byte(tool.Function.Arguments), &req)
-
-	if err != nil {
-		return ai.ChatCompletionMessage{
-			Role:       ai.ChatMessageRoleTool,
-			ToolCallID: tool.ID,
-			Name:       tool.Function.Name,
-			Content:    "failed to unmarshal arguments" + err.Error(),
-		}, err
+func (t *IrcKickTool) Execute(args map[string]interface{}) (string, error) {
+	if t.ctx == nil {
+		return "", fmt.Errorf("no IRC context available")
 	}
 
-	if !ctx.IsAdmin() {
-		return ai.ChatCompletionMessage{
-			Role:       ai.ChatMessageRoleTool,
-			Name:       tool.Function.Name,
-			ToolCallID: tool.ID,
-			Content:    ctx.GetSource() + "doesn't have admin permission to perform this action.",
-		}, fmt.Errorf("unauthorized")
+	// Check admin permission
+	if !t.ctx.IsAdmin() {
+		return "You are not authorized to use this tool", nil
 	}
 
-	ctx.Kick(ctx.GetConfig().Server.Channel, req.Nick, req.Reason)
+	nick, ok := args["nick"].(string)
+	if !ok {
+		return "", fmt.Errorf("nick must be a string")
+	}
 
-	return ai.ChatCompletionMessage{
-		Role:       ai.ChatMessageRoleTool,
-		Content:    "success",
-		ToolCallID: tool.ID,
-		Name:       tool.Function.Name,
-	}, nil
+	reason, ok := args["reason"].(string)
+	if !ok {
+		return "", fmt.Errorf("reason must be a string")
+	}
+
+	// Execute the IRC command
+	channel := t.ctx.GetConfig().Server.Channel
+	t.ctx.Kick(channel, nick, reason)
+
+	log.Printf("IRC KICK: Kicked %s from %s for: %s", nick, channel, reason)
+	return fmt.Sprintf("Kicked %s: %s", nick, reason), nil
 }
 
+// IrcTopicTool sets the channel topic
 type IrcTopicTool struct {
+	ctx ChatContextInterface
 }
 
-func (t *IrcTopicTool) GetTool() (ai.Tool, error) {
-	return ai.Tool{
-		Type: ai.ToolTypeFunction,
-		Function: &ai.FunctionDefinition{
-			Name:        "irc_topic",
-			Description: "sets the channel topic",
-			Parameters: jsonschema.Definition{
-				Type: jsonschema.Object,
-				Properties: map[string]jsonschema.Definition{
-					"topic": {
-						Type:        jsonschema.String,
-						Description: "the new channel topic",
-					},
-				},
-				Required: []string{"topic"},
+func (t *IrcTopicTool) SetContext(ctx ChatContextInterface) {
+	t.ctx = ctx
+}
+
+func (t *IrcTopicTool) GetSchema() ToolSchema {
+	return ToolSchema{
+		Name:        "irc_topic",
+		Description: "Set the IRC channel topic",
+		Type:        "object",
+		Properties: map[string]interface{}{
+			"topic": map[string]interface{}{
+				"type":        "string",
+				"description": "The new topic for the channel",
 			},
-		}}, nil
+		},
+		Required: []string{"topic"},
+	}
 }
 
-func (t *IrcTopicTool) Execute(ctx ChatContextInterface, tool ai.ToolCall) (ai.ChatCompletionMessage, error) {
-	type topicRequest struct {
-		Topic string `json:"topic"`
+func (t *IrcTopicTool) Execute(args map[string]interface{}) (string, error) {
+	if t.ctx == nil {
+		return "", fmt.Errorf("no IRC context available")
 	}
 
-	var req topicRequest
-	err := json.Unmarshal([]byte(tool.Function.Arguments), &req)
-
-	if err != nil {
-		return ai.ChatCompletionMessage{
-			Role:       ai.ChatMessageRoleTool,
-			ToolCallID: tool.ID,
-			Name:       tool.Function.Name,
-			Content:    "failed to unmarshal arguments" + err.Error(),
-		}, err
+	// Check admin permission
+	if !t.ctx.IsAdmin() {
+		return "You are not authorized to use this tool", nil
 	}
 
-	if !ctx.IsAdmin() {
-		return ai.ChatCompletionMessage{
-			Role:       ai.ChatMessageRoleTool,
-			ToolCallID: tool.ID,
-			Name:       tool.Function.Name,
-			Content:    ctx.GetSource() + " has no admin permission to perform this action.",
-		}, fmt.Errorf("unauthorized")
+	topic, ok := args["topic"].(string)
+	if !ok {
+		return "", fmt.Errorf("topic must be a string")
 	}
 
-	ctx.Topic(ctx.GetConfig().Server.Channel, req.Topic)
-	return ai.ChatCompletionMessage{
-		Role:       ai.ChatMessageRoleTool,
-		Content:    "success",
-		ToolCallID: tool.ID,
-		Name:       tool.Function.Name,
-	}, nil
+	// Execute the IRC command
+	channel := t.ctx.GetConfig().Server.Channel
+	t.ctx.Topic(channel, topic)
+
+	log.Printf("IRC TOPIC: Set topic in %s to: %s", channel, topic)
+	return fmt.Sprintf("Set topic: %s", topic), nil
 }
 
-type IrcOperTool struct {
-}
-
-func (t *IrcOperTool) GetTool() (ai.Tool, error) {
-	return ai.Tool{
-		Type: ai.ToolTypeFunction,
-		Function: &ai.FunctionDefinition{
-			Name:        "irc_self_operator",
-			Description: "grants the chatbot /oper operator status on the server (irc operator)",
-			Parameters: jsonschema.Definition{
-				Type: jsonschema.Object,
-				Properties: map[string]jsonschema.Definition{
-					"reason": {
-						Type:        jsonschema.String,
-						Description: "the reason for the chatbot asking for operator status",
-					},
-				},
-				Required: []string{"reason"},
-			},
-		}}, nil
-}
-
-func (t *IrcOperTool) Execute(ctx ChatContextInterface, tool ai.ToolCall) (ai.ChatCompletionMessage, error) {
-	type operRequest struct {
-		Reason string `json:"reason"`
-	}
-
-	var req operRequest
-	err := json.Unmarshal([]byte(tool.Function.Arguments), &req)
-
-	if err != nil {
-		return ai.ChatCompletionMessage{
-			Role:       ai.ChatMessageRoleTool,
-			ToolCallID: tool.ID,
-			Name:       tool.Function.Name,
-			Content:    "failed to unmarshal arguments" + err.Error(),
-		}, err
-	}
-
-	ctx.Oper("", "")
-
-	return ai.ChatCompletionMessage{
-		Role:       ai.ChatMessageRoleTool,
-		Content:    "success",
-		ToolCallID: tool.ID,
-		Name:       tool.Function.Name,
-	}, nil
-}
-
+// IrcActionTool sends an action message to the channel
 type IrcActionTool struct {
+	ctx ChatContextInterface
 }
 
-func (t *IrcActionTool) GetTool() (ai.Tool, error) {
-	return ai.Tool{
-		Type: ai.ToolTypeFunction,
-		Function: &ai.FunctionDefinition{
-			Name:        "irc_action",
-			Description: "sends an irc action message to the channel",
-			Parameters: jsonschema.Definition{
-				Type: jsonschema.Object,
-				Properties: map[string]jsonschema.Definition{
-					"message": {
-						Type:        jsonschema.String,
-						Description: "the action message to send",
-					},
-				},
-				Required: []string{"message"},
+func (t *IrcActionTool) SetContext(ctx ChatContextInterface) {
+	t.ctx = ctx
+}
+
+func (t *IrcActionTool) GetSchema() ToolSchema {
+	return ToolSchema{
+		Name:        "irc_action",
+		Description: "Send an action message to the IRC channel",
+		Type:        "object",
+		Properties: map[string]interface{}{
+			"message": map[string]interface{}{
+				"type":        "string",
+				"description": "The action message to send",
 			},
-		}}, nil
+		},
+		Required: []string{"message"},
+	}
 }
 
-func (t *IrcActionTool) Execute(ctx ChatContextInterface, tool ai.ToolCall) (ai.ChatCompletionMessage, error) {
-	type actionRequest struct {
-		Message string `json:"message"`
+func (t *IrcActionTool) Execute(args map[string]interface{}) (string, error) {
+	if t.ctx == nil {
+		return "", fmt.Errorf("no IRC context available")
 	}
 
-	var req actionRequest
-	err := json.Unmarshal([]byte(tool.Function.Arguments), &req)
-
-	if err != nil {
-		return ai.ChatCompletionMessage{
-			Role:       ai.ChatMessageRoleTool,
-			ToolCallID: tool.ID,
-			Name:       tool.Function.Name,
-			Content:    "failed to unmarshal arguments" + err.Error(),
-		}, err
+	message, ok := args["message"].(string)
+	if !ok {
+		return "", fmt.Errorf("message must be a string")
 	}
 
-	ctx.Action(ctx.GetConfig().Server.Channel, req.Message)
+	// Send IRC action (CTCP ACTION)
+	t.ctx.Reply(fmt.Sprintf("\x01ACTION %s\x01", message))
 
-	return ai.ChatCompletionMessage{
-		Role:       ai.ChatMessageRoleTool,
-		Content:    "success. reply with simple confirmation.",
-		ToolCallID: tool.ID,
-		Name:       tool.Function.Name,
-	}, nil
-}
-
-func checkBotOp(_ ChatContext) error {
-	return nil
+	log.Printf("IRC ACTION: Sent action: %s", message)
+	return fmt.Sprintf("* %s", message), nil
 }

@@ -26,7 +26,7 @@ func NewOpenAIClient(api APIConfig) *OpenAIClient {
 	}
 }
 
-func (o OpenAIClient) ChatCompletionTask(ctx context.Context, req *CompletionRequest, chunker *Chunker) (<-chan []byte, <-chan *ai.ToolCall, <-chan *ai.ChatCompletionMessage) {
+func (o OpenAIClient) ChatCompletionTask(ctx context.Context, req *CompletionRequest, chunker *Chunker) (<-chan []byte, <-chan *ToolCall, <-chan *ai.ChatCompletionMessage) {
 	messageChannel := make(chan ai.ChatCompletionMessage, 10)
 	o.completion(ctx, req, messageChannel)
 	return chunker.ProcessMessages(messageChannel)
@@ -46,8 +46,12 @@ func (o OpenAIClient) completion(ctx context.Context, req *CompletionRequest, re
 		TopP:                req.TopP,
 	}
 
-	if req.ToolsEnabled {
-		ccr.Tools = req.ToolRegistry.GetToolDefinitions()
+	if req.ToolsEnabled && len(req.Tools) > 0 {
+		var openaiTools []ai.Tool
+		for _, tool := range req.Tools {
+			openaiTools = append(openaiTools, ConvertToOpenAI(tool.GetSchema()))
+		}
+		ccr.Tools = openaiTools
 	}
 
 	response, err := o.Client.CreateChatCompletion(timeout, ccr)

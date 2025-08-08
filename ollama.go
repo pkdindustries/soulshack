@@ -35,7 +35,7 @@ func NewOllamaClient(config APIConfig) *OllamaClient {
 	}
 }
 
-func (o *OllamaClient) ChatCompletionTask(ctx context.Context, req *CompletionRequest, chunker *Chunker) (<-chan []byte, <-chan *ai.ToolCall, <-chan *ai.ChatCompletionMessage) {
+func (o *OllamaClient) ChatCompletionTask(ctx context.Context, req *CompletionRequest, chunker *Chunker) (<-chan []byte, <-chan *ToolCall, <-chan *ai.ChatCompletionMessage) {
 	messageChannel := make(chan ai.ChatCompletionMessage, 10)
 
 	go func() {
@@ -59,6 +59,15 @@ func (o *OllamaClient) ChatCompletionTask(ctx context.Context, req *CompletionRe
 				"top_p":       req.TopP,
 				"num_predict": req.MaxTokens,
 			},
+		}
+
+		// Add tool support if enabled
+		if req.ToolsEnabled && len(req.Tools) > 0 {
+			var ollamaTools []ollamaapi.Tool
+			for _, tool := range req.Tools {
+				ollamaTools = append(ollamaTools, ConvertToOllama(tool.GetSchema()))
+			}
+			chatReq.Tools = ollamaTools
 		}
 
 		log.Printf("ollama: chat request to model %s", req.Model)

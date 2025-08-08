@@ -24,36 +24,43 @@ func NewChunker(config *Configuration) *Chunker {
 	}
 }
 
-func (c *Chunker) ProcessMessages(msgChan <-chan ai.ChatCompletionMessage) (<-chan []byte, <-chan *ai.ToolCall, <-chan *ai.ChatCompletionMessage) {
-	toolChan := make(chan *ai.ToolCall, 10)
+func (c *Chunker) ProcessMessages(msgChan <-chan ai.ChatCompletionMessage) (<-chan []byte, <-chan *ToolCall, <-chan *ai.ChatCompletionMessage) {
+	toolChan := make(chan *ToolCall, 10)
 	byteChan := make(chan []byte, 10)
 	ccmChan := make(chan *ai.ChatCompletionMessage, 10)
-	
+
 	go func() {
 		defer close(toolChan)
 		defer close(byteChan)
 		defer close(ccmChan)
 		log.Println("processMessages: start")
-		
+
 		for msg := range msgChan {
 			// Handle tool calls
 			for _, toolCall := range msg.ToolCalls {
 				log.Println("processMessages: tool call found")
-				tc := toolCall // Create a copy to avoid pointer issues
-				toolChan <- &tc
+				// Convert OpenAI tool call to generic format
+				if tc, err := ParseOpenAIToolCall(toolCall); err == nil {
+					toolChan <- tc
+				} else {
+					log.Printf("processMessages: failed to parse tool call: %v", err)
+				}
 			}
-			
-			// Handle content
-			if msg.Content != "" {
+
+			// Handle content: if this message includes tool calls, defer
+			// content emission to the higher-level handler to preserve
+			// ordering (content first, then tool execution). Otherwise, emit
+			// the content normally for streaming/chunking.
+			if msg.Content != "" && len(msg.ToolCalls) == 0 {
 				byteChan <- []byte(msg.Content)
 			}
-			
+
 			// Pass through the complete message
 			ccmChan <- &msg
 		}
 		log.Println("processMessages: done")
 	}()
-	
+
 	return c.chunkTask(byteChan), toolChan, ccmChan
 }
 
