@@ -272,7 +272,7 @@ func initializeConfig() {
 
 	// timeouts and behavior
 	cmd.PersistentFlags().BoolP("addressed", "a", true, "require bot be addressed by nick for response")
-	cmd.PersistentFlags().DurationP("sessionduration", "S", time.Minute*3, "message context will be cleared after it is unused for this duration")
+	cmd.PersistentFlags().DurationP("sessionduration", "S", time.Minute*10, "message context will be cleared after it is unused for this duration")
 	cmd.PersistentFlags().IntP("sessionhistory", "H", 250, "maximum number of lines of context to keep per session")
 	cmd.PersistentFlags().IntP("chunkmax", "m", 350, "maximum number of characters to send as a single message")
 

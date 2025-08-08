@@ -103,7 +103,7 @@ LLM/API configuration:
 
 Behavior & session:
   -a, --addressed                  require bot be addressed by nick for response (default true)
-  -S, --sessionduration duration   message context will be cleared after it is unused for this duration (default 3m0s)
+  -S, --sessionduration duration   message context will be cleared after it is unused for this duration (default 10m0s)
   -H, --sessionhistory int         maximum number of lines of context to keep per session (default 250)
   -m, --chunkmax int               maximum number of characters to send as a single message (default 350)
 

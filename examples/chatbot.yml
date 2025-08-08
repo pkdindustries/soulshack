@@ -70,7 +70,7 @@ greeting: say hi and explain your functionality.
 # SESSION MANAGEMENT
 # ============================================================================
 
-# sessionduration: 3m            # Clear context after idle time
+# sessionduration: 10m           # Clear context after idle time (default: 10m)
 # sessionhistory: 250            # Max messages to keep in context
 # chunkmax: 350                  # Max chars per IRC message
 
