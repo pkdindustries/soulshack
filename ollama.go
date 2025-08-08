@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"regexp"
 
 	ollamaapi "github.com/ollama/ollama/api"
 	ai "github.com/sashabaranov/go-openai"
@@ -45,6 +46,13 @@ func mustJSON(v map[string]interface{}) string {
 		return "{}"
 	}
 	return string(b)
+}
+
+// stripThinkBlocks removes <think>...</think> blocks from the response content
+func stripThinkBlocks(content string) string {
+	// Match <think> blocks including nested content, using non-greedy matching
+	thinkRegex := regexp.MustCompile(`(?s)<think>.*?</think>`)
+	return thinkRegex.ReplaceAllString(content, "")
 }
 
 func (o *OllamaClient) ChatCompletionTask(ctx context.Context, req *CompletionRequest, chunker *Chunker) (<-chan []byte, <-chan *ToolCall, <-chan *ai.ChatCompletionMessage) {
@@ -145,15 +153,18 @@ func (o *OllamaClient) ChatCompletionTask(ctx context.Context, req *CompletionRe
 			return
 		}
 
+		// Strip think blocks from the response content
+		cleanContent := stripThinkBlocks(responseContent)
+		
 		// Send the complete response (may include tool calls with or without content)
 		messageChannel <- ai.ChatCompletionMessage{
 			Role:      ai.ChatMessageRoleAssistant,
-			Content:   responseContent,
+			Content:   cleanContent,
 			ToolCalls: toolCalls,
 		}
 
 		// Log detailed response information
-	contentPreview := responseContent
+	contentPreview := cleanContent
 	if len(contentPreview) > 200 {
 		contentPreview = contentPreview[:200] + "..."
 	}
@@ -164,12 +175,12 @@ func (o *OllamaClient) ChatCompletionTask(ctx context.Context, req *CompletionRe
 			toolInfo[i] = fmt.Sprintf("%s(%s)", tc.Function.Name, tc.Function.Arguments)
 		}
 		log.Printf("ollama: completed, content: '%s' (%d chars), tool calls: %d %v", 
-			contentPreview, len(responseContent), len(toolCalls), toolInfo)
-	} else if len(responseContent) == 0 {
+			contentPreview, len(cleanContent), len(toolCalls), toolInfo)
+	} else if len(cleanContent) == 0 {
 		log.Printf("ollama: completed, empty response (no content or tool calls)")
 	} else {
 		log.Printf("ollama: completed, content: '%s' (%d chars)", 
-			contentPreview, len(responseContent))
+			contentPreview, len(cleanContent))
 	}
 	}()
 
