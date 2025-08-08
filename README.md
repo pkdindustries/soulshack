@@ -53,7 +53,7 @@ Flags:
   -b, --config string              use the named configuration file
       --greeting string            prompt to be used when the bot joins the channel (default "hello.")
   -h, --help                       help for soulshack
-      --maxtokens int              maximum number of tokens to generate (default 512)
+      --maxtokens int              maximum number of tokens to generate (default 4096)
       --model string               model to be used for responses (default "gpt-4o")
   -n, --nick string                bot's nickname on the irc server (default "soulshack")
       --apikey string              openai api key

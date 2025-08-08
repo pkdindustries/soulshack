@@ -249,7 +249,7 @@ func initializeConfig() {
 	cmd.PersistentFlags().String("anthropickey", "", "Anthropic API key")
 	cmd.PersistentFlags().String("geminikey", "", "Google Gemini API key")
 	cmd.PersistentFlags().String("ollamaurl", "", "Ollama API URL (default: http://localhost:11434)")
-	cmd.PersistentFlags().Int("maxtokens", 512, "maximum number of tokens to generate")
+	cmd.PersistentFlags().Int("maxtokens", 4096, "maximum number of tokens to generate")
 	cmd.PersistentFlags().String("model", openai.GPT4o, "model to be used for responses")
 	cmd.PersistentFlags().DurationP("apitimeout", "t", time.Minute*5, "timeout for each completion request")
 	cmd.PersistentFlags().Float32("temperature", 0.7, "temperature for the completion")
