@@ -105,9 +105,12 @@ func slashSet(ctx ChatContextInterface) {
 		}
 		config.Bot.ToolsEnabled = toolUse
 		ctx.Reply(fmt.Sprintf("%s set to: %t", param, config.Bot.ToolsEnabled))
-	case "apiurl":
-		config.API.URL = value
-		ctx.Reply(fmt.Sprintf("%s set to: %s", param, config.API.URL))
+	case "openaiurl":
+		config.API.OpenAIURL = value
+		ctx.Reply(fmt.Sprintf("%s set to: %s", param, config.API.OpenAIURL))
+	case "ollamaurl":
+		config.API.OllamaURL = value
+		ctx.Reply(fmt.Sprintf("%s set to: %s", param, config.API.OllamaURL))
 	}
 
 	ctx.GetSession().Clear()
@@ -146,8 +149,10 @@ func slashGet(ctx ChatContextInterface) {
 			return
 		}
 		ctx.Reply(fmt.Sprintf("%s: %s", param, strings.Join(config.Bot.Admins, ", ")))
-	case "apiurl":
-		ctx.Reply(fmt.Sprintf("%s: %s", param, config.API.URL))
+	case "openaiurl":
+		ctx.Reply(fmt.Sprintf("%s: %s", param, config.API.OpenAIURL))
+	case "ollamaurl":
+		ctx.Reply(fmt.Sprintf("%s: %s", param, config.API.OllamaURL))
 	case "tools":
 		ctx.Reply(fmt.Sprintf("%s: %t", param, config.Bot.ToolsEnabled))
 	}

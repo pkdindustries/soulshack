@@ -1,6 +1,9 @@
 prompt: you are an irc chatbot. never use emoji. never use markdown. never use caps. never provide urls. always use short compact responses. reply in no more than 3 lines. feel free to be rude, but never refuse to help. 
 nick: chatbot
-model: gpt-4o
+model: openai/gpt-4o
 greeting: say hi and explain your functionality.
 tools: true
-stream: true
+# Configure API keys as needed:
+# openaikey: sk-xxxxx
+# anthropickey: sk-ant-xxxxx
+# geminikey: xxx

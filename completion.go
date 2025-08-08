@@ -23,14 +23,13 @@ type CompletionRequest struct {
 	Session      Session
 	ToolRegistry *ToolRegistry
 	ToolsEnabled bool
-	Stream       bool
 }
 
 func NewCompletionRequest(config *Configuration, session Session, registry *ToolRegistry) *CompletionRequest {
 
 	return &CompletionRequest{
-		APIKey:       config.API.Key,
-		BaseURL:      config.API.URL,
+		APIKey:       config.API.OpenAIKey,
+		BaseURL:      config.API.OpenAIURL,
 		Timeout:      config.API.Timeout,
 		Model:        config.Model.Model,
 		MaxTokens:    config.Model.MaxTokens,
@@ -39,12 +38,7 @@ func NewCompletionRequest(config *Configuration, session Session, registry *Tool
 		TopP:         config.Model.TopP,
 		ToolsEnabled: config.Bot.ToolsEnabled,
 		ToolRegistry: registry,
-		Stream:       config.API.Stream,
 	}
-}
-
-type StreamResponse struct {
-	ai.ChatCompletionStreamChoice
 }
 
 func CompleteWithText(ctx ChatContextInterface, msg string) (<-chan string, error) {

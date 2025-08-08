@@ -1,11 +1,10 @@
-# connect to a local ollama server via openai compatible API
+# connect to a local ollama server via native API
 nick: ollamabot
 prompt: "you are an irc chatbot. never use emoji. never use markdown. never use caps. always use short compact responses. reply in no more than 3 lines."
-model: llama3.2
+model: ollama/llama3.2
 greeting: say hi and explain your functionality.
-apiurl: "http://localhost:11434/v1/"
+# ollamaurl defaults to http://localhost:11434 if not specified
+# ollamaurl: "http://localhost:11434"
 sessionhistory: 150
-# (still) need to disable streaming for tools to work
-# on a the ollama rendition of the openai api
+# tools now work properly without streaming
 tools: true
-stream: false
