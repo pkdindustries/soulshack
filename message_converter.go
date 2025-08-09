@@ -242,6 +242,12 @@ func MessagesToOllama(messages []ChatMessage) []ollamaapi.Message {
 			ollamaMsg.ToolCalls = ollamaToolCalls
 		}
 		
+		// Handle tool response messages
+		if msg.Role == MessageRoleTool {
+			// Ollama expects tool responses to have "tool" role
+			ollamaMsg.Role = "tool"
+		}
+		
 		ollamaMessages = append(ollamaMessages, ollamaMsg)
 	}
 	
