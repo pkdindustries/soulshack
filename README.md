@@ -13,7 +13,7 @@ soulshack is an IRC chatbot that can talk in channels and call tools. It support
 - utilizes the openai api and compatible endpoints like ollama
 - allows dynamic configuration of bot settings through commands
 - supports ssl and SASL authentication for irc servers
-- tool calling, example tools, channel management tools
+- tool calling (shell scripts, MCP servers, IRC tools)
 
 ## building
 
@@ -62,6 +62,13 @@ soulshack --channel '#soulshack' --model ollama/llama3.2 \
   --shelltools examples/tools/datetime.sh,examples/tools/weather.py
 ```
 
+To connect to MCP (Model Context Protocol) servers:
+```bash
+soulshack --channel '#soulshack' --model ollama/llama3.2 \
+  --mcpservers "npx @modelcontextprotocol/server-filesystem" \
+  --mcpservers "uvx mcp-server-git"
+```
+
 ## configuration
 
 soulshack can be configured using command line flags, environment variables, or configuration files. 
@@ -100,6 +107,7 @@ LLM/API configuration:
       --top_p float32              top P value for the completion (default 1)
       --shelltools strings         comma-separated list of shell tool paths to load
       --irctools strings           comma-separated list of IRC tools to enable (default: irc_op,irc_kick,irc_topic,irc_action)
+      --mcpservers strings         comma-separated list of MCP server commands to run
 
 Behavior & session:
   -a, --addressed                  require bot be addressed by nick for response (default true)
@@ -146,9 +154,14 @@ Modifiable parameters via `/set` and `/get`:
 - `geminikey` - Gemini API key (masked when reading)
 - `shelltools` - comma-separated shell tool paths
 - `irctools` - comma-separated IRC tools (irc_op, irc_kick, irc_topic, irc_action)
+- `mcpservers` - comma-separated MCP server commands
 
 
 ## tools
+
+Soulshack supports three types of tools:
+
+### Shell Tools
 
 Tools are enabled by providing paths to tool scripts via the `--shelltools` flag or configuration file. Each tool must be an executable that responds to the following commands:
 
@@ -171,7 +184,7 @@ if [[ "$1" == "--schema" ]]; then
   # shellcheck disable=SC2016
   cat <<EOF
   {
-  "name": "get_current_date_with_format",
+  "title": "get_current_date_with_format",
   "description": "provides the current time and date in the specified unix date command format",
   "type": "object",
   "properties": {
@@ -216,6 +229,34 @@ fi
 # shellcheck disable=SC2140
 echo "Usage: currentdate.sh [--schema | --execute '{\"format\": \"+%Y-%m-%d %H:%M:%S\"}']"
 ```
+
+### MCP Servers
+
+Soulshack can connect to MCP (Model Context Protocol) servers, which provide tools via a standardized protocol. MCP servers are started as subprocesses and communicate over stdin/stdout.
+
+Examples:
+```bash
+# Filesystem operations
+--mcpservers "npx @modelcontextprotocol/server-filesystem"
+
+# Git operations  
+--mcpservers "uvx mcp-server-git"
+
+# Multiple servers (use the flag multiple times)
+--mcpservers "uvx mcp-server-time" --mcpservers "npx @modelcontextprotocol/server-puppeteer"
+```
+
+MCP servers automatically expose their available tools to the bot. For more information about MCP, see [modelcontextprotocol.io](https://modelcontextprotocol.io).
+
+### IRC Tools
+
+Built-in IRC channel management tools can be enabled via `--irctools`:
+- `irc_op` - Grant/revoke operator status
+- `irc_kick` - Kick users from the channel
+- `irc_topic` - Change the channel topic  
+- `irc_action` - Send /me actions
+
+These tools require appropriate channel permissions 
 
 ![jacob, high five me](https://i.imgur.com/CDccJ5r.png)
 

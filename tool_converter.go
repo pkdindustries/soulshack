@@ -5,56 +5,86 @@ import (
 
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/google/generative-ai-go/genai"
+	mcpjsonschema "github.com/modelcontextprotocol/go-sdk/jsonschema"
 	ollamaapi "github.com/ollama/ollama/api"
 	ai "github.com/sashabaranov/go-openai"
 	"github.com/sashabaranov/go-openai/jsonschema"
 )
 
 // ConvertToOpenAI converts a generic tool schema to OpenAI format
-func ConvertToOpenAI(schema ToolSchema) ai.Tool {
-	// Convert generic properties to jsonschema.Definition
+func ConvertToOpenAI(schema *mcpjsonschema.Schema) ai.Tool {
+	// Convert properties to OpenAI jsonschema.Definition
 	props := make(map[string]jsonschema.Definition)
-	for k, v := range schema.Properties {
-		if propMap, ok := v.(map[string]interface{}); ok {
-			def := jsonschema.Definition{
-				Type: jsonschema.DataType(propMap["type"].(string)),
+	if schema != nil && schema.Properties != nil {
+		for k, v := range schema.Properties {
+			if v != nil {
+				def := jsonschema.Definition{
+					Type:        jsonschema.DataType(v.Type),
+					Description: v.Description,
+				}
+				props[k] = def
 			}
-			if desc, ok := propMap["description"].(string); ok {
-				def.Description = desc
-			}
-			props[k] = def
 		}
 	}
 
+	name := ""
+	description := ""
+	var required []string
+	
+	if schema != nil {
+		name = schema.Title
+		description = schema.Description
+		required = schema.Required
+	}
+	
 	return ai.Tool{
 		Type: ai.ToolTypeFunction,
 		Function: &ai.FunctionDefinition{
-			Name:        schema.Name,
-			Description: schema.Description,
+			Name:        name,
+			Description: description,
 			Parameters: jsonschema.Definition{
 				Type:       jsonschema.Object,
 				Properties: props,
-				Required:   schema.Required,
+				Required:   required,
 			},
 		},
 	}
 }
 
 // ConvertToAnthropic converts a generic tool schema to Anthropic format
-func ConvertToAnthropic(schema ToolSchema) anthropic.ToolUnionParam {
+func ConvertToAnthropic(schema *mcpjsonschema.Schema) anthropic.ToolUnionParam {
 	// Convert properties to Anthropic format
 	properties := make(map[string]interface{})
-	for k, v := range schema.Properties {
-		properties[k] = v
+	if schema != nil && schema.Properties != nil {
+		for k, v := range schema.Properties {
+			if v != nil {
+				// Convert Schema to map for Anthropic
+				propMap := map[string]interface{}{
+					"type":        v.Type,
+					"description": v.Description,
+				}
+				properties[k] = propMap
+			}
+		}
 	}
 
+	name := ""
+	description := ""
+	var required []string
+	
+	if schema != nil {
+		name = schema.Title
+		description = schema.Description
+		required = schema.Required
+	}
+	
 	tool := anthropic.ToolParam{
-		Name:        schema.Name,
-		Description: anthropic.String(schema.Description),
+		Name:        name,
+		Description: anthropic.String(description),
 		InputSchema: anthropic.ToolInputSchemaParam{
 			Type:       "object",
 			Properties: properties,
-			Required:   schema.Required,
+			Required:   required,
 		},
 	}
 
@@ -65,94 +95,86 @@ func ConvertToAnthropic(schema ToolSchema) anthropic.ToolUnionParam {
 }
 
 // ConvertToGemini converts a generic tool schema to Gemini format
-func ConvertToGemini(schema ToolSchema) *genai.Tool {
+func ConvertToGemini(schema *mcpjsonschema.Schema) *genai.Tool {
 	// Convert properties to Gemini schema format
 	props := make(map[string]*genai.Schema)
 
-	for name, prop := range schema.Properties {
-		props[name] = parseGeminiProperty(prop)
+	if schema != nil && schema.Properties != nil {
+		for name, prop := range schema.Properties {
+			if prop != nil {
+				geminiSchema := &genai.Schema{
+					Description: prop.Description,
+				}
+				// Map type
+				switch prop.Type {
+				case "string":
+					geminiSchema.Type = genai.TypeString
+				case "number":
+					geminiSchema.Type = genai.TypeNumber
+				case "boolean":
+					geminiSchema.Type = genai.TypeBoolean
+				case "array":
+					geminiSchema.Type = genai.TypeArray
+				case "object":
+					geminiSchema.Type = genai.TypeObject
+				default:
+					geminiSchema.Type = genai.TypeString
+				}
+				props[name] = geminiSchema
+			}
+		}
 	}
 
+	name := ""
+	description := ""
+	var required []string
+	
+	if schema != nil {
+		name = schema.Title
+		description = schema.Description
+		required = schema.Required
+	}
+	
 	return &genai.Tool{
 		FunctionDeclarations: []*genai.FunctionDeclaration{{
-			Name:        schema.Name,
-			Description: schema.Description,
+			Name:        name,
+			Description: description,
 			Parameters: &genai.Schema{
 				Type:       genai.TypeObject,
 				Properties: props,
-				Required:   schema.Required,
+				Required:   required,
 			},
 		}},
 	}
 }
 
-// parseGeminiProperty converts a generic property to Gemini schema
-func parseGeminiProperty(prop interface{}) *genai.Schema {
-	schema := &genai.Schema{}
-
-	// Try to parse as a map
-	if propMap, ok := prop.(map[string]interface{}); ok {
-		// Get type
-		if typeStr, ok := propMap["type"].(string); ok {
-			switch typeStr {
-			case "string":
-				schema.Type = genai.TypeString
-			case "number":
-				schema.Type = genai.TypeNumber
-			case "boolean":
-				schema.Type = genai.TypeBoolean
-			case "array":
-				schema.Type = genai.TypeArray
-				// Handle array items if present
-				if items, ok := propMap["items"]; ok {
-					schema.Items = parseGeminiProperty(items)
-				}
-			case "object":
-				schema.Type = genai.TypeObject
-				// Handle nested properties if present
-				if props, ok := propMap["properties"].(map[string]interface{}); ok {
-					schema.Properties = make(map[string]*genai.Schema)
-					for k, v := range props {
-						schema.Properties[k] = parseGeminiProperty(v)
-					}
-				}
-			default:
-				schema.Type = genai.TypeString // Default to string
-			}
-		}
-
-		// Get description
-		if desc, ok := propMap["description"].(string); ok {
-			schema.Description = desc
-		}
-
-		// Get enum values if present
-		if enum, ok := propMap["enum"].([]interface{}); ok {
-			enumStrs := make([]string, len(enum))
-			for i, e := range enum {
-				if s, ok := e.(string); ok {
-					enumStrs[i] = s
-				}
-			}
-			schema.Enum = enumStrs
-		}
-	}
-
-	return schema
-}
 
 // ConvertToOllama converts a generic tool schema to Ollama native format
-func ConvertToOllama(schema ToolSchema) ollamaapi.Tool {
+func ConvertToOllama(schema *mcpjsonschema.Schema) ollamaapi.Tool {
+	name := ""
+	description := ""
+	typeStr := "object"
+	var required []string
+	
+	if schema != nil {
+		name = schema.Title
+		description = schema.Description
+		if schema.Type != "" {
+			typeStr = schema.Type
+		}
+		required = schema.Required
+	}
+	
 	// Create the tool function
 	toolFunc := ollamaapi.ToolFunction{
-		Name:        schema.Name,
-		Description: schema.Description,
+		Name:        name,
+		Description: description,
 	}
 
 	// Set parameters
-	toolFunc.Parameters.Type = schema.Type
-	toolFunc.Parameters.Required = schema.Required
-	toolFunc.Parameters.Properties = convertPropertiesToOllama(schema.Properties)
+	toolFunc.Parameters.Type = typeStr
+	toolFunc.Parameters.Required = required
+	toolFunc.Parameters.Properties = convertPropertiesToOllamaFromSchema(schema)
 
 	return ollamaapi.Tool{
 		Type:     "function",
@@ -160,29 +182,20 @@ func ConvertToOllama(schema ToolSchema) ollamaapi.Tool {
 	}
 }
 
-// convertPropertiesToOllama converts generic properties to Ollama format
-func convertPropertiesToOllama(props map[string]interface{}) map[string]ollamaapi.ToolProperty {
+// convertPropertiesToOllamaFromSchema converts schema properties to Ollama format
+func convertPropertiesToOllamaFromSchema(schema *mcpjsonschema.Schema) map[string]ollamaapi.ToolProperty {
 	result := make(map[string]ollamaapi.ToolProperty)
 
-	for name, prop := range props {
-		if propMap, ok := prop.(map[string]interface{}); ok {
-			ollamaProp := ollamaapi.ToolProperty{}
-
-			if typeStr, ok := propMap["type"].(string); ok {
-				// PropertyType is a []string
-				ollamaProp.Type = ollamaapi.PropertyType{typeStr}
+	if schema != nil && schema.Properties != nil {
+		for name, prop := range schema.Properties {
+			if prop != nil {
+				ollamaProp := ollamaapi.ToolProperty{
+					Type:        ollamaapi.PropertyType{prop.Type},
+					Description: prop.Description,
+				}
+				// Note: prop.Enum would need conversion if used
+				result[name] = ollamaProp
 			}
-
-			if desc, ok := propMap["description"].(string); ok {
-				ollamaProp.Description = desc
-			}
-
-			if enum, ok := propMap["enum"].([]interface{}); ok {
-				// Enum is []any
-				ollamaProp.Enum = enum
-			}
-
-			result[name] = ollamaProp
 		}
 	}
 

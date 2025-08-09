@@ -8,7 +8,7 @@ if [[ "$1" == "--schema" ]]; then
   # shellcheck disable=SC2016
   cat <<EOF
 {
-  "name": "get_current_date_with_format",
+  "title": "get_current_date_with_format",
   "description": "provides the current time and date in the specified unix date command format",
   "type": "object",
   "properties": {

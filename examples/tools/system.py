@@ -10,7 +10,7 @@ import time
 
 def print_schema():
     schema = {
-        "name": "system_resource_monitor",
+        "title": "system_resource_monitor",
         "description": "provides system resource usage such as CPU, memory, disk, process, Docker container, and load average information",
         "type": "object",
         "properties": {

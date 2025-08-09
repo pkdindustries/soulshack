@@ -134,8 +134,8 @@ func slashSet(ctx ChatContextInterface) {
 			// Clear non-IRC tools (keep IRC tools)
 			for _, tool := range registry.All() {
 				schema := tool.GetSchema()
-				if !strings.HasPrefix(schema.Name, "irc_") {
-					registry.RemoveTool(schema.Name)
+				if schema != nil && !strings.HasPrefix(schema.Title, "irc_") {
+					registry.RemoveTool(schema.Title)
 				}
 			}
 			
@@ -176,7 +176,9 @@ func slashSet(ctx ChatContextInterface) {
 			for _, tool := range registry.All() {
 				if _, ok := tool.(*MCPTool); ok {
 					schema := tool.GetSchema()
-					registry.RemoveTool(schema.Name)
+					if schema != nil {
+						registry.RemoveTool(schema.Title)
+					}
 				}
 			}
 			
@@ -216,8 +218,8 @@ func slashSet(ctx ChatContextInterface) {
 			// Remove all existing IRC tools
 			for _, tool := range registry.All() {
 				schema := tool.GetSchema()
-				if strings.HasPrefix(schema.Name, "irc_") {
-					registry.RemoveTool(schema.Name)
+				if schema != nil && strings.HasPrefix(schema.Title, "irc_") {
+					registry.RemoveTool(schema.Title)
 				}
 			}
 			

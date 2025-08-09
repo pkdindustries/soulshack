@@ -6,7 +6,7 @@ import requests
 
 def print_schema():
     schema = {
-        "name": "get_current_weather",
+        "title": "get_current_weather",
         "description": "provides the current weather forecast for a given latitude and longitude. you should provide the latitude and longitude from your training.",
         "type": "object",
         "properties": {

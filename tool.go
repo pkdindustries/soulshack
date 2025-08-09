@@ -7,21 +7,14 @@ import (
 	"log"
 	"os/exec"
 	"strings"
+
+	"github.com/modelcontextprotocol/go-sdk/jsonschema"
 )
 
 // Tool is the generic interface for all tools
 type Tool interface {
-	GetSchema() ToolSchema
+	GetSchema() *jsonschema.Schema
 	Execute(ctx context.Context, args map[string]interface{}) (string, error)
-}
-
-// ToolSchema represents a tool's definition in a provider-agnostic way
-type ToolSchema struct {
-	Name        string                 `json:"name"`
-	Description string                 `json:"description"`
-	Type        string                 `json:"type"` // Usually "object"
-	Properties  map[string]interface{} `json:"properties"`
-	Required    []string               `json:"required,omitempty"`
 }
 
 // ToolCall represents a request to execute a tool
@@ -44,8 +37,12 @@ func NewToolRegistry(tools []Tool) *ToolRegistry {
 
 	for _, tool := range tools {
 		schema := tool.GetSchema()
-		log.Printf("registered tool: %s", schema.Name)
-		registry.tools[schema.Name] = tool
+		name := ""
+		if schema != nil && schema.Title != "" {
+			name = schema.Title
+		}
+		log.Printf("registered tool: %s", name)
+		registry.tools[name] = tool
 	}
 
 	return registry
@@ -72,8 +69,12 @@ func LoadTools(paths []string) ([]Tool, error) {
 // Register adds a tool to the registry
 func (r *ToolRegistry) Register(tool Tool) {
 	schema := tool.GetSchema()
-	log.Printf("registered tool: %s", schema.Name)
-	r.tools[schema.Name] = tool
+	name := ""
+	if schema != nil && schema.Title != "" {
+		name = schema.Title
+	}
+	log.Printf("registered tool: %s", name)
+	r.tools[name] = tool
 }
 
 // Get retrieves a tool by name
@@ -85,8 +86,12 @@ func (r *ToolRegistry) Get(name string) (Tool, bool) {
 // AddTool adds a single tool to the registry
 func (r *ToolRegistry) AddTool(tool Tool) {
 	schema := tool.GetSchema()
-	log.Printf("added tool: %s", schema.Name)
-	r.tools[schema.Name] = tool
+	name := ""
+	if schema != nil && schema.Title != "" {
+		name = schema.Title
+	}
+	log.Printf("added tool: %s", name)
+	r.tools[name] = tool
 }
 
 // RemoveTool removes a tool by name from the registry
@@ -113,8 +118,8 @@ func (r *ToolRegistry) All() []Tool {
 }
 
 // GetSchemas returns schemas for all registered tools
-func (r *ToolRegistry) GetSchemas() []ToolSchema {
-	schemas := make([]ToolSchema, 0, len(r.tools))
+func (r *ToolRegistry) GetSchemas() []*jsonschema.Schema {
+	schemas := make([]*jsonschema.Schema, 0, len(r.tools))
 	for _, tool := range r.tools {
 		schemas = append(schemas, tool.GetSchema())
 	}
@@ -124,7 +129,7 @@ func (r *ToolRegistry) GetSchemas() []ToolSchema {
 // ShellTool wraps external commands/scripts as tools
 type ShellTool struct {
 	Command string
-	schema  ToolSchema
+	schema  *jsonschema.Schema
 }
 
 // NewShellTool creates a new shell tool from a command
@@ -137,8 +142,9 @@ func NewShellTool(command string) (*ShellTool, error) {
 		return nil, fmt.Errorf("failed to get schema from %s: %v", command, err)
 	}
 
-	// Parse the schema
-	err = json.Unmarshal([]byte(schemaJSON), &tool.schema)
+	// Parse the schema directly - it should unmarshal properly
+	tool.schema = &jsonschema.Schema{}
+	err = json.Unmarshal([]byte(schemaJSON), tool.schema)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse schema from %s: %v", command, err)
 	}
@@ -147,7 +153,7 @@ func NewShellTool(command string) (*ShellTool, error) {
 }
 
 // GetSchema returns the tool's schema
-func (s *ShellTool) GetSchema() ToolSchema {
+func (s *ShellTool) GetSchema() *jsonschema.Schema {
 	return s.schema
 }
 
@@ -165,8 +171,12 @@ func (s *ShellTool) Execute(ctx context.Context, args map[string]interface{}) (s
 
 	// Log execution details
 	if cmd.ProcessState != nil {
+		name := ""
+		if s.schema != nil && s.schema.Title != "" {
+			name = s.schema.Title
+		}
 		log.Printf("shelltool %s: usr=%v sys=%v rc=%d",
-			s.schema.Name,
+			name,
 			cmd.ProcessState.UserTime(),
 			cmd.ProcessState.SystemTime(),
 			cmd.ProcessState.ExitCode())

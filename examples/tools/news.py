@@ -8,7 +8,7 @@ urllib3.disable_warnings()
 
 def print_schema():
     schema = {
-        "name": "get_news_summary",
+        "title": "get_news_summary",
         "description": "provides a short summary of recent news",
         "type": "object",
         "properties": {

@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log"
+
+	"github.com/modelcontextprotocol/go-sdk/jsonschema"
 )
 
 // ContextualTool is a tool that needs IRC context to execute
@@ -40,19 +42,19 @@ func (t *IrcOpTool) SetContext(ctx ChatContextInterface) {
 	t.ctx = ctx
 }
 
-func (t *IrcOpTool) GetSchema() ToolSchema {
-	return ToolSchema{
-		Name:        "irc_op",
+func (t *IrcOpTool) GetSchema() *jsonschema.Schema {
+	return &jsonschema.Schema{
+		Title:       "irc_op",
 		Description: "Grant or revoke IRC operator status",
 		Type:        "object",
-		Properties: map[string]interface{}{
-			"nick": map[string]interface{}{
-				"type":        "string",
-				"description": "The nick to op/deop",
+		Properties: map[string]*jsonschema.Schema{
+			"nick": &jsonschema.Schema{
+				Type:        "string",
+				Description: "The nick to op/deop",
 			},
-			"grant": map[string]interface{}{
-				"type":        "boolean",
-				"description": "true to grant op, false to revoke",
+			"grant": &jsonschema.Schema{
+				Type:        "boolean",
+				Description: "true to grant op, false to revoke",
 			},
 		},
 		Required: []string{"nick", "grant"},
@@ -101,19 +103,19 @@ func (t *IrcKickTool) SetContext(ctx ChatContextInterface) {
 	t.ctx = ctx
 }
 
-func (t *IrcKickTool) GetSchema() ToolSchema {
-	return ToolSchema{
-		Name:        "irc_kick",
+func (t *IrcKickTool) GetSchema() *jsonschema.Schema {
+	return &jsonschema.Schema{
+		Title:       "irc_kick",
 		Description: "Kick a user from the IRC channel",
 		Type:        "object",
-		Properties: map[string]interface{}{
-			"nick": map[string]interface{}{
-				"type":        "string",
-				"description": "The nick to kick",
+		Properties: map[string]*jsonschema.Schema{
+			"nick": &jsonschema.Schema{
+				Type:        "string",
+				Description: "The nick to kick",
 			},
-			"reason": map[string]interface{}{
-				"type":        "string",
-				"description": "The reason for kicking",
+			"reason": &jsonschema.Schema{
+				Type:        "string",
+				Description: "The reason for kicking",
 			},
 		},
 		Required: []string{"nick", "reason"},
@@ -157,15 +159,15 @@ func (t *IrcTopicTool) SetContext(ctx ChatContextInterface) {
 	t.ctx = ctx
 }
 
-func (t *IrcTopicTool) GetSchema() ToolSchema {
-	return ToolSchema{
-		Name:        "irc_topic",
+func (t *IrcTopicTool) GetSchema() *jsonschema.Schema {
+	return &jsonschema.Schema{
+		Title:       "irc_topic",
 		Description: "Set the IRC channel topic",
 		Type:        "object",
-		Properties: map[string]interface{}{
-			"topic": map[string]interface{}{
-				"type":        "string",
-				"description": "The new topic for the channel",
+		Properties: map[string]*jsonschema.Schema{
+			"topic": &jsonschema.Schema{
+				Type:        "string",
+				Description: "The new topic for the channel",
 			},
 		},
 		Required: []string{"topic"},
@@ -204,15 +206,15 @@ func (t *IrcActionTool) SetContext(ctx ChatContextInterface) {
 	t.ctx = ctx
 }
 
-func (t *IrcActionTool) GetSchema() ToolSchema {
-	return ToolSchema{
-		Name:        "irc_action",
+func (t *IrcActionTool) GetSchema() *jsonschema.Schema {
+	return &jsonschema.Schema{
+		Title:       "irc_action",
 		Description: "Send an action message to the IRC channel",
 		Type:        "object",
-		Properties: map[string]interface{}{
-			"message": map[string]interface{}{
-				"type":        "string",
-				"description": "The action message to send",
+		Properties: map[string]*jsonschema.Schema{
+			"message": &jsonschema.Schema{
+				Type:        "string",
+				Description: "The action message to send",
 			},
 		},
 		Required: []string{"message"},

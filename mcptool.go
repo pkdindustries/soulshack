@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/modelcontextprotocol/go-sdk/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -23,42 +24,28 @@ func NewMCPTool(session *mcp.ClientSession, tool *mcp.Tool) *MCPTool {
 	}
 }
 
-// GetSchema returns the tool's schema in soulshack format
-func (m *MCPTool) GetSchema() ToolSchema {
-	// Convert MCP tool to soulshack ToolSchema
-	schema := ToolSchema{
-		Name:        m.tool.Name,
+// GetSchema returns the tool's schema
+func (m *MCPTool) GetSchema() *jsonschema.Schema {
+	// MCP tools already use jsonschema.Schema, so we can return it directly
+	if m.tool.InputSchema != nil {
+		// Set the title from the tool name if not already set
+		if m.tool.InputSchema.Title == "" {
+			m.tool.InputSchema.Title = m.tool.Name
+		}
+		// Set the description if not already set
+		if m.tool.InputSchema.Description == "" {
+			m.tool.InputSchema.Description = m.tool.Description
+		}
+		return m.tool.InputSchema
+	}
+	
+	// If no input schema, create a basic one
+	return &jsonschema.Schema{
+		Title:       m.tool.Name,
 		Description: m.tool.Description,
 		Type:        "object",
-		Properties:  make(map[string]interface{}),
+		Properties:  make(map[string]*jsonschema.Schema),
 	}
-
-	// If the MCP tool has input schema, convert it
-	if m.tool.InputSchema != nil {
-		// The InputSchema is already a jsonschema.Schema object
-		// We need to extract its properties
-		// For now, we'll just set basic properties
-		// In a real implementation, we'd need to properly convert the schema
-		schemaBytes, err := json.Marshal(m.tool.InputSchema)
-		if err == nil {
-			var inputSchema map[string]interface{}
-			if err := json.Unmarshal(schemaBytes, &inputSchema); err == nil {
-				if props, ok := inputSchema["properties"].(map[string]interface{}); ok {
-					schema.Properties = props
-				}
-				if required, ok := inputSchema["required"].([]interface{}); ok {
-					schema.Required = make([]string, len(required))
-					for i, r := range required {
-						if s, ok := r.(string); ok {
-							schema.Required[i] = s
-						}
-					}
-				}
-			}
-		}
-	}
-
-	return schema
 }
 
 // Execute runs the MCP tool with the given arguments
