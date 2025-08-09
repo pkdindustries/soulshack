@@ -42,7 +42,7 @@ func TestGetToolSchemas(t *testing.T) {
 	expectedToolName := "get_current_date_with_format"
 	found := false
 	for _, schema := range toolSchemas {
-		if schema.Name == expectedToolName {
+		if schema != nil && schema.Title == expectedToolName {
 			found = true
 			break
 		}
