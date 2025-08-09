@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"math/rand"
 	"testing"
-
-	ai "github.com/sashabaranov/go-openai"
 )
 
 func TestChunker_Chunk(t *testing.T) {
@@ -76,26 +74,24 @@ func BenchmarkFilter_StressTest(b *testing.B) {
 				c := NewChunker(Config)
 
 				// create chat completion message
-				msg := ai.ChatCompletionMessage{
-					Role:    ai.ChatMessageRoleAssistant,
+				msg := ChatMessage{
+					Role:    MessageRoleAssistant,
 					Content: text,
 				}
 
 				// create tool message
-				toolMsg := ai.ChatCompletionMessage{
-					Role: ai.ChatMessageRoleAssistant,
-					ToolCalls: []ai.ToolCall{
+				toolMsg := ChatMessage{
+					Role: MessageRoleAssistant,
+					ToolCalls: []ChatMessageToolCall{
 						{
-							Function: ai.FunctionCall{
-								Name:      "get_current_date_with_format",
-								Arguments: `{"format": "+%A %B %d %T %Y"}`,
-							},
-							ID: "12354",
+							ID:        "12354",
+							Name:      "get_current_date_with_format",
+							Arguments: `{"format": "+%A %B %d %T %Y"}`,
 						},
 					},
 				}
 
-				respch := make(chan ai.ChatCompletionMessage, 10)
+				respch := make(chan ChatMessage, 10)
 
 				respch <- msg
 				respch <- msg

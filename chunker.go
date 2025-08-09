@@ -2,10 +2,9 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"log"
 	"time"
-
-	ai "github.com/sashabaranov/go-openai"
 )
 
 type Chunker struct {
@@ -24,10 +23,10 @@ func NewChunker(config *Configuration) *Chunker {
 	}
 }
 
-func (c *Chunker) ProcessMessages(msgChan <-chan ai.ChatCompletionMessage) (<-chan []byte, <-chan *ToolCall, <-chan *ai.ChatCompletionMessage) {
+func (c *Chunker) ProcessMessages(msgChan <-chan ChatMessage) (<-chan []byte, <-chan *ToolCall, <-chan *ChatMessage) {
 	toolChan := make(chan *ToolCall, 10)
 	byteChan := make(chan []byte, 10)
-	ccmChan := make(chan *ai.ChatCompletionMessage, 10)
+	ccmChan := make(chan *ChatMessage, 10)
 
 	go func() {
 		defer close(toolChan)
@@ -38,11 +37,17 @@ func (c *Chunker) ProcessMessages(msgChan <-chan ai.ChatCompletionMessage) (<-ch
 			// Handle tool calls
 			for _, toolCall := range msg.ToolCalls {
 				log.Println("processMessages: tool call found")
-				// Convert OpenAI tool call to generic format
-				if tc, err := ParseOpenAIToolCall(toolCall); err == nil {
+				// Convert message tool call to generic ToolCall format
+				var args map[string]interface{}
+				if err := json.Unmarshal([]byte(toolCall.Arguments), &args); err == nil {
+					tc := &ToolCall{
+						ID:   toolCall.ID,
+						Name: toolCall.Name,
+						Args: args,
+					}
 					toolChan <- tc
 				} else {
-					log.Printf("processMessages: failed to parse tool call: %v", err)
+					log.Printf("processMessages: failed to parse tool call arguments: %v", err)
 				}
 			}
 

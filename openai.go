@@ -26,22 +26,25 @@ func NewOpenAIClient(api APIConfig) *OpenAIClient {
 	}
 }
 
-func (o OpenAIClient) ChatCompletionTask(ctx context.Context, req *CompletionRequest, chunker *Chunker) (<-chan []byte, <-chan *ToolCall, <-chan *ai.ChatCompletionMessage) {
-	messageChannel := make(chan ai.ChatCompletionMessage, 10)
+func (o OpenAIClient) ChatCompletionTask(ctx context.Context, req *CompletionRequest, chunker *Chunker) (<-chan []byte, <-chan *ToolCall, <-chan *ChatMessage) {
+	messageChannel := make(chan ChatMessage, 10)
 	o.completion(ctx, req, messageChannel)
 	return chunker.ProcessMessages(messageChannel)
 }
 
-func (o OpenAIClient) completion(ctx context.Context, req *CompletionRequest, respChannel chan<- ai.ChatCompletionMessage) error {
+func (o OpenAIClient) completion(ctx context.Context, req *CompletionRequest, respChannel chan<- ChatMessage) error {
 	timeout, cancel := context.WithTimeout(ctx, req.Timeout)
 	defer close(respChannel)
 	defer cancel()
 	log.Println("completionTask: start")
 
+	// Convert agnostic messages to OpenAI format
+	openAIMessages := MessagesToOpenAI(req.Session.GetHistory())
+	
 	ccr := ai.ChatCompletionRequest{
 		MaxCompletionTokens: req.MaxTokens,
 		Model:               req.Model,
-		Messages:            req.Session.GetHistory(),
+		Messages:            openAIMessages,
 		Temperature:         req.Temperature,
 		TopP:                req.TopP,
 	}
@@ -58,8 +61,8 @@ func (o OpenAIClient) completion(ctx context.Context, req *CompletionRequest, re
 
 	if err != nil {
 		log.Println("completionTask: failed to create chat completion:", err)
-		respChannel <- ai.ChatCompletionMessage{
-			Role:    ai.ChatMessageRoleAssistant,
+		respChannel <- ChatMessage{
+			Role:    MessageRoleAssistant,
 			Content: "failed to create chat completion: " + err.Error(),
 		}
 		return err
@@ -69,12 +72,9 @@ func (o OpenAIClient) completion(ctx context.Context, req *CompletionRequest, re
 		return fmt.Errorf("empty completion response")
 	}
 
-	msg := ai.ChatCompletionMessage{
-		Role:       response.Choices[0].Message.Role,
-		Content:    response.Choices[0].Message.Content,
-		ToolCalls:  response.Choices[0].Message.ToolCalls,
-		ToolCallID: response.Choices[0].Message.ToolCallID,
-	}
+	// Convert OpenAI response to agnostic format
+	openAIMsg := response.Choices[0].Message
+	msg := MessageFromOpenAI(openAIMsg)
 
 	respChannel <- msg
 	
@@ -87,7 +87,7 @@ func (o OpenAIClient) completion(ctx context.Context, req *CompletionRequest, re
 	if len(msg.ToolCalls) > 0 {
 		toolInfo := make([]string, len(msg.ToolCalls))
 		for i, tc := range msg.ToolCalls {
-			toolInfo[i] = fmt.Sprintf("%s(%s)", tc.Function.Name, tc.Function.Arguments)
+			toolInfo[i] = fmt.Sprintf("%s(%s)", tc.Name, tc.Arguments)
 		}
 		log.Printf("openai: completed, content: '%s' (%d chars), tool calls: %d %v", 
 			contentPreview, len(msg.Content), len(msg.ToolCalls), toolInfo)

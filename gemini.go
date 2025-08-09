@@ -2,12 +2,10 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 
 	"github.com/google/generative-ai-go/genai"
-	ai "github.com/sashabaranov/go-openai"
 	"google.golang.org/api/option"
 )
 
@@ -25,15 +23,15 @@ func NewGeminiClient(config APIConfig) *GeminiClient {
 	}
 }
 
-func (g *GeminiClient) ChatCompletionTask(ctx context.Context, req *CompletionRequest, chunker *Chunker) (<-chan []byte, <-chan *ToolCall, <-chan *ai.ChatCompletionMessage) {
-	messageChannel := make(chan ai.ChatCompletionMessage, 10)
+func (g *GeminiClient) ChatCompletionTask(ctx context.Context, req *CompletionRequest, chunker *Chunker) (<-chan []byte, <-chan *ToolCall, <-chan *ChatMessage) {
+	messageChannel := make(chan ChatMessage, 10)
 
 	go func() {
 		defer close(messageChannel)
 
 		if g.apiKey == "" {
-			messageChannel <- ai.ChatCompletionMessage{
-				Role:    ai.ChatMessageRoleAssistant,
+			messageChannel <- ChatMessage{
+				Role:    MessageRoleAssistant,
 				Content: "Error: Gemini API key not configured",
 			}
 			return
@@ -43,8 +41,8 @@ func (g *GeminiClient) ChatCompletionTask(ctx context.Context, req *CompletionRe
 		client, err := genai.NewClient(ctx, option.WithAPIKey(g.apiKey))
 		if err != nil {
 			log.Printf("gemini: failed to create client: %v", err)
-			messageChannel <- ai.ChatCompletionMessage{
-				Role:    ai.ChatMessageRoleAssistant,
+			messageChannel <- ChatMessage{
+				Role:    MessageRoleAssistant,
 				Content: "Error creating Gemini client: " + err.Error(),
 			}
 			return
@@ -59,79 +57,32 @@ func (g *GeminiClient) ChatCompletionTask(ctx context.Context, req *CompletionRe
 		model.SetTopP(req.TopP)
 		model.SetMaxOutputTokens(int32(req.MaxTokens))
 
-		// Convert session history to Gemini chat history and prepare the last user prompt parts
-		var (
-			history           []*genai.Content
-			userParts         []genai.Part
-			systemInstruction string
-		)
-
+		// Convert session history to Gemini chat history
 		msgs := req.Session.GetHistory()
-		// Map ToolCallID -> function name for pairing tool responses
-		callIDToName := make(map[string]string)
-
-		for i, msg := range msgs {
-			isLast := i == len(msgs)-1
-			switch msg.Role {
-			case ai.ChatMessageRoleSystem:
-				systemInstruction = msg.Content
-
-			case ai.ChatMessageRoleUser:
-				if isLast {
-					userParts = append(userParts, genai.Text(msg.Content))
-				} else {
-					history = append(history, genai.NewUserContent(genai.Text(msg.Content)))
+		history, systemInstruction, _ := MessagesToGeminiContent(msgs)
+		
+		// Extract the last user message parts if present
+		var userParts []genai.Part
+		if len(msgs) > 0 {
+			lastMsg := msgs[len(msgs)-1]
+			if lastMsg.Role == MessageRoleUser {
+				userParts = append(userParts, genai.Text(lastMsg.Content))
+				// Remove last from history since we'll send it separately
+				if len(history) > 0 && history[len(history)-1].Role == "user" {
+					history = history[:len(history)-1]
 				}
-
-			case ai.ChatMessageRoleAssistant:
-				// Build model content, including any function calls
-				var parts []genai.Part
-				if msg.Content != "" {
-					parts = append(parts, genai.Text(msg.Content))
+			} else if lastMsg.Role == MessageRoleAssistant {
+				// Handle assistant message with tool calls as last message
+				if len(history) > 0 && history[len(history)-1].Role == "model" {
+					userParts = history[len(history)-1].Parts
+					history = history[:len(history)-1]
 				}
-				if len(msg.ToolCalls) > 0 {
-					for _, tc := range msg.ToolCalls {
-						// Record name by ID for later tool response pairing
-						if tc.ID != "" {
-							callIDToName[tc.ID] = tc.Function.Name
-						}
-						// Parse arguments JSON
-						var args map[string]interface{}
-						if err := json.Unmarshal([]byte(tc.Function.Arguments), &args); err == nil {
-							parts = append(parts, genai.FunctionCall{Name: tc.Function.Name, Args: args})
-						} else {
-							parts = append(parts, genai.Text("[function call args parse error]"))
-						}
-					}
+			} else if lastMsg.Role == MessageRoleTool {
+				// Handle tool response as last message
+				if len(history) > 0 && history[len(history)-1].Role == "user" {
+					userParts = history[len(history)-1].Parts
+					history = history[:len(history)-1]
 				}
-				if len(parts) == 0 {
-					// Ensure we still represent assistant turn, even if empty
-					parts = append(parts, genai.Text(""))
-				}
-				history = append(history, &genai.Content{Role: "model", Parts: parts})
-
-			case ai.ChatMessageRoleTool:
-				// Convert tool response into a FunctionResponse part as a user turn
-				name := callIDToName[msg.ToolCallID]
-				if name == "" {
-					// Fallback to plain user content if we cannot map the tool call
-					history = append(history, genai.NewUserContent(genai.Text(msg.Content)))
-					continue
-				}
-
-				// Try to parse tool content as JSON; otherwise wrap in {result: ...}
-				var respObj map[string]any
-				var tmp any
-				if err := json.Unmarshal([]byte(msg.Content), &tmp); err == nil {
-					if m, ok := tmp.(map[string]any); ok {
-						respObj = m
-					} else {
-						respObj = map[string]any{"result": tmp}
-					}
-				} else {
-					respObj = map[string]any{"result": msg.Content}
-				}
-				history = append(history, &genai.Content{Role: "user", Parts: []genai.Part{genai.FunctionResponse{Name: name, Response: respObj}}})
 			}
 		}
 
@@ -178,69 +129,48 @@ func (g *GeminiClient) ChatCompletionTask(ctx context.Context, req *CompletionRe
 		resp, err := cs.SendMessage(ctx, userParts...)
 		if err != nil {
 			log.Printf("gemini: API error: %v", err)
-			messageChannel <- ai.ChatCompletionMessage{
-				Role:    ai.ChatMessageRoleAssistant,
+			messageChannel <- ChatMessage{
+				Role:    MessageRoleAssistant,
 				Content: "Error communicating with Gemini: " + err.Error(),
 			}
 			return
 		}
 
-		// Extract response content
-		var (
-			responseContent string
-			toolCalls       []ai.ToolCall
-		)
-
-		for _, candidate := range resp.Candidates {
-			if candidate.Content != nil {
-				for _, part := range candidate.Content.Parts {
-					if text, ok := part.(genai.Text); ok {
-						responseContent += string(text)
-					}
-				}
-				// Extract function calls from candidate
-				for idx, fc := range candidate.FunctionCalls() {
-					// Convert args to JSON string
-					argsJSON, _ := json.Marshal(fc.Args)
-					toolCalls = append(toolCalls, ai.ToolCall{
-						ID:   fmt.Sprintf("gemini-%d", idx),
-						Type: ai.ToolTypeFunction,
-						Function: ai.FunctionCall{
-							Name:      fc.Name,
-							Arguments: string(argsJSON),
-						},
-					})
-				}
+		// Extract response content and convert to agnostic format
+		var msg ChatMessage
+		if len(resp.Candidates) > 0 {
+			msg = MessageFromGeminiCandidate(resp.Candidates[0])
+			// Generate IDs for tool calls since Gemini doesn't provide them
+			for idx := range msg.ToolCalls {
+				msg.ToolCalls[idx].ID = fmt.Sprintf("gemini-%d", idx)
 			}
-		}
-
-		// Send the response
-		msg := ai.ChatCompletionMessage{
-			Role:      ai.ChatMessageRoleAssistant,
-			Content:   responseContent,
-			ToolCalls: toolCalls,
+		} else {
+			msg = ChatMessage{
+				Role:    MessageRoleAssistant,
+				Content: "",
+			}
 		}
 
 		messageChannel <- msg
 
 		// Log detailed response information
-		contentPreview := responseContent
+		contentPreview := msg.Content
 		if len(contentPreview) > 200 {
 			contentPreview = contentPreview[:200] + "..."
 		}
 		
-		if len(toolCalls) > 0 {
-			toolInfo := make([]string, len(toolCalls))
-			for i, tc := range toolCalls {
-				toolInfo[i] = fmt.Sprintf("%s(%s)", tc.Function.Name, tc.Function.Arguments)
+		if len(msg.ToolCalls) > 0 {
+			toolInfo := make([]string, len(msg.ToolCalls))
+			for i, tc := range msg.ToolCalls {
+				toolInfo[i] = fmt.Sprintf("%s(%s)", tc.Name, tc.Arguments)
 			}
 			log.Printf("gemini: completed, content: '%s' (%d chars), tool calls: %d %v", 
-				contentPreview, len(responseContent), len(toolCalls), toolInfo)
-		} else if len(responseContent) == 0 {
+				contentPreview, len(msg.Content), len(msg.ToolCalls), toolInfo)
+		} else if len(msg.Content) == 0 {
 			log.Printf("gemini: completed, empty response (no content or tool calls)")
 		} else {
 			log.Printf("gemini: completed, content: '%s' (%d chars)", 
-				contentPreview, len(responseContent))
+				contentPreview, len(msg.Content))
 		}
 	}()
 

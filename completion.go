@@ -2,15 +2,14 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"time"
-
-	ai "github.com/sashabaranov/go-openai"
 )
 
 type LLM interface {
-	ChatCompletionTask(context.Context, *CompletionRequest, *Chunker) (<-chan []byte, <-chan *ToolCall, <-chan *ai.ChatCompletionMessage)
+	ChatCompletionTask(context.Context, *CompletionRequest, *Chunker) (<-chan []byte, <-chan *ToolCall, <-chan *ChatMessage)
 }
 
 type CompletionRequest struct {
@@ -41,8 +40,8 @@ func NewCompletionRequest(config *Configuration, session Session, tools []Tool) 
 }
 
 func CompleteWithText(ctx ChatContextInterface, msg string) (<-chan string, error) {
-	cmsg := ai.ChatCompletionMessage{
-		Role:    ai.ChatMessageRoleUser,
+	cmsg := ChatMessage{
+		Role:    MessageRoleUser,
 		Content: msg,
 	}
 	log.Printf("complete: %s %.64s...", cmsg.Role, cmsg.Content)
@@ -106,14 +105,20 @@ func complete(ctx ChatContextInterface) (<-chan string, error) {
                     // on the tool call data embedded in the message itself. This
                     // avoids races between toolChan and msgChan arrival order.
                     if len(msg.ToolCalls) > 0 {
-                        for _, otc := range msg.ToolCalls {
-                            if tc, err := ParseOpenAIToolCall(otc); err == nil {
+                        for _, mtc := range msg.ToolCalls {
+                            tc := &ToolCall{
+                                ID:   mtc.ID,
+                                Name: mtc.Name,
+                            }
+                            // Parse arguments from JSON string
+                            tc.Args = make(map[string]interface{})
+                            if err := json.Unmarshal([]byte(mtc.Arguments), &tc.Args); err == nil {
                                 toolch, _ := handleToolCall(ctx, tc)
                                 for r := range toolch {
                                     outputChan <- r
                                 }
                             } else {
-                                log.Printf("complete: failed to parse tool call: %v", err)
+                                log.Printf("complete: failed to parse tool call arguments: %v", err)
                             }
                         }
                     }
@@ -157,8 +162,8 @@ func handleToolCall(ctx ChatContextInterface, toolCall *ToolCall) (<-chan string
 	}
 
 	// Add tool result linked to the initiating assistant tool call.
-	ctx.GetSession().AddMessage(ai.ChatCompletionMessage{
-		Role:       ai.ChatMessageRoleTool,
+	ctx.GetSession().AddMessage(ChatMessage{
+		Role:       MessageRoleTool,
 		Content:    result,
 		ToolCallID: toolCall.ID,
 	})

@@ -6,13 +6,11 @@ import (
 	"time"
 
 	"slices"
-
-	ai "github.com/sashabaranov/go-openai"
 )
 
 type Session interface {
-	GetHistory() []ai.ChatCompletionMessage
-	AddMessage(ai.ChatCompletionMessage)
+	GetHistory() []ChatMessage
+	AddMessage(ChatMessage)
 	Clear()
 }
 
@@ -28,7 +26,7 @@ type SyncMapSessionStore struct {
 }
 
 type LocalSession struct {
-	history []ai.ChatCompletionMessage
+	history []ChatMessage
 	config  *Configuration
 	last    time.Time
 	mu      sync.RWMutex
@@ -84,17 +82,17 @@ func (sessions *SyncMapSessionStore) Get(id string) Session {
 	return session
 }
 
-func (s *LocalSession) GetHistory() []ai.ChatCompletionMessage {
+func (s *LocalSession) GetHistory() []ChatMessage {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	history := make([]ai.ChatCompletionMessage, len(s.history))
+	history := make([]ChatMessage, len(s.history))
 	copy(history, s.history)
 
 	return history
 }
 
-func (s *LocalSession) AddMessage(msg ai.ChatCompletionMessage) {
+func (s *LocalSession) AddMessage(msg ChatMessage) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -112,7 +110,7 @@ func (s *LocalSession) trimHistory() {
 	// "messages with role 'tool' must be a response to a preceding message with 'tool_calls'."
 	// if the second oldest message is a tool, remove it
 	// (the first message is the system message)
-	if s.history[1].Role == ai.ChatMessageRoleTool {
+	if s.history[1].Role == MessageRoleTool {
 		s.history = slices.Delete(s.history, 1, 2)
 	}
 }
@@ -121,6 +119,6 @@ func (s *LocalSession) Clear() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.history = s.history[:0]
-	s.history = append(s.history, ai.ChatCompletionMessage{Role: ai.ChatMessageRoleSystem, Content: s.config.Bot.Prompt})
+	s.history = append(s.history, ChatMessage{Role: MessageRoleSystem, Content: s.config.Bot.Prompt})
 	s.last = time.Now()
 }

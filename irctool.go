@@ -220,18 +220,19 @@ func (t *IrcActionTool) GetSchema() ToolSchema {
 }
 
 func (t *IrcActionTool) Execute(ctx context.Context, args map[string]interface{}) (string, error) {
-	if t.ctx == nil {
-		return "", fmt.Errorf("no IRC context available")
-	}
+    if t.ctx == nil {
+        return "", fmt.Errorf("no IRC context available")
+    }
 
-	message, ok := args["message"].(string)
-	if !ok {
-		return "", fmt.Errorf("message must be a string")
-	}
+    message, ok := args["message"].(string)
+    if !ok {
+        return "", fmt.Errorf("message must be a string")
+    }
 
-	// Send IRC action (CTCP ACTION)
-	t.ctx.Reply(fmt.Sprintf("\x01ACTION %s\x01", message))
+    // Send IRC action directly to the configured channel
+    channel := t.ctx.GetConfig().Server.Channel
+    t.ctx.Action(channel, message)
 
-	log.Printf("IRC ACTION: Sent action: %s", message)
-	return fmt.Sprintf("* %s", message), nil
+    log.Printf("IRC ACTION: Sent action: %s", message)
+    return fmt.Sprintf("* %s", message), nil
 }

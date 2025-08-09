@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-
-	ai "github.com/sashabaranov/go-openai"
 )
 
 type MultiPass struct {
@@ -18,14 +16,14 @@ func NewMultiPass(config APIConfig) *MultiPass {
 	}
 }
 
-func (m *MultiPass) ChatCompletionTask(ctx context.Context, req *CompletionRequest, chunker *Chunker) (<-chan []byte, <-chan *ToolCall, <-chan *ai.ChatCompletionMessage) {
+func (m *MultiPass) ChatCompletionTask(ctx context.Context, req *CompletionRequest, chunker *Chunker) (<-chan []byte, <-chan *ToolCall, <-chan *ChatMessage) {
 	// Parse the model string to extract provider and actual model name
 	parts := strings.SplitN(req.Model, "/", 2)
 	if len(parts) != 2 {
 		// Return error through the channel
-		errorChan := make(chan ai.ChatCompletionMessage, 1)
-		errorChan <- ai.ChatCompletionMessage{
-			Role:    ai.ChatMessageRoleAssistant,
+		errorChan := make(chan ChatMessage, 1)
+		errorChan <- ChatMessage{
+			Role:    MessageRoleAssistant,
 			Content: fmt.Sprintf("Error: model must include provider prefix (e.g., 'openai/gpt-4o', 'ollama/llama3.2'). Got: %s", req.Model),
 		}
 		close(errorChan)
@@ -51,9 +49,9 @@ func (m *MultiPass) ChatCompletionTask(ctx context.Context, req *CompletionReque
 		llm = NewOllamaClient(m.config)
 	default:
 		// Return error through the channel
-		errorChan := make(chan ai.ChatCompletionMessage, 1)
-		errorChan <- ai.ChatCompletionMessage{
-			Role:    ai.ChatMessageRoleAssistant,
+		errorChan := make(chan ChatMessage, 1)
+		errorChan <- ChatMessage{
+			Role:    MessageRoleAssistant,
 			Content: fmt.Sprintf("Error: unknown provider '%s'. Valid providers: openai, anthropic, gemini, ollama", provider),
 		}
 		close(errorChan)

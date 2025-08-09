@@ -10,7 +10,6 @@ import (
 	"regexp"
 
 	ollamaapi "github.com/ollama/ollama/api"
-	ai "github.com/sashabaranov/go-openai"
 )
 
 type OllamaClient struct {
@@ -75,40 +74,14 @@ func stripThinkBlocks(content string) string {
 	return thinkRegex.ReplaceAllString(content, "")
 }
 
-func (o *OllamaClient) ChatCompletionTask(ctx context.Context, req *CompletionRequest, chunker *Chunker) (<-chan []byte, <-chan *ToolCall, <-chan *ai.ChatCompletionMessage) {
-	messageChannel := make(chan ai.ChatCompletionMessage, 10)
+func (o *OllamaClient) ChatCompletionTask(ctx context.Context, req *CompletionRequest, chunker *Chunker) (<-chan []byte, <-chan *ToolCall, <-chan *ChatMessage) {
+	messageChannel := make(chan ChatMessage, 10)
 
 	go func() {
 		defer close(messageChannel)
 
 		// Convert messages to Ollama format
-		var messages []ollamaapi.Message
-		for _, msg := range req.Session.GetHistory() {
-			ollamaMsg := ollamaapi.Message{
-				Role:    msg.Role,
-				Content: msg.Content,
-			}
-			
-			// Preserve tool calls in assistant messages
-			if msg.Role == ai.ChatMessageRoleAssistant && len(msg.ToolCalls) > 0 {
-				var ollamaToolCalls []ollamaapi.ToolCall
-				for _, tc := range msg.ToolCalls {
-					// Parse the arguments back to a map
-					var args map[string]interface{}
-					if err := json.Unmarshal([]byte(tc.Function.Arguments), &args); err == nil {
-						ollamaToolCalls = append(ollamaToolCalls, ollamaapi.ToolCall{
-							Function: ollamaapi.ToolCallFunction{
-								Name:      tc.Function.Name,
-								Arguments: args,
-							},
-						})
-					}
-				}
-				ollamaMsg.ToolCalls = ollamaToolCalls
-			}
-			
-			messages = append(messages, ollamaMsg)
-		}
+		messages := MessagesToOllama(req.Session.GetHistory())
 
 		// Create chat request
 		chatReq := &ollamaapi.ChatRequest{
@@ -136,7 +109,7 @@ func (o *OllamaClient) ChatCompletionTask(ctx context.Context, req *CompletionRe
 		// Accumulate content and capture any tool calls the model returns.
 		var (
 			responseContent string
-			toolCalls       []ai.ToolCall
+			toolCalls       []ChatMessageToolCall
 		)
 		err := o.client.Chat(ctx, chatReq, func(resp ollamaapi.ChatResponse) error {
 			// Append streamed content tokens
@@ -149,14 +122,11 @@ func (o *OllamaClient) ChatCompletionTask(ctx context.Context, req *CompletionRe
 				toolCalls = toolCalls[:0]
 				for idx, tc := range resp.Message.ToolCalls {
 					if parsed := ParseOllamaToolCall(tc); parsed != nil {
-						// Convert back to OpenAI-structured tool call for the rest of the pipeline.
-						toolCalls = append(toolCalls, ai.ToolCall{
-							ID:   fmt.Sprintf("ollama-%d", idx),
-							Type: ai.ToolTypeFunction,
-							Function: ai.FunctionCall{
-								Name:      parsed.Name,
-								Arguments: mustJSON(parsed.Args),
-							},
+						// Convert to agnostic tool call format
+						toolCalls = append(toolCalls, ChatMessageToolCall{
+							ID:        fmt.Sprintf("ollama-%d", idx),
+							Name:      parsed.Name,
+							Arguments: mustJSON(parsed.Args),
 						})
 					}
 				}
@@ -166,8 +136,8 @@ func (o *OllamaClient) ChatCompletionTask(ctx context.Context, req *CompletionRe
 
 		if err != nil {
 			log.Printf("ollama: chat error: %v", err)
-			messageChannel <- ai.ChatCompletionMessage{
-				Role:    ai.ChatMessageRoleAssistant,
+			messageChannel <- ChatMessage{
+				Role:    MessageRoleAssistant,
 				Content: "Error communicating with Ollama: " + err.Error(),
 			}
 			return
@@ -177,8 +147,8 @@ func (o *OllamaClient) ChatCompletionTask(ctx context.Context, req *CompletionRe
 		cleanContent := stripThinkBlocks(responseContent)
 		
 		// Send the complete response (may include tool calls with or without content)
-		messageChannel <- ai.ChatCompletionMessage{
-			Role:      ai.ChatMessageRoleAssistant,
+		messageChannel <- ChatMessage{
+			Role:      MessageRoleAssistant,
 			Content:   cleanContent,
 			ToolCalls: toolCalls,
 		}
@@ -192,7 +162,7 @@ func (o *OllamaClient) ChatCompletionTask(ctx context.Context, req *CompletionRe
 	if len(toolCalls) > 0 {
 		toolInfo := make([]string, len(toolCalls))
 		for i, tc := range toolCalls {
-			toolInfo[i] = fmt.Sprintf("%s(%s)", tc.Function.Name, tc.Function.Arguments)
+			toolInfo[i] = fmt.Sprintf("%s(%s)", tc.Name, tc.Arguments)
 		}
 		log.Printf("ollama: completed, content: '%s' (%d chars), tool calls: %d %v", 
 			contentPreview, len(cleanContent), len(toolCalls), toolInfo)
