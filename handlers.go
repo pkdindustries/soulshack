@@ -156,6 +156,47 @@ func slashSet(ctx ChatContextInterface) {
 		} else {
 			ctx.Reply(fmt.Sprintf("shell tools set to: %s", strings.Join(toolPaths, ", ")))
 		}
+	case "mcpservers":
+		// Parse comma-separated MCP server commands
+		var mcpServers []string
+		if value != "" && value != "none" {
+			mcpServers = strings.Split(value, ",")
+			for i := range mcpServers {
+				mcpServers[i] = strings.TrimSpace(mcpServers[i])
+			}
+		}
+		config.Bot.MCPServers = mcpServers
+		
+		// Get the tool registry
+		sys := ctx.GetSystem()
+		if sys != nil && sys.GetToolRegistry() != nil {
+			registry := sys.GetToolRegistry()
+			
+			// Remove existing MCP tools
+			for _, tool := range registry.All() {
+				if _, ok := tool.(*MCPTool); ok {
+					schema := tool.GetSchema()
+					registry.RemoveTool(schema.Name)
+				}
+			}
+			
+			// Load and add new MCP tools
+			if len(mcpServers) > 0 {
+				newTools, err := LoadMCPTools(mcpServers)
+				if err != nil {
+					log.Printf("warning loading MCP tools: %v", err)
+				}
+				for _, tool := range newTools {
+					registry.AddTool(tool)
+				}
+			}
+		}
+		
+		if len(mcpServers) == 0 {
+			ctx.Reply("MCP servers disabled")
+		} else {
+			ctx.Reply(fmt.Sprintf("MCP servers set to: %s", strings.Join(mcpServers, ", ")))
+		}
 	case "irctools":
 		// Parse comma-separated IRC tool names
 		var ircTools []string
@@ -257,6 +298,12 @@ func slashGet(ctx ChatContextInterface) {
 			ctx.Reply("irctools: none")
 		} else {
 			ctx.Reply(fmt.Sprintf("irctools: %s", strings.Join(config.Bot.IrcTools, ", ")))
+		}
+	case "mcpservers":
+		if len(config.Bot.MCPServers) == 0 {
+			ctx.Reply("mcpservers: none")
+		} else {
+			ctx.Reply(fmt.Sprintf("mcpservers: %s", strings.Join(config.Bot.MCPServers, ", ")))
 		}
 	}
 }

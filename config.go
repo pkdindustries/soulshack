@@ -25,6 +25,7 @@ var ModifiableConfigKeys = []string{
 	"geminikey",
 	"shelltools",
 	"irctools",
+	"mcpservers",
 }
 
 type ModelConfig struct {
@@ -42,6 +43,7 @@ type BotConfig struct {
 	Greeting       string
 	ShellToolPaths []string
 	IrcTools       []string // list of enabled IRC tools (default: all)
+	MCPServers     []string // list of MCP server commands to run
 }
 
 type ServerConfig struct {
@@ -119,6 +121,15 @@ func NewSystem(c *Configuration) System {
 	ircTools := GetIrcTools(c.Bot.IrcTools)
 	allTools = append(allTools, ircTools...)
 
+	// Load MCP server tools
+	if len(c.Bot.MCPServers) > 0 {
+		mcpTools, err := LoadMCPTools(c.Bot.MCPServers)
+		if err != nil {
+			log.Printf("config: warning loading MCP tools: %v", err)
+		}
+		allTools = append(allTools, mcpTools...)
+	}
+
 	s.Tools = NewToolRegistry(allTools)
 
 	if len(allTools) > 0 {
@@ -150,6 +161,7 @@ func (c *Configuration) PrintConfig() {
 	fmt.Printf("maxhistory: %d\n", c.Session.MaxHistory)
 	fmt.Printf("maxtokens: %d\n", c.Model.MaxTokens)
 	fmt.Printf("shelltools: %v\n", c.Bot.ShellToolPaths)
+	fmt.Printf("mcpservers: %v\n", c.Bot.MCPServers)
 
 	fmt.Printf("sessionduration: %s\n", c.Session.TTL)
 	if len(c.API.OpenAIKey) > 3 && c.API.OpenAIKey != "" {
@@ -206,6 +218,7 @@ func NewConfiguration() *Configuration {
 			Greeting:       vip.GetString("greeting"),
 			ShellToolPaths: vip.GetStringSlice("shelltools"),
 			IrcTools:       vip.GetStringSlice("irctools"),
+			MCPServers:     vip.GetStringSlice("mcpservers"),
 		},
 		Model: &ModelConfig{
 			Model:       vip.GetString("model"),
@@ -267,6 +280,7 @@ func initializeConfig() {
 	cmd.PersistentFlags().Float32("top_p", 1, "top P value for the completion")
 	cmd.PersistentFlags().StringSlice("shelltools", []string{}, "comma-separated list of shell tool paths to load")
 	cmd.PersistentFlags().StringSlice("irctools", []string{"irc_op", "irc_kick", "irc_topic", "irc_action"}, "comma-separated list of IRC tools to enable")
+	cmd.PersistentFlags().StringSlice("mcpservers", []string{}, "comma-separated list of MCP server commands to run")
 
 	// timeouts and behavior
 	cmd.PersistentFlags().BoolP("addressed", "a", true, "require bot be addressed by nick for response")
