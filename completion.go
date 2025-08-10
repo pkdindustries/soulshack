@@ -105,6 +105,7 @@ func complete(ctx ChatContextInterface) (<-chan string, error) {
                     // on the tool call data embedded in the message itself. This
                     // avoids races between toolChan and msgChan arrival order.
                     if len(msg.ToolCalls) > 0 {
+                        // Execute all tool calls and add their responses to message history
                         for _, mtc := range msg.ToolCalls {
                             tc := &ToolCall{
                                 ID:   mtc.ID,
@@ -113,13 +114,23 @@ func complete(ctx ChatContextInterface) (<-chan string, error) {
                             // Parse arguments from JSON string
                             tc.Args = make(map[string]interface{})
                             if err := json.Unmarshal([]byte(mtc.Arguments), &tc.Args); err == nil {
-                                toolch, _ := handleToolCall(ctx, tc)
-                                for r := range toolch {
-                                    outputChan <- r
-                                }
+                                executeToolCall(ctx, tc)
+                                // Tool response is added to message history by executeToolCall
                             } else {
                                 log.Printf("complete: failed to parse tool call arguments: %v", err)
+                                // Add error response for this tool call
+                                ctx.GetSession().AddMessage(ChatMessage{
+                                    Role:       MessageRoleTool,
+                                    Content:    fmt.Sprintf("Error parsing arguments: %v", err),
+                                    ToolCallID: mtc.ID,
+                                })
                             }
+                        }
+                        
+                        // After all tool responses are added, continue the completion
+                        toolch, _ := complete(ctx)
+                        for r := range toolch {
+                            outputChan <- r
                         }
                     }
                 }
@@ -134,13 +145,20 @@ func complete(ctx ChatContextInterface) (<-chan string, error) {
 	return outputChan, nil
 }
 
-func handleToolCall(ctx ChatContextInterface, toolCall *ToolCall) (<-chan string, error) {
+func executeToolCall(ctx ChatContextInterface, toolCall *ToolCall) {
 	log.Printf("Tool Call Received: %s(%v)", toolCall.Name, toolCall.Args)
 	sys := ctx.GetSystem()
 	tool, ok := sys.GetToolRegistry().Get(toolCall.Name)
 	if !ok {
 		log.Printf("Tool not found: %s", toolCall.Name)
-		return nil, fmt.Errorf("tool not found: %s", toolCall.Name)
+		result := fmt.Sprintf("Error: tool not found: %s", toolCall.Name)
+		// Add tool result linked to the initiating assistant tool call.
+		ctx.GetSession().AddMessage(ChatMessage{
+			Role:       MessageRoleTool,
+			Content:    result,
+			ToolCallID: toolCall.ID,
+		})
+		return
 	}
 
 	// Set context for contextual tools (like IRC tools)
@@ -167,5 +185,4 @@ func handleToolCall(ctx ChatContextInterface, toolCall *ToolCall) (<-chan string
 		Content:    result,
 		ToolCallID: toolCall.ID,
 	})
-	return complete(ctx)
 }
