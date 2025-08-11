@@ -88,3 +88,12 @@ func (m *MCPTool) Execute(ctx context.Context, args map[string]interface{}) (str
 
 	return string(output), nil
 }
+
+// Close closes the MCP session to release resources
+func (m *MCPTool) Close() error {
+	if m.session != nil {
+		m.session.Close()
+		m.session = nil
+	}
+	return nil
+}

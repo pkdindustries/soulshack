@@ -17,6 +17,12 @@ type Tool interface {
 	Execute(ctx context.Context, args map[string]interface{}) (string, error)
 }
 
+// CloseableTool is a Tool that can be closed to release resources
+type CloseableTool interface {
+	Tool
+	Close() error
+}
+
 // ToolCall represents a request to execute a tool
 type ToolCall struct {
 	ID   string                 // Provider-specific ID (if any)
@@ -96,7 +102,13 @@ func (r *ToolRegistry) AddTool(tool Tool) {
 
 // RemoveTool removes a tool by name from the registry
 func (r *ToolRegistry) RemoveTool(name string) {
-	if _, ok := r.tools[name]; ok {
+	if tool, ok := r.tools[name]; ok {
+		// Clean up closeable tools
+		if closeable, ok := tool.(CloseableTool); ok {
+			if err := closeable.Close(); err != nil {
+				log.Printf("error closing tool %s: %v", name, err)
+			}
+		}
 		delete(r.tools, name)
 		log.Printf("removed tool: %s", name)
 	}
