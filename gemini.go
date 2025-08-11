@@ -60,24 +60,25 @@ func (g *GeminiClient) ChatCompletionTask(ctx context.Context, req *CompletionRe
 		// Convert session history to Gemini chat history
 		msgs := req.Session.GetHistory()
 		history, systemInstruction, _ := MessagesToGeminiContent(msgs)
-		
+
 		// Extract the last user message parts if present
 		var userParts []genai.Part
 		if len(msgs) > 0 {
 			lastMsg := msgs[len(msgs)-1]
-			if lastMsg.Role == MessageRoleUser {
+			switch lastMsg.Role {
+			case MessageRoleUser:
 				userParts = append(userParts, genai.Text(lastMsg.Content))
 				// Remove last from history since we'll send it separately
 				if len(history) > 0 && history[len(history)-1].Role == "user" {
 					history = history[:len(history)-1]
 				}
-			} else if lastMsg.Role == MessageRoleAssistant {
+			case MessageRoleAssistant:
 				// Handle assistant message with tool calls as last message
 				if len(history) > 0 && history[len(history)-1].Role == "model" {
 					userParts = history[len(history)-1].Parts
 					history = history[:len(history)-1]
 				}
-			} else if lastMsg.Role == MessageRoleTool {
+			case MessageRoleTool:
 				// Handle tool response as last message
 				if len(history) > 0 && history[len(history)-1].Role == "user" {
 					userParts = history[len(history)-1].Parts
@@ -158,18 +159,18 @@ func (g *GeminiClient) ChatCompletionTask(ctx context.Context, req *CompletionRe
 		if len(contentPreview) > 200 {
 			contentPreview = contentPreview[:200] + "..."
 		}
-		
+
 		if len(msg.ToolCalls) > 0 {
 			toolInfo := make([]string, len(msg.ToolCalls))
 			for i, tc := range msg.ToolCalls {
 				toolInfo[i] = fmt.Sprintf("%s(%s)", tc.Name, tc.Arguments)
 			}
-			log.Printf("gemini: completed, content: '%s' (%d chars), tool calls: %d %v", 
+			log.Printf("gemini: completed, content: '%s' (%d chars), tool calls: %d %v",
 				contentPreview, len(msg.Content), len(msg.ToolCalls), toolInfo)
 		} else if len(msg.Content) == 0 {
 			log.Printf("gemini: completed, empty response (no content or tool calls)")
 		} else {
-			log.Printf("gemini: completed, content: '%s' (%d chars)", 
+			log.Printf("gemini: completed, content: '%s' (%d chars)",
 				contentPreview, len(msg.Content))
 		}
 	}()

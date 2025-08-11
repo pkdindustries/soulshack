@@ -22,7 +22,7 @@ func GetIrcTools(enabledTools []string) []Tool {
 		"irc_topic":  &IrcTopicTool{},
 		"irc_action": &IrcActionTool{},
 	}
-	
+
 	// Return only enabled tools
 	var tools []Tool
 	for _, name := range enabledTools {
@@ -48,11 +48,11 @@ func (t *IrcOpTool) GetSchema() *jsonschema.Schema {
 		Description: "Grant or revoke IRC operator status",
 		Type:        "object",
 		Properties: map[string]*jsonschema.Schema{
-			"nick": &jsonschema.Schema{
+			"nick": {
 				Type:        "string",
 				Description: "The nick to op/deop",
 			},
-			"grant": &jsonschema.Schema{
+			"grant": {
 				Type:        "boolean",
 				Description: "true to grant op, false to revoke",
 			},
@@ -109,11 +109,11 @@ func (t *IrcKickTool) GetSchema() *jsonschema.Schema {
 		Description: "Kick a user from the IRC channel",
 		Type:        "object",
 		Properties: map[string]*jsonschema.Schema{
-			"nick": &jsonschema.Schema{
+			"nick": {
 				Type:        "string",
 				Description: "The nick to kick",
 			},
-			"reason": &jsonschema.Schema{
+			"reason": {
 				Type:        "string",
 				Description: "The reason for kicking",
 			},
@@ -165,7 +165,7 @@ func (t *IrcTopicTool) GetSchema() *jsonschema.Schema {
 		Description: "Set the IRC channel topic",
 		Type:        "object",
 		Properties: map[string]*jsonschema.Schema{
-			"topic": &jsonschema.Schema{
+			"topic": {
 				Type:        "string",
 				Description: "The new topic for the channel",
 			},
@@ -212,7 +212,7 @@ func (t *IrcActionTool) GetSchema() *jsonschema.Schema {
 		Description: "Send an action message to the IRC channel",
 		Type:        "object",
 		Properties: map[string]*jsonschema.Schema{
-			"message": &jsonschema.Schema{
+			"message": {
 				Type:        "string",
 				Description: "The action message to send",
 			},
@@ -222,19 +222,19 @@ func (t *IrcActionTool) GetSchema() *jsonschema.Schema {
 }
 
 func (t *IrcActionTool) Execute(ctx context.Context, args map[string]interface{}) (string, error) {
-    if t.ctx == nil {
-        return "", fmt.Errorf("no IRC context available")
-    }
+	if t.ctx == nil {
+		return "", fmt.Errorf("no IRC context available")
+	}
 
-    message, ok := args["message"].(string)
-    if !ok {
-        return "", fmt.Errorf("message must be a string")
-    }
+	message, ok := args["message"].(string)
+	if !ok {
+		return "", fmt.Errorf("message must be a string")
+	}
 
-    // Send IRC action directly to the configured channel
-    channel := t.ctx.GetConfig().Server.Channel
-    t.ctx.Action(channel, message)
+	// Send IRC action directly to the configured channel
+	channel := t.ctx.GetConfig().Server.Channel
+	t.ctx.Action(channel, message)
 
-    log.Printf("IRC ACTION: Sent action: %s", message)
-    return fmt.Sprintf("* %s", message), nil
+	log.Printf("IRC ACTION: Sent action: %s", message)
+	return fmt.Sprintf("* %s", message), nil
 }

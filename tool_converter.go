@@ -78,13 +78,13 @@ func ConvertToOpenAI(schema *mcpjsonschema.Schema) ai.Tool {
 	name := ""
 	description := ""
 	var required []string
-	
+
 	if schema != nil {
 		name = schema.Title
 		description = schema.Description
 		required = schema.Required
 	}
-	
+
 	return ai.Tool{
 		Type: ai.ToolTypeFunction,
 		Function: &ai.FunctionDefinition{
@@ -106,14 +106,14 @@ func convertSchemaToAnthropicMap(schema *mcpjsonschema.Schema) map[string]interf
 	}
 
 	propMap := make(map[string]interface{})
-	
+
 	// Always set type, default to string if empty
 	if schema.Type != "" {
 		propMap["type"] = schema.Type
 	} else {
 		propMap["type"] = "string"
 	}
-	
+
 	// Only add description if non-empty
 	if schema.Description != "" {
 		propMap["description"] = schema.Description
@@ -133,7 +133,7 @@ func convertSchemaToAnthropicMap(schema *mcpjsonschema.Schema) map[string]interf
 		}
 	case "object":
 		// Handle nested object properties recursively
-		if schema.Properties != nil && len(schema.Properties) > 0 {
+		if len(schema.Properties) > 0 {
 			props := make(map[string]interface{})
 			for name, prop := range schema.Properties {
 				if prop != nil {
@@ -173,7 +173,7 @@ func ConvertToAnthropic(schema *mcpjsonschema.Schema) anthropic.ToolUnionParam {
 	name := ""
 	description := ""
 	var required []string
-	
+
 	if schema != nil {
 		name = schema.Title
 		description = schema.Description
@@ -182,18 +182,18 @@ func ConvertToAnthropic(schema *mcpjsonschema.Schema) anthropic.ToolUnionParam {
 			required = schema.Required
 		}
 	}
-	
+
 	// Build InputSchema with proper JSON Schema 2020-12 format
 	inputSchema := anthropic.ToolInputSchemaParam{
 		Type:       "object",
 		Properties: properties,
 	}
-	
+
 	// Only add required field if it's not empty
 	if len(required) > 0 {
 		inputSchema.Required = required
 	}
-	
+
 	tool := anthropic.ToolParam{
 		Name:        name,
 		Description: anthropic.String(description),
@@ -269,13 +269,13 @@ func ConvertToGemini(schema *mcpjsonschema.Schema) *genai.Tool {
 	name := ""
 	description := ""
 	var required []string
-	
+
 	if schema != nil {
 		name = schema.Title
 		description = schema.Description
 		required = schema.Required
 	}
-	
+
 	return &genai.Tool{
 		FunctionDeclarations: []*genai.FunctionDeclaration{{
 			Name:        name,
@@ -289,14 +289,13 @@ func ConvertToGemini(schema *mcpjsonschema.Schema) *genai.Tool {
 	}
 }
 
-
 // ConvertToOllama converts a generic tool schema to Ollama native format
 func ConvertToOllama(schema *mcpjsonschema.Schema) ollamaapi.Tool {
 	name := ""
 	description := ""
 	typeStr := "object"
 	var required []string
-	
+
 	if schema != nil {
 		name = schema.Title
 		description = schema.Description
@@ -305,7 +304,7 @@ func ConvertToOllama(schema *mcpjsonschema.Schema) ollamaapi.Tool {
 		}
 		required = schema.Required
 	}
-	
+
 	// Create the tool function
 	toolFunc := ollamaapi.ToolFunction{
 		Name:        name,
@@ -353,7 +352,7 @@ func convertSchemaToOllamaProperty(schema *mcpjsonschema.Schema) ollamaapi.ToolP
 		// For nested objects, we need to handle properties recursively
 		// Note: Ollama's ToolProperty doesn't have a Properties field for nested objects
 		// So we'll need to handle this differently or flatten the structure
-		if schema.Properties != nil && len(schema.Properties) > 0 {
+		if len(schema.Properties) > 0 {
 			// We can't directly set nested properties in ToolProperty
 			// This is a limitation of the Ollama API structure
 			// For now, we'll just mark it as object type
