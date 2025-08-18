@@ -45,10 +45,9 @@ func (p *PollyLLM) ChatCompletionStream(ctx context.Context, req *CompletionRequ
 	}
 	
 	// Set base URL for ollama if provided
-	if config, ok := req.Session.(*LocalSession); ok && config != nil {
-		if config.config != nil && config.config.API != nil && config.config.API.OllamaURL != "" {
-			pollyReq.BaseURL = config.config.API.OllamaURL
-		}
+	config := chatCtx.GetConfig()
+	if config != nil && config.API != nil && config.API.OllamaURL != "" {
+		pollyReq.BaseURL = config.API.OllamaURL
 	}
 
 	// Get the system for registry access
@@ -56,7 +55,6 @@ func (p *PollyLLM) ChatCompletionStream(ctx context.Context, req *CompletionRequ
 	registry := sys.GetToolRegistry()
 
 	// Create processor with IRC context and chunking
-	config := chatCtx.GetConfig()
 	maxChunkSize := 400 // Default IRC chunk size
 	if config.Session.ChunkMax > 0 {
 		maxChunkSize = config.Session.ChunkMax

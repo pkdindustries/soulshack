@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alexschlessinger/pollytool/sessions"
 	"github.com/alexschlessinger/pollytool/tools"
 	vip "github.com/spf13/viper"
 )
@@ -83,7 +84,7 @@ type Configuration struct {
 }
 
 type SystemImpl struct {
-	Store SessionStore
+	Store sessions.SessionStore
 	LLM   LLM
 	Tools *tools.ToolRegistry
 }
@@ -100,7 +101,7 @@ func (s *SystemImpl) SetToolRegistry(reg *tools.ToolRegistry) {
 	s.Tools = reg
 }
 
-func (s *SystemImpl) GetSessionStore() SessionStore {
+func (s *SystemImpl) GetSessionStore() sessions.SessionStore {
 	return s.Store
 }
 
@@ -151,8 +152,14 @@ func NewSystem(c *Configuration) System {
 	// initialize the api for completions using Polly
 	s.LLM = NewPollyLLM(*c.API)
 
-	// initialize sessions
-	s.Store = NewSessionStore(c)
+	// initialize sessions with pollytool's SyncMapSessionStore
+	log.Printf("sessionstore: syncmap")
+	sessionConfig := &sessions.SessionConfig{
+		MaxHistory:   c.Session.MaxHistory,
+		TTL:          c.Session.TTL,
+		SystemPrompt: c.Bot.Prompt,
+	}
+	s.Store = sessions.NewSyncMapSessionStore(sessionConfig)
 	return &s
 }
 

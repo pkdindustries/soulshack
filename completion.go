@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/alexschlessinger/pollytool/messages"
+	"github.com/alexschlessinger/pollytool/sessions"
 	"github.com/alexschlessinger/pollytool/tools"
 )
 
@@ -22,11 +23,11 @@ type CompletionRequest struct {
 	TopP        float32
 	Model       string
 	MaxTokens   int
-	Session     Session
+	Session     sessions.Session
 	Tools       []tools.Tool
 }
 
-func NewCompletionRequest(config *Configuration, session Session, tools []tools.Tool) *CompletionRequest {
+func NewCompletionRequest(config *Configuration, session sessions.Session, tools []tools.Tool) *CompletionRequest {
 	return &CompletionRequest{
 		APIKey:      config.API.OpenAIKey,
 		BaseURL:     config.API.OpenAIURL,
