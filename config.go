@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alexschlessinger/pollytool/tools"
 	vip "github.com/spf13/viper"
 )
 
@@ -84,18 +85,18 @@ type Configuration struct {
 type SystemImpl struct {
 	Store SessionStore
 	LLM   LLM
-	Tools *ToolRegistry
+	Tools *tools.ToolRegistry
 }
 
 func (s *SystemImpl) GetLLM() LLM {
 	return s.LLM
 }
 
-func (s *SystemImpl) GetToolRegistry() *ToolRegistry {
+func (s *SystemImpl) GetToolRegistry() *tools.ToolRegistry {
 	return s.Tools
 }
 
-func (s *SystemImpl) SetToolRegistry(reg *ToolRegistry) {
+func (s *SystemImpl) SetToolRegistry(reg *tools.ToolRegistry) {
 	s.Tools = reg
 }
 
@@ -106,11 +107,11 @@ func (s *SystemImpl) GetSessionStore() SessionStore {
 func NewSystem(c *Configuration) System {
 	s := SystemImpl{}
 	// initialize tools
-	var allTools []Tool
+	var allTools []tools.Tool
 
-	// Load shell tools from paths
+	// Load shell tools from paths using pollytool
 	if len(c.Bot.ShellToolPaths) > 0 {
-		shellTools, err := LoadTools(c.Bot.ShellToolPaths)
+		shellTools, err := tools.LoadShellTools(c.Bot.ShellToolPaths)
 		if err != nil {
 			log.Printf("config: warning loading tools: %v", err)
 		}
@@ -121,23 +122,34 @@ func NewSystem(c *Configuration) System {
 	ircTools := GetIrcTools(c.Bot.IrcTools)
 	allTools = append(allTools, ircTools...)
 
-	// Load MCP server tools
+	// Add pollytool native tools
+	// Example: allTools = append(allTools, &tools.UpperCaseTool{}, &tools.WordCountTool{})
+
+	// Load MCP server tools using pollytool
 	if len(c.Bot.MCPServers) > 0 {
-		mcpTools, err := LoadMCPTools(c.Bot.MCPServers)
-		if err != nil {
-			log.Printf("config: warning loading MCP tools: %v", err)
+		for _, server := range c.Bot.MCPServers {
+			mcpClient, err := tools.NewMCPClient(server)
+			if err != nil {
+				log.Printf("config: warning connecting to MCP server %s: %v", server, err)
+				continue
+			}
+			mcpTools, err := mcpClient.ListTools()
+			if err != nil {
+				log.Printf("config: warning listing tools from MCP server %s: %v", server, err)
+				continue
+			}
+			allTools = append(allTools, mcpTools...)
 		}
-		allTools = append(allTools, mcpTools...)
 	}
 
-	s.Tools = NewToolRegistry(allTools)
+	s.Tools = tools.NewToolRegistry(allTools)
 
 	if len(allTools) > 0 {
 		log.Printf("config: loaded %d tools", len(allTools))
 	}
 
-	// initialize the api for completions using MultiPass
-	s.LLM = NewMultiPass(*c.API)
+	// initialize the api for completions using Polly
+	s.LLM = NewPollyLLM(*c.API)
 
 	// initialize sessions
 	s.Store = NewSessionStore(c)

@@ -5,6 +5,7 @@ import (
 	"log"
 	"strings"
 
+	"github.com/alexschlessinger/pollytool/tools"
 	"github.com/lrstanley/girc"
 )
 
@@ -31,7 +32,7 @@ type Server interface {
 
 type System interface {
 	GetLLM() LLM
-	GetToolRegistry() *ToolRegistry
+	GetToolRegistry() *tools.ToolRegistry
 	GetSessionStore() SessionStore
 }
 

@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alexschlessinger/pollytool/messages"
 	"github.com/lrstanley/girc"
 	"github.com/stretchr/testify/assert"
 )
@@ -48,8 +49,8 @@ func TestChatSession(t *testing.T) {
 	store := ctx.GetSystem().GetSessionStore()
 	t.Run("Test interactions and message history", func(t *testing.T) {
 		session1 := store.Get("session1")
-		session1.AddMessage(ChatMessage{Role: MessageRoleUser, Content: "Hello!"})
-		session1.AddMessage(ChatMessage{Role: MessageRoleAssistant, Content: "Hi there!"})
+		session1.AddMessage(messages.ChatMessage{Role: messages.MessageRoleUser, Content: "Hello!"})
+		session1.AddMessage(messages.ChatMessage{Role: messages.MessageRoleAssistant, Content: "Hi there!"})
 
 		assert.Len(t, session1.GetHistory(), 3)
 		assert.Equal(t, session1.GetHistory()[1].Content, "Hello!")
@@ -70,27 +71,27 @@ func TestExpiry(t *testing.T) {
 	t.Run("Test session expiration and trimming", func(t *testing.T) {
 
 		session2 := store.Get("session2")
-		session2.AddMessage(ChatMessage{Role: MessageRoleUser, Content: "How are you?"})
-		session2.AddMessage(ChatMessage{Role: MessageRoleAssistant, Content: "I'm doing great, thanks!"})
-		session2.AddMessage(ChatMessage{Role: MessageRoleUser, Content: "What's your name?"})
+		session2.AddMessage(messages.ChatMessage{Role: messages.MessageRoleUser, Content: "How are you?"})
+		session2.AddMessage(messages.ChatMessage{Role: messages.MessageRoleAssistant, Content: "I'm doing great, thanks!"})
+		session2.AddMessage(messages.ChatMessage{Role: messages.MessageRoleUser, Content: "What's your name?"})
 
 		time.Sleep(1 * time.Second)
 		session3 := store.Get("session2")
 
 		assert.NotEqual(t, session2, session3, "Expired session should not be reused")
 		assert.Len(t, session3.GetHistory(), 1, "New session history should have one system message")
-		assert.Equal(t, session3.GetHistory()[0].Role, MessageRoleSystem, "First message should be a system message")
+		assert.Equal(t, session3.GetHistory()[0].Role, messages.MessageRoleSystem, "First message should be a system message")
 
-		session3.AddMessage(ChatMessage{Role: MessageRoleUser, Content: "Hello again! I scroll off"})
-		session3.AddMessage(ChatMessage{Role: MessageRoleAssistant, Content: "Hi! Nice to see you again!"})
+		session3.AddMessage(messages.ChatMessage{Role: messages.MessageRoleUser, Content: "Hello again! I scroll off"})
+		session3.AddMessage(messages.ChatMessage{Role: messages.MessageRoleAssistant, Content: "Hi! Nice to see you again!"})
 
 		assert.Len(t, session3.GetHistory(), 3, "History should include the latest 2 messages plus the initial system message")
 		assert.Equal(t, session3.GetHistory()[1].Content, "Hello again! I scroll off")
 		assert.Equal(t, session3.GetHistory()[2].Content, "Hi! Nice to see you again!")
-		assert.Equal(t, session3.GetHistory()[0].Role, MessageRoleSystem, "First message should be a system message")
+		assert.Equal(t, session3.GetHistory()[0].Role, messages.MessageRoleSystem, "First message should be a system message")
 
-		session3.AddMessage(ChatMessage{Role: MessageRoleUser, Content: "Hello again?"})
-		session3.AddMessage(ChatMessage{Role: MessageRoleAssistant, Content: "WHAT?!"})
+		session3.AddMessage(messages.ChatMessage{Role: messages.MessageRoleUser, Content: "Hello again?"})
+		session3.AddMessage(messages.ChatMessage{Role: messages.MessageRoleAssistant, Content: "WHAT?!"})
 
 		assert.Equal(t, session3.GetHistory()[2].Content, "Hello again?")
 		assert.Equal(t, session3.GetHistory()[3].Content, "WHAT?!")
@@ -123,8 +124,8 @@ func TestSessionConcurrency(t *testing.T) {
 				session := store.Get(sessionID)
 
 				for j := 0; j < messagesPerUser; j++ {
-					session.AddMessage(ChatMessage{Role: MessageRoleUser, Content: fmt.Sprintf("User %d message %d", userIndex, j)})
-					session.AddMessage(ChatMessage{Role: MessageRoleAssistant, Content: fmt.Sprintf("Assistant response to user %d message %d", userIndex, j)})
+					session.AddMessage(messages.ChatMessage{Role: messages.MessageRoleUser, Content: fmt.Sprintf("User %d message %d", userIndex, j)})
+					session.AddMessage(messages.ChatMessage{Role: messages.MessageRoleAssistant, Content: fmt.Sprintf("Assistant response to user %d message %d", userIndex, j)})
 				}
 			}(i)
 		}
@@ -167,8 +168,8 @@ func TestSingleSessionConcurrency(t *testing.T) {
 			go func(userIndex int) {
 				defer wg.Done()
 				for j := 0; j < messagesPerUser; j++ {
-					session.AddMessage(ChatMessage{Role: MessageRoleUser, Content: fmt.Sprintf("User %d message %d", userIndex, j)})
-					session.AddMessage(ChatMessage{Role: MessageRoleAssistant, Content: fmt.Sprintf("Assistant response to user %d message %d", userIndex, j)})
+					session.AddMessage(messages.ChatMessage{Role: messages.MessageRoleUser, Content: fmt.Sprintf("User %d message %d", userIndex, j)})
+					session.AddMessage(messages.ChatMessage{Role: messages.MessageRoleAssistant, Content: fmt.Sprintf("Assistant response to user %d message %d", userIndex, j)})
 				}
 			}(i)
 		}
@@ -219,8 +220,8 @@ func TestSessionReapStress(t *testing.T) {
 	for i := 0; i < numSessions/2; i++ {
 		sessionID := fmt.Sprintf("session-%d", i)
 		session := store.Get(sessionID)
-		session.AddMessage(ChatMessage{Role: MessageRoleUser, Content: fmt.Sprintf("message-%d", 0)})
-		session.AddMessage(ChatMessage{Role: MessageRoleUser, Content: fmt.Sprintf("message-%d", 1)})
+		session.AddMessage(messages.ChatMessage{Role: messages.MessageRoleUser, Content: fmt.Sprintf("message-%d", 0)})
+		session.AddMessage(messages.ChatMessage{Role: messages.MessageRoleUser, Content: fmt.Sprintf("message-%d", 1)})
 	}
 
 	// wait for the unfreshened half to time out
@@ -245,24 +246,24 @@ func TestSessionReapStress(t *testing.T) {
 func TestSessionWindow(t *testing.T) {
 	testCases := []struct {
 		name       string
-		history    []ChatMessage
+		history    []messages.ChatMessage
 		maxHistory int
-		expected   []ChatMessage
+		expected   []messages.ChatMessage
 	}{
 		{
 			name: "Simple_case",
-			history: []ChatMessage{
-				{Role: MessageRoleUser, Content: "Prompt"},
-				{Role: MessageRoleUser, Content: "Message 1"},
-				{Role: MessageRoleUser, Content: "Message 2"},
-				{Role: MessageRoleUser, Content: "Message 3"},
-				{Role: MessageRoleUser, Content: "Message 4"},
+			history: []messages.ChatMessage{
+				{Role: messages.MessageRoleUser, Content: "Prompt"},
+				{Role: messages.MessageRoleUser, Content: "Message 1"},
+				{Role: messages.MessageRoleUser, Content: "Message 2"},
+				{Role: messages.MessageRoleUser, Content: "Message 3"},
+				{Role: messages.MessageRoleUser, Content: "Message 4"},
 			},
 			maxHistory: 2,
-			expected: []ChatMessage{
-				{Role: MessageRoleUser, Content: "Prompt"},
-				{Role: MessageRoleUser, Content: "Message 3"},
-				{Role: MessageRoleUser, Content: "Message 4"},
+			expected: []messages.ChatMessage{
+				{Role: messages.MessageRoleUser, Content: "Prompt"},
+				{Role: messages.MessageRoleUser, Content: "Message 3"},
+				{Role: messages.MessageRoleUser, Content: "Message 4"},
 			},
 		},
 		// Add more test cases if needed
@@ -298,9 +299,9 @@ func TestSessionWindow(t *testing.T) {
 func BenchmarkTrim(b *testing.B) {
 	testCases := []int{100, 1000, 10000, 20000}
 	for _, msgCount := range testCases {
-		messages := make([]ChatMessage, msgCount)
+		msgs := make([]messages.ChatMessage, msgCount)
 		for i := 0; i < msgCount; i++ {
-			messages[i] = ChatMessage{Role: MessageRoleUser, Content: fmt.Sprintf("Message %d", i)}
+			msgs[i] = messages.ChatMessage{Role: messages.MessageRoleUser, Content: fmt.Sprintf("Message %d", i)}
 		}
 
 		Config := NewConfiguration()
@@ -311,7 +312,7 @@ func BenchmarkTrim(b *testing.B) {
 
 			Config.Session.MaxHistory = msgCount / 2
 			msg := store.Get("test").(*LocalSession)
-			msg.history = messages
+			msg.history = msgs
 
 			b.ResetTimer()
 
@@ -358,11 +359,11 @@ func BenchmarkSessionStress(b *testing.B) {
 							switch action {
 							case 0: // Add user message
 								for j := 0; j < messagesPerUser; j++ {
-									session.AddMessage(ChatMessage{Role: MessageRoleUser, Content: fmt.Sprintf("User %d message %d", userIndex, j)})
+									session.AddMessage(messages.ChatMessage{Role: messages.MessageRoleUser, Content: fmt.Sprintf("User %d message %d", userIndex, j)})
 								}
 							case 1: // Add assistant message
 								for j := 0; j < messagesPerUser; j++ {
-									session.AddMessage(ChatMessage{Role: MessageRoleAssistant, Content: fmt.Sprintf("Assistant response to user %d message %d", userIndex, j)})
+									session.AddMessage(messages.ChatMessage{Role: messages.MessageRoleAssistant, Content: fmt.Sprintf("Assistant response to user %d message %d", userIndex, j)})
 								}
 							case 2:
 							}

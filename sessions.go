@@ -5,12 +5,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/alexschlessinger/pollytool/messages"
 	"slices"
 )
 
 type Session interface {
-	GetHistory() []ChatMessage
-	AddMessage(ChatMessage)
+	GetHistory() []messages.ChatMessage
+	AddMessage(messages.ChatMessage)
 	Clear()
 }
 
@@ -26,7 +27,7 @@ type SyncMapSessionStore struct {
 }
 
 type LocalSession struct {
-	history []ChatMessage
+	history []messages.ChatMessage
 	config  *Configuration
 	last    time.Time
 	mu      sync.RWMutex
@@ -82,17 +83,17 @@ func (sessions *SyncMapSessionStore) Get(id string) Session {
 	return session
 }
 
-func (s *LocalSession) GetHistory() []ChatMessage {
+func (s *LocalSession) GetHistory() []messages.ChatMessage {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	history := make([]ChatMessage, len(s.history))
+	history := make([]messages.ChatMessage, len(s.history))
 	copy(history, s.history)
 
 	return history
 }
 
-func (s *LocalSession) AddMessage(msg ChatMessage) {
+func (s *LocalSession) AddMessage(msg messages.ChatMessage) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -110,7 +111,7 @@ func (s *LocalSession) trimHistory() {
 	// "messages with role 'tool' must be a response to a preceding message with 'tool_calls'."
 	// if the second oldest message is a tool, remove it
 	// (the first message is the system message)
-	if s.history[1].Role == MessageRoleTool {
+	if s.history[1].Role == messages.MessageRoleTool {
 		s.history = slices.Delete(s.history, 1, 2)
 	}
 }
@@ -119,6 +120,6 @@ func (s *LocalSession) Clear() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.history = s.history[:0]
-	s.history = append(s.history, ChatMessage{Role: MessageRoleSystem, Content: s.config.Bot.Prompt})
+	s.history = append(s.history, messages.ChatMessage{Role: messages.MessageRoleSystem, Content: s.config.Bot.Prompt})
 	s.last = time.Now()
 }
