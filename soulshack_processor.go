@@ -19,6 +19,7 @@ type SoulshackStreamProcessor struct {
 	chunkBuffer  *bytes.Buffer
 	registry     *tools.ToolRegistry
 	client       llm.LLM
+	originalModel string // Store the original model name with provider prefix
 }
 
 // NewSoulshackStreamProcessor creates a processor for soulshack
@@ -39,6 +40,9 @@ func (s *SoulshackStreamProcessor) ProcessCompletionStream(ctx context.Context, 
 	go func() {
 		defer close(byteChan)
 		defer s.flushBuffer(byteChan)
+
+		// Save the original model name (MultiPass modifies it by stripping the provider prefix)
+		s.originalModel = req.Model
 
 		// Use SimpleProcessor from pollytool
 		processor := &llm.SimpleProcessor{}
@@ -145,6 +149,8 @@ func (s *SoulshackStreamProcessor) handleToolCallsAndContinue(ctx context.Contex
 
 	// Continue conversation with tool results
 	req.Messages = s.ctx.GetSession().GetHistory()
+	// Restore the original model name (MultiPass strips the provider prefix)
+	req.Model = s.originalModel
 	processor := &llm.SimpleProcessor{}
 	eventChan := s.client.ChatCompletionStream(ctx, req, processor)
 

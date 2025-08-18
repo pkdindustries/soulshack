@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"os"
 
 	"github.com/alexschlessinger/pollytool/llm"
 )
@@ -15,34 +14,11 @@ type PollyLLM struct {
 // NewPollyLLM creates a new pollytool-based LLM client
 func NewPollyLLM(config APIConfig) *PollyLLM {
 	// Map soulshack's API keys to pollytool's expected format
-	apiKeys := make(map[string]string)
-	
-	// Map from soulshack config to pollytool's expected keys
-	if config.OpenAIKey != "" {
-		apiKeys["openai"] = config.OpenAIKey
-	}
-	if config.AnthropicKey != "" {
-		apiKeys["anthropic"] = config.AnthropicKey
-	}
-	if config.GeminiKey != "" {
-		apiKeys["gemini"] = config.GeminiKey
-	}
-	if config.OllamaKey != "" {
-		apiKeys["ollama"] = config.OllamaKey
-	}
-	
-	// Also check environment variables for pollytool format
-	if key := os.Getenv("POLLYTOOL_OPENAIKEY"); key != "" && apiKeys["openai"] == "" {
-		apiKeys["openai"] = key
-	}
-	if key := os.Getenv("POLLYTOOL_ANTHROPICKEY"); key != "" && apiKeys["anthropic"] == "" {
-		apiKeys["anthropic"] = key
-	}
-	if key := os.Getenv("POLLYTOOL_GEMINIKEY"); key != "" && apiKeys["gemini"] == "" {
-		apiKeys["gemini"] = key
-	}
-	if key := os.Getenv("POLLYTOOL_OLLAMAKEY"); key != "" && apiKeys["ollama"] == "" {
-		apiKeys["ollama"] = key
+	apiKeys := map[string]string{
+		"openai":    config.OpenAIKey,
+		"anthropic": config.AnthropicKey,
+		"gemini":    config.GeminiKey,
+		"ollama":    config.OllamaKey,
 	}
 	
 	return &PollyLLM{
