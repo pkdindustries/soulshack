@@ -3,7 +3,7 @@ module pkdindustries/soulshack
 go 1.24.0
 
 require (
-	github.com/alexschlessinger/pollytool v0.0.0-20250819045013-d5207f2fd67b
+	github.com/alexschlessinger/pollytool v0.0.0-20250819045637-5a79abce481d
 	github.com/lrstanley/girc v1.1.0
 	github.com/modelcontextprotocol/go-sdk v0.2.0
 	github.com/spf13/cobra v1.9.1
@@ -52,8 +52,8 @@ require (
 	golang.org/x/sync v0.16.0 // indirect
 	golang.org/x/time v0.12.0 // indirect
 	google.golang.org/api v0.247.0 // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20250811230008-5f3141c8851a // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20250811230008-5f3141c8851a // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20250818200422-3122310a409c // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20250818200422-3122310a409c // indirect
 	google.golang.org/grpc v1.74.2 // indirect
 	google.golang.org/protobuf v1.36.7 // indirect
 )
