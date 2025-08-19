@@ -115,7 +115,7 @@ func slashSet(ctx ChatContextInterface) {
 	case "geminikey":
 		config.API.GeminiKey = value
 		ctx.Reply(fmt.Sprintf("%s set to: %s", param, maskAPIKey(value)))
-	case "shelltools":
+	case "shelltool":
 		// Parse comma-separated shell tool paths
 		var toolPaths []string
 		if value != "" && value != "none" {
@@ -152,11 +152,11 @@ func slashSet(ctx ChatContextInterface) {
 		}
 
 		if len(toolPaths) == 0 {
-			ctx.Reply("shell tools disabled")
+			ctx.Reply("shelltool disabled")
 		} else {
-			ctx.Reply(fmt.Sprintf("shell tools set to: %s", strings.Join(toolPaths, ", ")))
+			ctx.Reply(fmt.Sprintf("shelltool set to: %s", strings.Join(toolPaths, ", ")))
 		}
-	case "mcpservers":
+	case "mcptool":
 		// Parse comma-separated MCP server commands
 		var mcpServers []string
 		if value != "" && value != "none" {
@@ -189,11 +189,11 @@ func slashSet(ctx ChatContextInterface) {
 		}
 
 		if len(mcpServers) == 0 {
-			ctx.Reply("MCP servers disabled")
+			ctx.Reply("mcptool disabled")
 		} else {
-			ctx.Reply(fmt.Sprintf("MCP servers set to: %s", strings.Join(mcpServers, ", ")))
+			ctx.Reply(fmt.Sprintf("mcptool set to: %s", strings.Join(mcpServers, ", ")))
 		}
-	case "irctools":
+	case "irctool":
 		// Parse comma-separated IRC tool names
 		var ircTools []string
 		if value != "" && value != "none" {
@@ -225,9 +225,9 @@ func slashSet(ctx ChatContextInterface) {
 		}
 
 		if len(ircTools) == 0 {
-			ctx.Reply("IRC tools disabled")
+			ctx.Reply("irctool disabled")
 		} else {
-			ctx.Reply(fmt.Sprintf("IRC tools set to: %s", strings.Join(ircTools, ", ")))
+			ctx.Reply(fmt.Sprintf("irctool set to: %s", strings.Join(ircTools, ", ")))
 		}
 	case "thinking":
 		thinking, err := strconv.ParseBool(value)
@@ -307,23 +307,23 @@ func slashGet(ctx ChatContextInterface) {
 	case "geminikey":
 		masked := maskAPIKey(config.API.GeminiKey)
 		ctx.Reply(fmt.Sprintf("%s: %s", param, masked))
-	case "shelltools":
+	case "shelltool":
 		if len(config.Bot.ShellToolPaths) == 0 {
-			ctx.Reply("shelltools: none")
+			ctx.Reply("shelltool: none")
 		} else {
-			ctx.Reply(fmt.Sprintf("shelltools: %s", strings.Join(config.Bot.ShellToolPaths, ", ")))
+			ctx.Reply(fmt.Sprintf("shelltool: %s", strings.Join(config.Bot.ShellToolPaths, ", ")))
 		}
-	case "irctools":
+	case "irctool":
 		if len(config.Bot.IrcTools) == 0 {
-			ctx.Reply("irctools: none")
+			ctx.Reply("irctool: none")
 		} else {
-			ctx.Reply(fmt.Sprintf("irctools: %s", strings.Join(config.Bot.IrcTools, ", ")))
+			ctx.Reply(fmt.Sprintf("irctool: %s", strings.Join(config.Bot.IrcTools, ", ")))
 		}
-	case "mcpservers":
+	case "mcptool":
 		if len(config.Bot.MCPServers) == 0 {
-			ctx.Reply("mcpservers: none")
+			ctx.Reply("mcptool: none")
 		} else {
-			ctx.Reply(fmt.Sprintf("mcpservers: %s", strings.Join(config.Bot.MCPServers, ", ")))
+			ctx.Reply(fmt.Sprintf("mcptool: %s", strings.Join(config.Bot.MCPServers, ", ")))
 		}
 	case "thinking":
 		ctx.Reply(fmt.Sprintf("%s: %t", param, config.Model.Thinking))

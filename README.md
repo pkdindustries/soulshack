@@ -59,14 +59,14 @@ See examples/chatbot.yml for a working config file (uses an anthropic/* model as
 To enable shell tools, pass tool paths:
 ```bash
 soulshack --channel '#soulshack' --model ollama/llama3.2 \
-  --shelltools examples/tools/datetime.sh,examples/tools/weather.py
+  --shelltool examples/tools/datetime.sh --shelltool examples/tools/weather.py
 ```
 
 To connect to MCP (Model Context Protocol) servers:
 ```bash
 soulshack --channel '#soulshack' --model ollama/llama3.2 \
-  --mcpservers "npx @modelcontextprotocol/server-filesystem" \
-  --mcpservers "uvx mcp-server-git"
+  --mcptool "npx @modelcontextprotocol/server-filesystem" \
+  --mcptool "uvx mcp-server-git"
 ```
 
 ## configuration
@@ -105,9 +105,9 @@ LLM/API configuration:
   -t, --apitimeout duration        timeout for each completion request (default 5m0s)
       --temperature float32        temperature for the completion (default 0.7)
       --top_p float32              top P value for the completion (default 1)
-      --shelltools strings         comma-separated list of shell tool paths to load
-      --irctools strings           comma-separated list of IRC tools to enable (default: irc_op,irc_kick,irc_topic,irc_action)
-      --mcpservers strings         comma-separated list of MCP server commands to run
+      --shelltool strings          shell tool paths to load (can be specified multiple times or comma-separated)
+      --irctool strings            IRC tools to enable (can be specified multiple times or comma-separated) (default: irc_op,irc_kick,irc_topic,irc_action)
+      --mcptool strings            MCP server commands to run (can be specified multiple times or comma-separated)
 
 Behavior & session:
   -a, --addressed                  require bot be addressed by nick for response (default true)
@@ -152,9 +152,9 @@ Modifiable parameters via `/set` and `/get`:
 - `openaikey` - OpenAI API key (masked when reading)
 - `anthropickey` - Anthropic API key (masked when reading)
 - `geminikey` - Gemini API key (masked when reading)
-- `shelltools` - comma-separated shell tool paths
-- `irctools` - comma-separated IRC tools (irc_op, irc_kick, irc_topic, irc_action)
-- `mcpservers` - comma-separated MCP server commands
+- `shelltool` - shell tool paths (comma-separated or multiple values)
+- `irctool` - IRC tools to enable (comma-separated or multiple values)
+- `mcptool` - MCP server commands (comma-separated or multiple values)
 
 
 ## tools
@@ -163,7 +163,7 @@ Soulshack supports three types of tools:
 
 ### Shell Tools
 
-Tools are enabled by providing paths to tool scripts via the `--shelltools` flag or configuration file. Each tool must be an executable that responds to the following commands:
+Tools are enabled by providing paths to tool scripts via the `--shelltool` flag or configuration file. Each tool must be an executable that responds to the following commands:
 
 - --schema: Outputs a JSON schema describing the tool use.
 - --execute $json: Will be called with JSON matching your schema
@@ -237,20 +237,20 @@ Soulshack can connect to MCP (Model Context Protocol) servers, which provide too
 Examples:
 ```bash
 # Filesystem operations
---mcpservers "npx @modelcontextprotocol/server-filesystem"
+--mcptool "npx @modelcontextprotocol/server-filesystem"
 
 # Git operations  
---mcpservers "uvx mcp-server-git"
+--mcptool "uvx mcp-server-git"
 
 # Multiple servers (use the flag multiple times)
---mcpservers "uvx mcp-server-time" --mcpservers "npx @modelcontextprotocol/server-puppeteer"
+--mcptool "uvx mcp-server-time" --mcptool "npx @modelcontextprotocol/server-puppeteer"
 ```
 
 MCP servers automatically expose their available tools to the bot. For more information about MCP, see [modelcontextprotocol.io](https://modelcontextprotocol.io).
 
 ### IRC Tools
 
-Built-in IRC channel management tools can be enabled via `--irctools`:
+Built-in IRC channel management tools can be enabled via `--irctool`:
 - `irc_op` - Grant/revoke operator status
 - `irc_kick` - Kick users from the channel
 - `irc_topic` - Change the channel topic  

@@ -26,9 +26,9 @@ var ModifiableConfigKeys = []string{
 	"openaikey",
 	"anthropickey",
 	"geminikey",
-	"shelltools",
-	"irctools",
-	"mcpservers",
+	"shelltool",
+	"irctool",
+	"mcptool",
 	"showthinkingaction",
 	"showtoolactions",
 }
@@ -185,8 +185,8 @@ func (c *Configuration) PrintConfig() {
 	fmt.Printf("clienttimeout: %s\n", c.API.Timeout)
 	fmt.Printf("maxhistory: %d\n", c.Session.MaxHistory)
 	fmt.Printf("maxtokens: %d\n", c.Model.MaxTokens)
-	fmt.Printf("shelltools: %v\n", c.Bot.ShellToolPaths)
-	fmt.Printf("mcpservers: %v\n", c.Bot.MCPServers)
+	fmt.Printf("shelltool: %v\n", c.Bot.ShellToolPaths)
+	fmt.Printf("mcptool: %v\n", c.Bot.MCPServers)
 	fmt.Printf("showthinkingaction: %t\n", c.Bot.ShowThinkingAction)
 	fmt.Printf("showtoolactions: %t\n", c.Bot.ShowToolActions)
 
@@ -244,9 +244,9 @@ func NewConfiguration() *Configuration {
 			Addressed:          vip.GetBool("addressed"),
 			Prompt:             vip.GetString("prompt"),
 			Greeting:           vip.GetString("greeting"),
-			ShellToolPaths:     vip.GetStringSlice("shelltools"),
-			IrcTools:           vip.GetStringSlice("irctools"),
-			MCPServers:         vip.GetStringSlice("mcpservers"),
+			ShellToolPaths:     vip.GetStringSlice("shelltool"),
+			IrcTools:           vip.GetStringSlice("irctool"),
+			MCPServers:         vip.GetStringSlice("mcptool"),
 			ShowThinkingAction: vip.GetBool("showthinkingaction"),
 			ShowToolActions:    vip.GetBool("showtoolactions"),
 		},
@@ -310,9 +310,9 @@ func initializeConfig() {
 	cmd.PersistentFlags().Float32("temperature", 0.7, "temperature for the completion")
 	cmd.PersistentFlags().Float32("top_p", 1, "top P value for the completion")
 	cmd.PersistentFlags().Bool("thinking", false, "enable thinking/reasoning for models that support it")
-	cmd.PersistentFlags().StringSlice("shelltools", []string{}, "comma-separated list of shell tool paths to load")
-	cmd.PersistentFlags().StringSlice("irctools", []string{"irc_op", "irc_kick", "irc_topic", "irc_action"}, "comma-separated list of IRC tools to enable")
-	cmd.PersistentFlags().StringSlice("mcpservers", []string{}, "comma-separated list of MCP server commands to run")
+	cmd.PersistentFlags().StringSlice("shelltool", []string{}, "shell tool paths to load (can be specified multiple times or comma-separated)")
+	cmd.PersistentFlags().StringSlice("irctool", []string{"irc_op", "irc_kick", "irc_topic", "irc_action"}, "IRC tools to enable (can be specified multiple times or comma-separated)")
+	cmd.PersistentFlags().StringSlice("mcptool", []string{}, "MCP server commands to run (can be specified multiple times or comma-separated)")
 	cmd.PersistentFlags().Bool("showthinkingaction", true, "show '[thinking]' IRC action when bot is reasoning")
 	cmd.PersistentFlags().Bool("showtoolactions", true, "show '[calling toolname]' IRC actions when executing tools")
 

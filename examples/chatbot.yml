@@ -6,7 +6,7 @@
 nick: chatbot
 
 # IRC channel to join (include # for public channels)
-channel: '#pkd.org'
+channel: '#soulshack'
 # channel: "##private-channel"  # Some networks use ## for unofficial channels
 
 # IRC server connection details
@@ -79,12 +79,12 @@ greeting: wave hello
 # ============================================================================
 
 # External shell tool scripts (must implement --schema and --execute)
-shelltools:
+shelltool:
   - examples/tools/datetime.sh   # Date/time queries
 
 # MCP (Model Context Protocol) servers
 # These are started as subprocesses and provide tools via stdin/stdout
-# mcpservers:
+# mcptool:
 #   - "npx @modelcontextprotocol/server-filesystem"  # File operations
 #   - "uvx mcp-server-git"                          # Git operations
 #   - "uvx mcp-server-time"                         # Time/timezone tools
@@ -92,14 +92,14 @@ shelltools:
 
 # IRC management tools (enabled by default)
 # Comment out or customize to change which IRC tools are available
-# irctools:
+# irctool:
 #   - irc_op                     # Grant/revoke op status
 #   - irc_kick                   # Kick users from channel
 #   - irc_topic                  # Change channel topic
 #   - irc_action                 # Send /me actions
 
 # To disable all IRC tools:
-# irctools: []
+# irctool: []
 
 # ============================================================================
 # DEBUGGING
