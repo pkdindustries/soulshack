@@ -10,8 +10,8 @@ cloud.google.com/go/compute/metadata v0.8.0 h1:HxMRIbao8w17ZX6wBnjhcDkW6lTFpgcao
 cloud.google.com/go/compute/metadata v0.8.0/go.mod h1:sYOGTp851OV9bOFJ9CH7elVvyzopvWQFNNghtDQ/Biw=
 cloud.google.com/go/longrunning v0.6.7 h1:IGtfDWHhQCgCjwQjV9iiLnUta9LBCo8R9QmAFsS/PrE=
 cloud.google.com/go/longrunning v0.6.7/go.mod h1:EAFV3IZAKmM56TyiE6VAP3VoTzhZzySwI/YI1s/nRsY=
-github.com/alexschlessinger/pollytool v0.0.0-20250818080542-c9f913bf41c7 h1:C4wn0I7F8zsSnX//jfB+cOkVCzNwnlOL6FalcD8Tb/4=
-github.com/alexschlessinger/pollytool v0.0.0-20250818080542-c9f913bf41c7/go.mod h1:wOLWkbLiz2dc2V37slB8RXJRrBOV8SsbbbXVNfGxttg=
+github.com/alexschlessinger/pollytool v0.0.0-20250818235336-acbc0c16fc7a h1:KgN8V1TQ66pEAEmgIfSsKzhAzC8H5la5HRIHiM2qfG4=
+github.com/alexschlessinger/pollytool v0.0.0-20250818235336-acbc0c16fc7a/go.mod h1:wOLWkbLiz2dc2V37slB8RXJRrBOV8SsbbbXVNfGxttg=
 github.com/anthropics/anthropic-sdk-go v1.9.1 h1:raRhZKmayVSVZtLpLDd6IsMXvxLeeSU03/2IBTerWlg=
 github.com/anthropics/anthropic-sdk-go v1.9.1/go.mod h1:WTz31rIUHUHqai2UslPpw5CwXrQP3geYBioRV4WOLvE=
 github.com/common-nighthawk/go-figure v0.0.0-20210622060536-734e95fb86be h1:J5BL2kskAlV9ckgEsNQXscjIaLiOYiZ75d4e94E6dcQ=

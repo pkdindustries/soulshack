@@ -38,6 +38,11 @@ func (p *PollyLLM) ChatCompletionStream(ctx context.Context, req *CompletionRequ
 		Timeout:     req.Timeout,
 	}
 	
+	// Set thinking effort if enabled
+	if req.Thinking {
+		pollyReq.ThinkingEffort = "medium" // Default to medium effort when enabled
+	}
+	
 	// Special handling for Ollama URLs
 	if req.Model == "local" || req.Model == "ollama" {
 		// Default to a common model if just "local" or "ollama" is specified

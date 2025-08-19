@@ -62,6 +62,12 @@ func (s *SoulshackStreamProcessor) processEvents(ctx context.Context, eventChan 
 			// Stream content through chunking
 			s.processContent(event.Content, byteChan)
 
+		case messages.EventTypeReasoning:
+			// Log that we're receiving thinking/reasoning content
+			if event.Content != "" {
+				log.Printf("Reasoning: %s", event.Content)
+			}
+
 		case messages.EventTypeToolCall:
 			// Tool calls come through the Complete event with the full message
 

@@ -18,6 +18,7 @@ var ModifiableConfigKeys = []string{
 	"maxtokens",
 	"temperature",
 	"top_p",
+	"thinking",
 	"admins",
 	"openaiurl",
 	"ollamaurl",
@@ -35,6 +36,7 @@ type ModelConfig struct {
 	MaxTokens   int
 	Temperature float32
 	TopP        float32
+	Thinking    bool
 }
 
 type BotConfig struct {
@@ -203,6 +205,7 @@ func (c *Configuration) PrintConfig() {
 	fmt.Printf("model: %s\n", c.Model.Model)
 	fmt.Printf("temperature: %f\n", c.Model.Temperature)
 	fmt.Printf("topp: %f\n", c.Model.TopP)
+	fmt.Printf("thinking: %t\n", c.Model.Thinking)
 	fmt.Printf("prompt: %s\n", c.Bot.Prompt)
 	fmt.Printf("greeting: %s\n", c.Bot.Greeting)
 }
@@ -244,6 +247,7 @@ func NewConfiguration() *Configuration {
 			MaxTokens:   vip.GetInt("maxtokens"),
 			Temperature: float32(vip.GetFloat64("temperature")),
 			TopP:        float32(vip.GetFloat64("top_p")),
+			Thinking:    vip.GetBool("thinking"),
 		},
 
 		Session: &SessionConfig{
@@ -297,6 +301,7 @@ func initializeConfig() {
 	cmd.PersistentFlags().DurationP("apitimeout", "t", time.Minute*5, "timeout for each completion request")
 	cmd.PersistentFlags().Float32("temperature", 0.7, "temperature for the completion")
 	cmd.PersistentFlags().Float32("top_p", 1, "top P value for the completion")
+	cmd.PersistentFlags().Bool("thinking", false, "enable thinking/reasoning for models that support it")
 	cmd.PersistentFlags().StringSlice("shelltools", []string{}, "comma-separated list of shell tool paths to load")
 	cmd.PersistentFlags().StringSlice("irctools", []string{"irc_op", "irc_kick", "irc_topic", "irc_action"}, "comma-separated list of IRC tools to enable")
 	cmd.PersistentFlags().StringSlice("mcpservers", []string{}, "comma-separated list of MCP server commands to run")

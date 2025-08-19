@@ -25,6 +25,7 @@ type CompletionRequest struct {
 	MaxTokens   int
 	Session     sessions.Session
 	Tools       []tools.Tool
+	Thinking    bool
 }
 
 func NewCompletionRequest(config *Configuration, session sessions.Session, tools []tools.Tool) *CompletionRequest {
@@ -38,6 +39,7 @@ func NewCompletionRequest(config *Configuration, session sessions.Session, tools
 		Temperature: config.Model.Temperature,
 		TopP:        config.Model.TopP,
 		Tools:       tools,
+		Thinking:    config.Model.Thinking,
 	}
 }
 
