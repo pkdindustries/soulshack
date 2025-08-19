@@ -4,18 +4,19 @@ import (
 	"context"
 	"testing"
 
+	"github.com/alexschlessinger/pollytool/tools"
 	"github.com/lrstanley/girc"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestNewToolRegistry(t *testing.T) {
 	// Load tools from paths
-	tools, err := LoadTools([]string{"examples/tools/datetime.sh"})
+	loadedTools, err := tools.LoadShellTools([]string{"examples/tools/datetime.sh"})
 	assert.NoError(t, err)
-	assert.NotEmpty(t, tools)
+	assert.NotEmpty(t, loadedTools)
 
 	// Create the tool registry
-	registry := NewToolRegistry(tools)
+	registry := tools.NewToolRegistry(loadedTools)
 	assert.NotNil(t, registry)
 
 	// check the currentdate tool
@@ -26,12 +27,12 @@ func TestNewToolRegistry(t *testing.T) {
 
 func TestGetToolSchemas(t *testing.T) {
 	// Load tools from paths
-	tools, err := LoadTools([]string{"examples/tools/datetime.sh", "examples/tools/weather.py"})
+	loadedTools, err := tools.LoadShellTools([]string{"examples/tools/datetime.sh", "examples/tools/weather.py"})
 	assert.NoError(t, err)
-	assert.NotEmpty(t, tools)
+	assert.NotEmpty(t, loadedTools)
 
 	// Create the tool registry
-	registry := NewToolRegistry(tools)
+	registry := tools.NewToolRegistry(loadedTools)
 	assert.NotNil(t, registry)
 
 	// Get tool schemas
@@ -52,12 +53,12 @@ func TestGetToolSchemas(t *testing.T) {
 
 func TestShellTool_Execute(t *testing.T) {
 	// Load tools from paths
-	tools, err := LoadTools([]string{"examples/tools/datetime.sh"})
+	loadedTools, err := tools.LoadShellTools([]string{"examples/tools/datetime.sh"})
 	assert.NoError(t, err)
-	assert.NotEmpty(t, tools)
+	assert.NotEmpty(t, loadedTools)
 
 	// Create the tool registry
-	registry := NewToolRegistry(tools)
+	registry := tools.NewToolRegistry(loadedTools)
 	assert.NotNil(t, registry)
 
 	tool, ok := registry.Get("get_current_date_with_format")

@@ -5,6 +5,8 @@ import (
 	"log"
 	"strings"
 
+	"github.com/alexschlessinger/pollytool/sessions"
+	"github.com/alexschlessinger/pollytool/tools"
 	"github.com/lrstanley/girc"
 )
 
@@ -31,13 +33,13 @@ type Server interface {
 
 type System interface {
 	GetLLM() LLM
-	GetToolRegistry() *ToolRegistry
-	GetSessionStore() SessionStore
+	GetToolRegistry() *tools.ToolRegistry
+	GetSessionStore() sessions.SessionStore
 }
 
 type ChatContextInterface interface {
 	context.Context
-	GetSession() Session
+	GetSession() sessions.Session
 	GetConfig() *Configuration
 	GetSystem() System
 	Message
@@ -47,7 +49,7 @@ type ChatContextInterface interface {
 type ChatContext struct {
 	context.Context
 	Sys     System
-	Session Session
+	Session sessions.Session
 	Config  *Configuration
 	client  *girc.Client
 	event   *girc.Event
@@ -132,7 +134,7 @@ func (c ChatContext) GetArgs() []string {
 	return c.args
 }
 
-func (c ChatContext) GetSession() Session {
+func (c ChatContext) GetSession() sessions.Session {
 	return c.Session
 }
 

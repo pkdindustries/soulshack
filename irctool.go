@@ -5,18 +5,19 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/alexschlessinger/pollytool/tools"
 	"github.com/modelcontextprotocol/go-sdk/jsonschema"
 )
 
-// ContextualTool is a tool that needs IRC context to execute
-type ContextualTool interface {
-	Tool
-	SetContext(ctx ChatContextInterface)
+// IRCContextualTool extends pollytool's ContextualTool for IRC-specific context
+type IRCContextualTool interface {
+	tools.ContextualTool
+	SetIRCContext(ctx ChatContextInterface)
 }
 
-// GetIrcTools returns enabled IRC-related tools (context is set later via SetContext)
-func GetIrcTools(enabledTools []string) []Tool {
-	allTools := map[string]Tool{
+// GetIrcTools returns enabled IRC-related tools as pollytool tools
+func GetIrcTools(enabledTools []string) []tools.Tool {
+	allTools := map[string]tools.Tool{
 		"irc_op":     &IrcOpTool{},
 		"irc_kick":   &IrcKickTool{},
 		"irc_topic":  &IrcTopicTool{},
@@ -24,13 +25,13 @@ func GetIrcTools(enabledTools []string) []Tool {
 	}
 
 	// Return only enabled tools
-	var tools []Tool
+	var result []tools.Tool
 	for _, name := range enabledTools {
 		if tool, ok := allTools[name]; ok {
-			tools = append(tools, tool)
+			result = append(result, tool)
 		}
 	}
-	return tools
+	return result
 }
 
 // IrcOpTool grants or revokes operator status
@@ -38,7 +39,13 @@ type IrcOpTool struct {
 	ctx ChatContextInterface
 }
 
-func (t *IrcOpTool) SetContext(ctx ChatContextInterface) {
+func (t *IrcOpTool) SetContext(ctx any) {
+	if chatCtx, ok := ctx.(ChatContextInterface); ok {
+		t.ctx = chatCtx
+	}
+}
+
+func (t *IrcOpTool) SetIRCContext(ctx ChatContextInterface) {
 	t.ctx = ctx
 }
 
@@ -61,7 +68,7 @@ func (t *IrcOpTool) GetSchema() *jsonschema.Schema {
 	}
 }
 
-func (t *IrcOpTool) Execute(ctx context.Context, args map[string]interface{}) (string, error) {
+func (t *IrcOpTool) Execute(ctx context.Context, args map[string]any) (string, error) {
 	if t.ctx == nil {
 		return "", fmt.Errorf("no IRC context available")
 	}
@@ -99,7 +106,13 @@ type IrcKickTool struct {
 	ctx ChatContextInterface
 }
 
-func (t *IrcKickTool) SetContext(ctx ChatContextInterface) {
+func (t *IrcKickTool) SetContext(ctx any) {
+	if chatCtx, ok := ctx.(ChatContextInterface); ok {
+		t.ctx = chatCtx
+	}
+}
+
+func (t *IrcKickTool) SetIRCContext(ctx ChatContextInterface) {
 	t.ctx = ctx
 }
 
@@ -122,7 +135,7 @@ func (t *IrcKickTool) GetSchema() *jsonschema.Schema {
 	}
 }
 
-func (t *IrcKickTool) Execute(ctx context.Context, args map[string]interface{}) (string, error) {
+func (t *IrcKickTool) Execute(ctx context.Context, args map[string]any) (string, error) {
 	if t.ctx == nil {
 		return "", fmt.Errorf("no IRC context available")
 	}
@@ -155,7 +168,13 @@ type IrcTopicTool struct {
 	ctx ChatContextInterface
 }
 
-func (t *IrcTopicTool) SetContext(ctx ChatContextInterface) {
+func (t *IrcTopicTool) SetContext(ctx any) {
+	if chatCtx, ok := ctx.(ChatContextInterface); ok {
+		t.ctx = chatCtx
+	}
+}
+
+func (t *IrcTopicTool) SetIRCContext(ctx ChatContextInterface) {
 	t.ctx = ctx
 }
 
@@ -174,7 +193,7 @@ func (t *IrcTopicTool) GetSchema() *jsonschema.Schema {
 	}
 }
 
-func (t *IrcTopicTool) Execute(ctx context.Context, args map[string]interface{}) (string, error) {
+func (t *IrcTopicTool) Execute(ctx context.Context, args map[string]any) (string, error) {
 	if t.ctx == nil {
 		return "", fmt.Errorf("no IRC context available")
 	}
@@ -202,7 +221,13 @@ type IrcActionTool struct {
 	ctx ChatContextInterface
 }
 
-func (t *IrcActionTool) SetContext(ctx ChatContextInterface) {
+func (t *IrcActionTool) SetContext(ctx any) {
+	if chatCtx, ok := ctx.(ChatContextInterface); ok {
+		t.ctx = chatCtx
+	}
+}
+
+func (t *IrcActionTool) SetIRCContext(ctx ChatContextInterface) {
 	t.ctx = ctx
 }
 
@@ -221,7 +246,7 @@ func (t *IrcActionTool) GetSchema() *jsonschema.Schema {
 	}
 }
 
-func (t *IrcActionTool) Execute(ctx context.Context, args map[string]interface{}) (string, error) {
+func (t *IrcActionTool) Execute(ctx context.Context, args map[string]any) (string, error) {
 	if t.ctx == nil {
 		return "", fmt.Errorf("no IRC context available")
 	}

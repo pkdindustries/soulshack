@@ -115,7 +115,7 @@ func slashSet(ctx ChatContextInterface) {
 	case "geminikey":
 		config.API.GeminiKey = value
 		ctx.Reply(fmt.Sprintf("%s set to: %s", param, maskAPIKey(value)))
-	case "shelltools":
+	case "shelltool":
 		// Parse comma-separated shell tool paths
 		var toolPaths []string
 		if value != "" && value != "none" {
@@ -125,20 +125,20 @@ func slashSet(ctx ChatContextInterface) {
 			}
 		}
 		config.Bot.ShellToolPaths = toolPaths
-		
+
 		// Get the tool registry
 		sys := ctx.GetSystem()
 		if sys != nil && sys.GetToolRegistry() != nil {
 			registry := sys.GetToolRegistry()
-			
+
 			// Clear non-IRC tools (keep IRC tools)
 			for _, tool := range registry.All() {
 				schema := tool.GetSchema()
 				if schema != nil && !strings.HasPrefix(schema.Title, "irc_") {
-					registry.RemoveTool(schema.Title)
+					registry.Remove(schema.Title)
 				}
 			}
-			
+
 			// Load and add new tools
 			if len(toolPaths) > 0 {
 				newTools, err := LoadTools(toolPaths)
@@ -146,17 +146,17 @@ func slashSet(ctx ChatContextInterface) {
 					log.Printf("warning loading tools: %v", err)
 				}
 				for _, tool := range newTools {
-					registry.AddTool(tool)
+					registry.Register(tool)
 				}
 			}
 		}
-		
+
 		if len(toolPaths) == 0 {
-			ctx.Reply("shell tools disabled")
+			ctx.Reply("shelltool disabled")
 		} else {
-			ctx.Reply(fmt.Sprintf("shell tools set to: %s", strings.Join(toolPaths, ", ")))
+			ctx.Reply(fmt.Sprintf("shelltool set to: %s", strings.Join(toolPaths, ", ")))
 		}
-	case "mcpservers":
+	case "mcptool":
 		// Parse comma-separated MCP server commands
 		var mcpServers []string
 		if value != "" && value != "none" {
@@ -166,22 +166,16 @@ func slashSet(ctx ChatContextInterface) {
 			}
 		}
 		config.Bot.MCPServers = mcpServers
-		
+
 		// Get the tool registry
 		sys := ctx.GetSystem()
 		if sys != nil && sys.GetToolRegistry() != nil {
 			registry := sys.GetToolRegistry()
-			
-			// Remove existing MCP tools
-			for _, tool := range registry.All() {
-				if _, ok := tool.(*MCPTool); ok {
-					schema := tool.GetSchema()
-					if schema != nil {
-						registry.RemoveTool(schema.Title)
-					}
-				}
-			}
-			
+
+			// For now, we can't type-check pollytool's MCPTool directly
+			// TODO: Find a better way to identify and remove MCP tools
+			// For simplicity, just clear and reload all tools when MCP servers change
+
 			// Load and add new MCP tools
 			if len(mcpServers) > 0 {
 				newTools, err := LoadMCPTools(mcpServers)
@@ -189,17 +183,17 @@ func slashSet(ctx ChatContextInterface) {
 					log.Printf("warning loading MCP tools: %v", err)
 				}
 				for _, tool := range newTools {
-					registry.AddTool(tool)
+					registry.Register(tool)
 				}
 			}
 		}
-		
+
 		if len(mcpServers) == 0 {
-			ctx.Reply("MCP servers disabled")
+			ctx.Reply("mcptool disabled")
 		} else {
-			ctx.Reply(fmt.Sprintf("MCP servers set to: %s", strings.Join(mcpServers, ", ")))
+			ctx.Reply(fmt.Sprintf("mcptool set to: %s", strings.Join(mcpServers, ", ")))
 		}
-	case "irctools":
+	case "irctool":
 		// Parse comma-separated IRC tool names
 		var ircTools []string
 		if value != "" && value != "none" {
@@ -209,32 +203,56 @@ func slashSet(ctx ChatContextInterface) {
 			}
 		}
 		config.Bot.IrcTools = ircTools
-		
+
 		// Get the tool registry
 		sys := ctx.GetSystem()
 		if sys != nil && sys.GetToolRegistry() != nil {
 			registry := sys.GetToolRegistry()
-			
+
 			// Remove all existing IRC tools
 			for _, tool := range registry.All() {
 				schema := tool.GetSchema()
 				if schema != nil && strings.HasPrefix(schema.Title, "irc_") {
-					registry.RemoveTool(schema.Title)
+					registry.Remove(schema.Title)
 				}
 			}
-			
+
 			// Add newly enabled IRC tools
 			newIrcTools := GetIrcTools(ircTools)
 			for _, tool := range newIrcTools {
-				registry.AddTool(tool)
+				registry.Register(tool)
 			}
 		}
-		
+
 		if len(ircTools) == 0 {
-			ctx.Reply("IRC tools disabled")
+			ctx.Reply("irctool disabled")
 		} else {
-			ctx.Reply(fmt.Sprintf("IRC tools set to: %s", strings.Join(ircTools, ", ")))
+			ctx.Reply(fmt.Sprintf("irctool set to: %s", strings.Join(ircTools, ", ")))
 		}
+	case "thinking":
+		thinking, err := strconv.ParseBool(value)
+		if err != nil {
+			ctx.Reply("Invalid value for thinking. Please provide 'true' or 'false'.")
+			return
+		}
+		config.Model.Thinking = thinking
+		ctx.Reply(fmt.Sprintf("%s set to: %t", param, config.Model.Thinking))
+	case "showthinkingaction":
+		showThinking, err := strconv.ParseBool(value)
+		if err != nil {
+			ctx.Reply("Invalid value for showthinkingaction. Please provide 'true' or 'false'.")
+			return
+		}
+		config.Bot.ShowThinkingAction = showThinking
+		ctx.Reply(fmt.Sprintf("%s set to: %t", param, config.Bot.ShowThinkingAction))
+	case "showtoolactions":
+		showTools, err := strconv.ParseBool(value)
+		if err != nil {
+			ctx.Reply("Invalid value for showtoolactions. Please provide 'true' or 'false'.")
+			return
+		}
+		config.Bot.ShowToolActions = showTools
+		ctx.Reply(fmt.Sprintf("%s set to: %t", param, config.Bot.ShowToolActions))
 	}
 
 	ctx.GetSession().Clear()
@@ -289,24 +307,30 @@ func slashGet(ctx ChatContextInterface) {
 	case "geminikey":
 		masked := maskAPIKey(config.API.GeminiKey)
 		ctx.Reply(fmt.Sprintf("%s: %s", param, masked))
-	case "shelltools":
+	case "shelltool":
 		if len(config.Bot.ShellToolPaths) == 0 {
-			ctx.Reply("shelltools: none")
+			ctx.Reply("shelltool: none")
 		} else {
-			ctx.Reply(fmt.Sprintf("shelltools: %s", strings.Join(config.Bot.ShellToolPaths, ", ")))
+			ctx.Reply(fmt.Sprintf("shelltool: %s", strings.Join(config.Bot.ShellToolPaths, ", ")))
 		}
-	case "irctools":
+	case "irctool":
 		if len(config.Bot.IrcTools) == 0 {
-			ctx.Reply("irctools: none")
+			ctx.Reply("irctool: none")
 		} else {
-			ctx.Reply(fmt.Sprintf("irctools: %s", strings.Join(config.Bot.IrcTools, ", ")))
+			ctx.Reply(fmt.Sprintf("irctool: %s", strings.Join(config.Bot.IrcTools, ", ")))
 		}
-	case "mcpservers":
+	case "mcptool":
 		if len(config.Bot.MCPServers) == 0 {
-			ctx.Reply("mcpservers: none")
+			ctx.Reply("mcptool: none")
 		} else {
-			ctx.Reply(fmt.Sprintf("mcpservers: %s", strings.Join(config.Bot.MCPServers, ", ")))
+			ctx.Reply(fmt.Sprintf("mcptool: %s", strings.Join(config.Bot.MCPServers, ", ")))
 		}
+	case "thinking":
+		ctx.Reply(fmt.Sprintf("%s: %t", param, config.Model.Thinking))
+	case "showthinkingaction":
+		ctx.Reply(fmt.Sprintf("%s: %t", param, config.Bot.ShowThinkingAction))
+	case "showtoolactions":
+		ctx.Reply(fmt.Sprintf("%s: %t", param, config.Bot.ShowToolActions))
 	}
 }
 

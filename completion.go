@@ -2,14 +2,17 @@ package main
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"log"
 	"time"
+
+	"github.com/alexschlessinger/pollytool/messages"
+	"github.com/alexschlessinger/pollytool/sessions"
+	"github.com/alexschlessinger/pollytool/tools"
 )
 
 type LLM interface {
-	ChatCompletionTask(context.Context, *CompletionRequest, *Chunker) (<-chan []byte, <-chan *ToolCall, <-chan *ChatMessage)
+	// New simplified interface - single byte channel output
+	ChatCompletionStream(context.Context, *CompletionRequest, ChatContextInterface) <-chan []byte
 }
 
 type CompletionRequest struct {
@@ -20,12 +23,12 @@ type CompletionRequest struct {
 	TopP        float32
 	Model       string
 	MaxTokens   int
-	Session     Session
-	Tools       []Tool
+	Session     sessions.Session
+	Tools       []tools.Tool
+	Thinking    bool
 }
 
-func NewCompletionRequest(config *Configuration, session Session, tools []Tool) *CompletionRequest {
-
+func NewCompletionRequest(config *Configuration, session sessions.Session, tools []tools.Tool) *CompletionRequest {
 	return &CompletionRequest{
 		APIKey:      config.API.OpenAIKey,
 		BaseURL:     config.API.OpenAIURL,
@@ -36,12 +39,13 @@ func NewCompletionRequest(config *Configuration, session Session, tools []Tool) 
 		Temperature: config.Model.Temperature,
 		TopP:        config.Model.TopP,
 		Tools:       tools,
+		Thinking:    config.Model.Thinking,
 	}
 }
 
 func CompleteWithText(ctx ChatContextInterface, msg string) (<-chan string, error) {
-	cmsg := ChatMessage{
-		Role:    MessageRoleUser,
+	cmsg := messages.ChatMessage{
+		Role:    messages.MessageRoleUser,
 		Content: msg,
 	}
 	log.Printf("complete: %s %.64s...", cmsg.Role, cmsg.Content)
@@ -54,135 +58,29 @@ func complete(ctx ChatContextInterface) (<-chan string, error) {
 	session := ctx.GetSession()
 	config := ctx.GetConfig()
 	sys := ctx.GetSystem()
+	
 	// Get all tools from registry
-	var tools []Tool
+	var allTools []tools.Tool
 	if sys.GetToolRegistry() != nil {
-		tools = sys.GetToolRegistry().All()
+		allTools = sys.GetToolRegistry().All()
 	}
-	req := NewCompletionRequest(config, session, tools)
+	
+	req := NewCompletionRequest(config, session, allTools)
 	llm := sys.GetLLM()
 
-    textChan, toolChan, msgChan := llm.ChatCompletionTask(ctx, req, NewChunker(config))
+	// Get the byte stream from the new interface
+	byteChan := llm.ChatCompletionStream(context.Background(), req, ctx)
 
+	// Convert bytes to strings for IRC output
 	outputChan := make(chan string, 10)
 
-    go func() {
-        defer close(outputChan)
-
-        for {
-            select {
-            case _, ok := <-toolChan:
-                // Consume toolChan to avoid blocking the producer; we will
-                // execute tool calls based on the assistant message we receive
-                // on msgChan which contains the authoritative ToolCalls.
-                if !ok {
-                    toolChan = nil
-                }
-            case reply, ok := <-textChan:
-                if !ok {
-                    textChan = nil
-                } else {
-                    outputChan <- string(reply)
-                }
-            case msg, ok := <-msgChan:
-                if !ok {
-                    msgChan = nil
-                } else {
-                    log.Printf("complete: received message from msgChan, role: %s, content length: %d, tool calls: %d", 
-                        msg.Role, len(msg.Content), len(msg.ToolCalls))
-                    // Persist the assistant message first.
-                    session.AddMessage(*msg)
-
-                    // If the assistant included content alongside tool calls,
-                    // emit that content before executing the tools to preserve
-                    // conversational order. For non-tool messages, content is
-                    // emitted via textChan already.
-                    if len(msg.ToolCalls) > 0 && msg.Content != "" {
-                        outputChan <- msg.Content
-                    }
-
-                    // If the message included tool calls, execute them now based
-                    // on the tool call data embedded in the message itself. This
-                    // avoids races between toolChan and msgChan arrival order.
-                    if len(msg.ToolCalls) > 0 {
-                        // Execute all tool calls and add their responses to message history
-                        for _, mtc := range msg.ToolCalls {
-                            tc := &ToolCall{
-                                ID:   mtc.ID,
-                                Name: mtc.Name,
-                            }
-                            // Parse arguments from JSON string
-                            tc.Args = make(map[string]interface{})
-                            if err := json.Unmarshal([]byte(mtc.Arguments), &tc.Args); err == nil {
-                                executeToolCall(ctx, tc)
-                                // Tool response is added to message history by executeToolCall
-                            } else {
-                                log.Printf("complete: failed to parse tool call arguments: %v", err)
-                                // Add error response for this tool call
-                                ctx.GetSession().AddMessage(ChatMessage{
-                                    Role:       MessageRoleTool,
-                                    Content:    fmt.Sprintf("Error parsing arguments: %v", err),
-                                    ToolCallID: mtc.ID,
-                                })
-                            }
-                        }
-                        
-                        // After all tool responses are added, continue the completion
-                        toolch, _ := complete(ctx)
-                        for r := range toolch {
-                            outputChan <- r
-                        }
-                    }
-                }
-            }
-
-            if toolChan == nil && textChan == nil && msgChan == nil {
-                break
-            }
-        }
-    }()
+	go func() {
+		defer close(outputChan)
+		
+		for bytes := range byteChan {
+			outputChan <- string(bytes)
+		}
+	}()
 
 	return outputChan, nil
-}
-
-func executeToolCall(ctx ChatContextInterface, toolCall *ToolCall) {
-	log.Printf("Tool Call Received: %s(%v)", toolCall.Name, toolCall.Args)
-	sys := ctx.GetSystem()
-	tool, ok := sys.GetToolRegistry().Get(toolCall.Name)
-	if !ok {
-		log.Printf("Tool not found: %s", toolCall.Name)
-		result := fmt.Sprintf("Error: tool not found: %s", toolCall.Name)
-		// Add tool result linked to the initiating assistant tool call.
-		ctx.GetSession().AddMessage(ChatMessage{
-			Role:       MessageRoleTool,
-			Content:    result,
-			ToolCallID: toolCall.ID,
-		})
-		return
-	}
-
-	// Set context for contextual tools (like IRC tools)
-	if contextualTool, ok := tool.(ContextualTool); ok {
-		contextualTool.SetContext(ctx)
-	}
-
-	result, err := tool.Execute(ctx, toolCall.Args)
-	if err != nil {
-		log.Printf("error executing tool %s: %v", toolCall.Name, err)
-		result = fmt.Sprintf("Error: %v", err)
-	} else {
-		// Log tool output (truncate if too long)
-		outputPreview := result
-		if len(outputPreview) > 200 {
-			outputPreview = outputPreview[:200] + "..."
-		}
-		log.Printf("Tool %s output: %s", toolCall.Name, outputPreview)
-	}
-
-	// Add tool result linked to the initiating assistant tool call.
-	ctx.GetSession().AddMessage(ChatMessage{
-		Role:       MessageRoleTool,
-		Content:    result,
-		ToolCallID: toolCall.ID,
-	})
 }

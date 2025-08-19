@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alexschlessinger/pollytool/sessions"
+	"github.com/alexschlessinger/pollytool/tools"
 	vip "github.com/spf13/viper"
 )
 
@@ -16,6 +18,7 @@ var ModifiableConfigKeys = []string{
 	"maxtokens",
 	"temperature",
 	"top_p",
+	"thinking",
 	"admins",
 	"openaiurl",
 	"ollamaurl",
@@ -23,9 +26,11 @@ var ModifiableConfigKeys = []string{
 	"openaikey",
 	"anthropickey",
 	"geminikey",
-	"shelltools",
-	"irctools",
-	"mcpservers",
+	"shelltool",
+	"irctool",
+	"mcptool",
+	"showthinkingaction",
+	"showtoolactions",
 }
 
 type ModelConfig struct {
@@ -33,17 +38,20 @@ type ModelConfig struct {
 	MaxTokens   int
 	Temperature float32
 	TopP        float32
+	Thinking    bool
 }
 
 type BotConfig struct {
-	Admins         []string
-	Verbose        bool
-	Addressed      bool
-	Prompt         string
-	Greeting       string
-	ShellToolPaths []string
-	IrcTools       []string // list of enabled IRC tools (default: all)
-	MCPServers     []string // list of MCP server commands to run
+	Admins             []string
+	Verbose            bool
+	Addressed          bool
+	Prompt             string
+	Greeting           string
+	ShellToolPaths     []string
+	IrcTools           []string // list of enabled IRC tools (default: all)
+	MCPServers         []string // list of MCP server commands to run
+	ShowThinkingAction bool     // Whether to show "[thinking]" IRC action
+	ShowToolActions    bool     // Whether to show "[calling toolname]" IRC actions
 }
 
 type ServerConfig struct {
@@ -82,35 +90,35 @@ type Configuration struct {
 }
 
 type SystemImpl struct {
-	Store SessionStore
+	Store sessions.SessionStore
 	LLM   LLM
-	Tools *ToolRegistry
+	Tools *tools.ToolRegistry
 }
 
 func (s *SystemImpl) GetLLM() LLM {
 	return s.LLM
 }
 
-func (s *SystemImpl) GetToolRegistry() *ToolRegistry {
+func (s *SystemImpl) GetToolRegistry() *tools.ToolRegistry {
 	return s.Tools
 }
 
-func (s *SystemImpl) SetToolRegistry(reg *ToolRegistry) {
+func (s *SystemImpl) SetToolRegistry(reg *tools.ToolRegistry) {
 	s.Tools = reg
 }
 
-func (s *SystemImpl) GetSessionStore() SessionStore {
+func (s *SystemImpl) GetSessionStore() sessions.SessionStore {
 	return s.Store
 }
 
 func NewSystem(c *Configuration) System {
 	s := SystemImpl{}
 	// initialize tools
-	var allTools []Tool
+	var allTools []tools.Tool
 
-	// Load shell tools from paths
+	// Load shell tools from paths using pollytool
 	if len(c.Bot.ShellToolPaths) > 0 {
-		shellTools, err := LoadTools(c.Bot.ShellToolPaths)
+		shellTools, err := tools.LoadShellTools(c.Bot.ShellToolPaths)
 		if err != nil {
 			log.Printf("config: warning loading tools: %v", err)
 		}
@@ -121,26 +129,43 @@ func NewSystem(c *Configuration) System {
 	ircTools := GetIrcTools(c.Bot.IrcTools)
 	allTools = append(allTools, ircTools...)
 
-	// Load MCP server tools
+	// Add pollytool native tools
+	// Example: allTools = append(allTools, &tools.UpperCaseTool{}, &tools.WordCountTool{})
+
+	// Load MCP server tools using pollytool
 	if len(c.Bot.MCPServers) > 0 {
-		mcpTools, err := LoadMCPTools(c.Bot.MCPServers)
-		if err != nil {
-			log.Printf("config: warning loading MCP tools: %v", err)
+		for _, server := range c.Bot.MCPServers {
+			mcpClient, err := tools.NewMCPClient(server)
+			if err != nil {
+				log.Fatalf("config: %v", err)
+				continue
+			}
+			mcpTools, err := mcpClient.ListTools()
+			if err != nil {
+				log.Fatalf("config: %v", err)
+				continue
+			}
+			allTools = append(allTools, mcpTools...)
 		}
-		allTools = append(allTools, mcpTools...)
 	}
 
-	s.Tools = NewToolRegistry(allTools)
+	s.Tools = tools.NewToolRegistry(allTools)
 
 	if len(allTools) > 0 {
 		log.Printf("config: loaded %d tools", len(allTools))
 	}
 
-	// initialize the api for completions using MultiPass
-	s.LLM = NewMultiPass(*c.API)
+	// initialize the api for completions using Polly
+	s.LLM = NewPollyLLM(*c.API)
 
-	// initialize sessions
-	s.Store = NewSessionStore(c)
+	// initialize sessions with pollytool's SyncMapSessionStore
+	log.Printf("sessionstore: syncmap")
+	sessionConfig := &sessions.SessionConfig{
+		MaxHistory:   c.Session.MaxHistory,
+		TTL:          c.Session.TTL,
+		SystemPrompt: c.Bot.Prompt,
+	}
+	s.Store = sessions.NewSyncMapSessionStore(sessionConfig)
 	return &s
 }
 
@@ -160,8 +185,10 @@ func (c *Configuration) PrintConfig() {
 	fmt.Printf("clienttimeout: %s\n", c.API.Timeout)
 	fmt.Printf("maxhistory: %d\n", c.Session.MaxHistory)
 	fmt.Printf("maxtokens: %d\n", c.Model.MaxTokens)
-	fmt.Printf("shelltools: %v\n", c.Bot.ShellToolPaths)
-	fmt.Printf("mcpservers: %v\n", c.Bot.MCPServers)
+	fmt.Printf("shelltool: %v\n", c.Bot.ShellToolPaths)
+	fmt.Printf("mcptool: %v\n", c.Bot.MCPServers)
+	fmt.Printf("showthinkingaction: %t\n", c.Bot.ShowThinkingAction)
+	fmt.Printf("showtoolactions: %t\n", c.Bot.ShowToolActions)
 
 	fmt.Printf("sessionduration: %s\n", c.Session.TTL)
 	if len(c.API.OpenAIKey) > 3 && c.API.OpenAIKey != "" {
@@ -184,6 +211,7 @@ func (c *Configuration) PrintConfig() {
 	fmt.Printf("model: %s\n", c.Model.Model)
 	fmt.Printf("temperature: %f\n", c.Model.Temperature)
 	fmt.Printf("topp: %f\n", c.Model.TopP)
+	fmt.Printf("thinking: %t\n", c.Model.Thinking)
 	fmt.Printf("prompt: %s\n", c.Bot.Prompt)
 	fmt.Printf("greeting: %s\n", c.Bot.Greeting)
 }
@@ -211,20 +239,23 @@ func NewConfiguration() *Configuration {
 			SASLPass:    vip.GetString("saslpass"),
 		},
 		Bot: &BotConfig{
-			Admins:         vip.GetStringSlice("admins"),
-			Verbose:        vip.GetBool("verbose"),
-			Addressed:      vip.GetBool("addressed"),
-			Prompt:         vip.GetString("prompt"),
-			Greeting:       vip.GetString("greeting"),
-			ShellToolPaths: vip.GetStringSlice("shelltools"),
-			IrcTools:       vip.GetStringSlice("irctools"),
-			MCPServers:     vip.GetStringSlice("mcpservers"),
+			Admins:             vip.GetStringSlice("admins"),
+			Verbose:            vip.GetBool("verbose"),
+			Addressed:          vip.GetBool("addressed"),
+			Prompt:             vip.GetString("prompt"),
+			Greeting:           vip.GetString("greeting"),
+			ShellToolPaths:     vip.GetStringSlice("shelltool"),
+			IrcTools:           vip.GetStringSlice("irctool"),
+			MCPServers:         vip.GetStringSlice("mcptool"),
+			ShowThinkingAction: vip.GetBool("showthinkingaction"),
+			ShowToolActions:    vip.GetBool("showtoolactions"),
 		},
 		Model: &ModelConfig{
 			Model:       vip.GetString("model"),
 			MaxTokens:   vip.GetInt("maxtokens"),
 			Temperature: float32(vip.GetFloat64("temperature")),
 			TopP:        float32(vip.GetFloat64("top_p")),
+			Thinking:    vip.GetBool("thinking"),
 		},
 
 		Session: &SessionConfig{
@@ -278,9 +309,12 @@ func initializeConfig() {
 	cmd.PersistentFlags().DurationP("apitimeout", "t", time.Minute*5, "timeout for each completion request")
 	cmd.PersistentFlags().Float32("temperature", 0.7, "temperature for the completion")
 	cmd.PersistentFlags().Float32("top_p", 1, "top P value for the completion")
-	cmd.PersistentFlags().StringSlice("shelltools", []string{}, "comma-separated list of shell tool paths to load")
-	cmd.PersistentFlags().StringSlice("irctools", []string{"irc_op", "irc_kick", "irc_topic", "irc_action"}, "comma-separated list of IRC tools to enable")
-	cmd.PersistentFlags().StringSlice("mcpservers", []string{}, "comma-separated list of MCP server commands to run")
+	cmd.PersistentFlags().Bool("thinking", false, "enable thinking/reasoning for models that support it")
+	cmd.PersistentFlags().StringSlice("shelltool", []string{}, "shell tool paths to load (can be specified multiple times or comma-separated)")
+	cmd.PersistentFlags().StringSlice("irctool", []string{"irc_op", "irc_kick", "irc_topic", "irc_action"}, "IRC tools to enable (can be specified multiple times or comma-separated)")
+	cmd.PersistentFlags().StringSlice("mcptool", []string{}, "MCP server commands to run (can be specified multiple times or comma-separated)")
+	cmd.PersistentFlags().Bool("showthinkingaction", true, "show '[thinking]' IRC action when bot is reasoning")
+	cmd.PersistentFlags().Bool("showtoolactions", true, "show '[calling toolname]' IRC actions when executing tools")
 
 	// timeouts and behavior
 	cmd.PersistentFlags().BoolP("addressed", "a", true, "require bot be addressed by nick for response")
