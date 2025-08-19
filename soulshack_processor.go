@@ -14,12 +14,13 @@ import (
 
 // SoulshackStreamProcessor handles streaming LLM responses with tool execution and IRC chunking
 type SoulshackStreamProcessor struct {
-	ctx          ChatContextInterface
-	maxChunkSize int
-	chunkBuffer  *bytes.Buffer
-	registry     *tools.ToolRegistry
-	client       llm.LLM
-	originalModel string // Store the original model name with provider prefix
+	ctx                ChatContextInterface
+	maxChunkSize       int
+	chunkBuffer        *bytes.Buffer
+	registry           *tools.ToolRegistry
+	client             llm.LLM
+	originalModel      string // Store the original model name with provider prefix
+	sentThinkingAction bool   // Track if we've sent the thinking action
 }
 
 // NewSoulshackStreamProcessor creates a processor for soulshack
@@ -44,8 +45,8 @@ func (s *SoulshackStreamProcessor) ProcessCompletionStream(ctx context.Context, 
 		// Save the original model name (MultiPass modifies it by stripping the provider prefix)
 		s.originalModel = req.Model
 
-		// Use SimpleProcessor from pollytool
-		processor := &llm.SimpleProcessor{}
+		// Use StreamProcessor from pollytool to handle reasoning events
+		processor := messages.NewStreamProcessor()
 		eventChan := s.client.ChatCompletionStream(ctx, req, processor)
 
 		s.processEvents(ctx, eventChan, req, byteChan)
@@ -56,16 +57,21 @@ func (s *SoulshackStreamProcessor) ProcessCompletionStream(ctx context.Context, 
 
 // processEvents handles the event stream, executes tools, and outputs chunked bytes
 func (s *SoulshackStreamProcessor) processEvents(ctx context.Context, eventChan <-chan *messages.StreamEvent, req *llm.CompletionRequest, byteChan chan<- []byte) {
+	log.Printf("Processing events with ThinkingEffort: %s", req.ThinkingEffort)
 	for event := range eventChan {
+		log.Printf("Received event type: %s", event.Type)
 		switch event.Type {
 		case messages.EventTypeContent:
 			// Stream content through chunking
 			s.processContent(event.Content, byteChan)
 
 		case messages.EventTypeReasoning:
-			// Log that we're receiving thinking/reasoning content
-			if event.Content != "" {
-				log.Printf("Reasoning: %s", event.Content)
+			log.Printf("Got reasoning event! sentThinkingAction=%v", s.sentThinkingAction)
+			// Send thinking action once on first reasoning event
+			if !s.sentThinkingAction {
+				channel := s.ctx.GetConfig().Server.Channel
+				s.ctx.Action(channel, "thinking")
+				s.sentThinkingAction = true
 			}
 
 		case messages.EventTypeToolCall:
@@ -157,7 +163,12 @@ func (s *SoulshackStreamProcessor) handleToolCallsAndContinue(ctx context.Contex
 	req.Messages = s.ctx.GetSession().GetHistory()
 	// Restore the original model name (MultiPass strips the provider prefix)
 	req.Model = s.originalModel
-	processor := &llm.SimpleProcessor{}
+
+	// Reset thinking action flag for continuation
+	s.sentThinkingAction = false
+
+	// Use StreamProcessor to handle reasoning events in continuation
+	processor := messages.NewStreamProcessor()
 	eventChan := s.client.ChatCompletionStream(ctx, req, processor)
 
 	// Process the continuation recursively
@@ -200,10 +211,7 @@ func (s *SoulshackStreamProcessor) extractChunk() []byte {
 	}
 
 	data := s.chunkBuffer.Bytes()
-	end := s.maxChunkSize
-	if end > len(data) {
-		end = len(data)
-	}
+	end := min(s.maxChunkSize, len(data))
 
 	// Try to break on space
 	if idx := bytes.LastIndexByte(data[:end], ' '); idx > 0 {
