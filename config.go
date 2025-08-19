@@ -29,6 +29,8 @@ var ModifiableConfigKeys = []string{
 	"shelltools",
 	"irctools",
 	"mcpservers",
+	"showthinkingaction",
+	"showtoolactions",
 }
 
 type ModelConfig struct {
@@ -40,14 +42,16 @@ type ModelConfig struct {
 }
 
 type BotConfig struct {
-	Admins         []string
-	Verbose        bool
-	Addressed      bool
-	Prompt         string
-	Greeting       string
-	ShellToolPaths []string
-	IrcTools       []string // list of enabled IRC tools (default: all)
-	MCPServers     []string // list of MCP server commands to run
+	Admins             []string
+	Verbose            bool
+	Addressed          bool
+	Prompt             string
+	Greeting           string
+	ShellToolPaths     []string
+	IrcTools           []string // list of enabled IRC tools (default: all)
+	MCPServers         []string // list of MCP server commands to run
+	ShowThinkingAction bool     // Whether to show "[thinking]" IRC action
+	ShowToolActions    bool     // Whether to show "[calling toolname]" IRC actions
 }
 
 type ServerConfig struct {
@@ -133,12 +137,12 @@ func NewSystem(c *Configuration) System {
 		for _, server := range c.Bot.MCPServers {
 			mcpClient, err := tools.NewMCPClient(server)
 			if err != nil {
-				log.Printf("config: warning connecting to MCP server %s: %v", server, err)
+				log.Fatalf("config: %v", err)
 				continue
 			}
 			mcpTools, err := mcpClient.ListTools()
 			if err != nil {
-				log.Printf("config: warning listing tools from MCP server %s: %v", server, err)
+				log.Fatalf("config: %v", err)
 				continue
 			}
 			allTools = append(allTools, mcpTools...)
@@ -183,6 +187,8 @@ func (c *Configuration) PrintConfig() {
 	fmt.Printf("maxtokens: %d\n", c.Model.MaxTokens)
 	fmt.Printf("shelltools: %v\n", c.Bot.ShellToolPaths)
 	fmt.Printf("mcpservers: %v\n", c.Bot.MCPServers)
+	fmt.Printf("showthinkingaction: %t\n", c.Bot.ShowThinkingAction)
+	fmt.Printf("showtoolactions: %t\n", c.Bot.ShowToolActions)
 
 	fmt.Printf("sessionduration: %s\n", c.Session.TTL)
 	if len(c.API.OpenAIKey) > 3 && c.API.OpenAIKey != "" {
@@ -233,14 +239,16 @@ func NewConfiguration() *Configuration {
 			SASLPass:    vip.GetString("saslpass"),
 		},
 		Bot: &BotConfig{
-			Admins:         vip.GetStringSlice("admins"),
-			Verbose:        vip.GetBool("verbose"),
-			Addressed:      vip.GetBool("addressed"),
-			Prompt:         vip.GetString("prompt"),
-			Greeting:       vip.GetString("greeting"),
-			ShellToolPaths: vip.GetStringSlice("shelltools"),
-			IrcTools:       vip.GetStringSlice("irctools"),
-			MCPServers:     vip.GetStringSlice("mcpservers"),
+			Admins:             vip.GetStringSlice("admins"),
+			Verbose:            vip.GetBool("verbose"),
+			Addressed:          vip.GetBool("addressed"),
+			Prompt:             vip.GetString("prompt"),
+			Greeting:           vip.GetString("greeting"),
+			ShellToolPaths:     vip.GetStringSlice("shelltools"),
+			IrcTools:           vip.GetStringSlice("irctools"),
+			MCPServers:         vip.GetStringSlice("mcpservers"),
+			ShowThinkingAction: vip.GetBool("showthinkingaction"),
+			ShowToolActions:    vip.GetBool("showtoolactions"),
 		},
 		Model: &ModelConfig{
 			Model:       vip.GetString("model"),
@@ -305,6 +313,8 @@ func initializeConfig() {
 	cmd.PersistentFlags().StringSlice("shelltools", []string{}, "comma-separated list of shell tool paths to load")
 	cmd.PersistentFlags().StringSlice("irctools", []string{"irc_op", "irc_kick", "irc_topic", "irc_action"}, "comma-separated list of IRC tools to enable")
 	cmd.PersistentFlags().StringSlice("mcpservers", []string{}, "comma-separated list of MCP server commands to run")
+	cmd.PersistentFlags().Bool("showthinkingaction", true, "show '[thinking]' IRC action when bot is reasoning")
+	cmd.PersistentFlags().Bool("showtoolactions", true, "show '[calling toolname]' IRC actions when executing tools")
 
 	// timeouts and behavior
 	cmd.PersistentFlags().BoolP("addressed", "a", true, "require bot be addressed by nick for response")

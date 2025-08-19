@@ -125,12 +125,12 @@ func slashSet(ctx ChatContextInterface) {
 			}
 		}
 		config.Bot.ShellToolPaths = toolPaths
-		
+
 		// Get the tool registry
 		sys := ctx.GetSystem()
 		if sys != nil && sys.GetToolRegistry() != nil {
 			registry := sys.GetToolRegistry()
-			
+
 			// Clear non-IRC tools (keep IRC tools)
 			for _, tool := range registry.All() {
 				schema := tool.GetSchema()
@@ -138,7 +138,7 @@ func slashSet(ctx ChatContextInterface) {
 					registry.Remove(schema.Title)
 				}
 			}
-			
+
 			// Load and add new tools
 			if len(toolPaths) > 0 {
 				newTools, err := LoadTools(toolPaths)
@@ -150,7 +150,7 @@ func slashSet(ctx ChatContextInterface) {
 				}
 			}
 		}
-		
+
 		if len(toolPaths) == 0 {
 			ctx.Reply("shell tools disabled")
 		} else {
@@ -166,16 +166,16 @@ func slashSet(ctx ChatContextInterface) {
 			}
 		}
 		config.Bot.MCPServers = mcpServers
-		
+
 		// Get the tool registry
 		sys := ctx.GetSystem()
 		if sys != nil && sys.GetToolRegistry() != nil {
 			registry := sys.GetToolRegistry()
-			
+
 			// For now, we can't type-check pollytool's MCPTool directly
 			// TODO: Find a better way to identify and remove MCP tools
 			// For simplicity, just clear and reload all tools when MCP servers change
-			
+
 			// Load and add new MCP tools
 			if len(mcpServers) > 0 {
 				newTools, err := LoadMCPTools(mcpServers)
@@ -187,7 +187,7 @@ func slashSet(ctx ChatContextInterface) {
 				}
 			}
 		}
-		
+
 		if len(mcpServers) == 0 {
 			ctx.Reply("MCP servers disabled")
 		} else {
@@ -203,12 +203,12 @@ func slashSet(ctx ChatContextInterface) {
 			}
 		}
 		config.Bot.IrcTools = ircTools
-		
+
 		// Get the tool registry
 		sys := ctx.GetSystem()
 		if sys != nil && sys.GetToolRegistry() != nil {
 			registry := sys.GetToolRegistry()
-			
+
 			// Remove all existing IRC tools
 			for _, tool := range registry.All() {
 				schema := tool.GetSchema()
@@ -216,14 +216,14 @@ func slashSet(ctx ChatContextInterface) {
 					registry.Remove(schema.Title)
 				}
 			}
-			
+
 			// Add newly enabled IRC tools
 			newIrcTools := GetIrcTools(ircTools)
 			for _, tool := range newIrcTools {
 				registry.Register(tool)
 			}
 		}
-		
+
 		if len(ircTools) == 0 {
 			ctx.Reply("IRC tools disabled")
 		} else {

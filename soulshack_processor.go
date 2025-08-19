@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/alexschlessinger/pollytool/llm"
 	"github.com/alexschlessinger/pollytool/messages"
@@ -19,8 +20,10 @@ type SoulshackStreamProcessor struct {
 	chunkBuffer        *bytes.Buffer
 	registry           *tools.ToolRegistry
 	client             llm.LLM
-	originalModel      string // Store the original model name with provider prefix
-	sentThinkingAction bool   // Track if we've sent the thinking action
+	originalModel      string      // Store the original model name with provider prefix
+	sentThinkingAction bool        // Track if we've sent the thinking action
+	thinkingStartTime  *time.Time  // Track when thinking started
+	thinkingTimer      *time.Timer // Timer that fires after 5 seconds
 }
 
 // NewSoulshackStreamProcessor creates a processor for soulshack
@@ -59,25 +62,41 @@ func (s *SoulshackStreamProcessor) ProcessCompletionStream(ctx context.Context, 
 func (s *SoulshackStreamProcessor) processEvents(ctx context.Context, eventChan <-chan *messages.StreamEvent, req *llm.CompletionRequest, byteChan chan<- []byte) {
 	log.Printf("Processing events with ThinkingEffort: %s", req.ThinkingEffort)
 	for event := range eventChan {
-		log.Printf("Received event type: %s", event.Type)
 		switch event.Type {
 		case messages.EventTypeContent:
 			// Stream content through chunking
 			s.processContent(event.Content, byteChan)
 
 		case messages.EventTypeReasoning:
-			log.Printf("Got reasoning event! sentThinkingAction=%v", s.sentThinkingAction)
-			// Send thinking action once on first reasoning event
-			if !s.sentThinkingAction {
-				channel := s.ctx.GetConfig().Server.Channel
-				s.ctx.Action(channel, "thinking")
-				s.sentThinkingAction = true
+			// Start timer on first reasoning event, send action after 5 seconds if still thinking
+			if !s.sentThinkingAction && s.ctx.GetConfig().Bot.ShowThinkingAction {
+				if s.thinkingStartTime == nil {
+					// First reasoning event - start timer
+					now := time.Now()
+					s.thinkingStartTime = &now
+					s.thinkingTimer = time.AfterFunc(5*time.Second, func() {
+						if !s.sentThinkingAction {
+							channel := s.ctx.GetConfig().Server.Channel
+							s.ctx.Action(channel, "still thinking.")
+							s.sentThinkingAction = true
+						}
+					})
+					log.Printf("Started thinking timer")
+				}
 			}
 
 		case messages.EventTypeToolCall:
 			// Tool calls come through the Complete event with the full message
 
 		case messages.EventTypeComplete:
+			// Cancel thinking timer if it hasn't fired yet
+			if s.thinkingTimer != nil && !s.sentThinkingAction {
+				s.thinkingTimer.Stop()
+				s.thinkingTimer = nil
+				s.thinkingStartTime = nil
+				log.Printf("Cancelled thinking timer (completed before 5 seconds)")
+			}
+
 			if event.Message != nil {
 				// Add the assistant message to session
 				s.ctx.GetSession().AddMessage(*event.Message)
@@ -132,6 +151,16 @@ func (s *SoulshackStreamProcessor) handleToolCallsAndContinue(ctx context.Contex
 			continue
 		}
 
+		// Send action to show tool is being called if configured
+		// Skip for IRC tools as they already perform visible actions
+		isIRCTool := toolCall.Name == "irc_op" || toolCall.Name == "irc_kick" ||
+			toolCall.Name == "irc_topic" || toolCall.Name == "irc_action"
+
+		if s.ctx.GetConfig().Bot.ShowToolActions && !isIRCTool {
+			channel := s.ctx.GetConfig().Server.Channel
+			s.ctx.Action(channel, fmt.Sprintf("calling %s", toolCall.Name))
+		}
+
 		// Set context for contextual tools (IRC tools)
 		if contextualTool, ok := tool.(tools.ContextualTool); ok {
 			contextualTool.SetContext(s.ctx)
@@ -164,8 +193,13 @@ func (s *SoulshackStreamProcessor) handleToolCallsAndContinue(ctx context.Contex
 	// Restore the original model name (MultiPass strips the provider prefix)
 	req.Model = s.originalModel
 
-	// Reset thinking action flag for continuation
+	// Reset thinking action flag and timer for continuation
 	s.sentThinkingAction = false
+	s.thinkingStartTime = nil
+	if s.thinkingTimer != nil {
+		s.thinkingTimer.Stop()
+		s.thinkingTimer = nil
+	}
 
 	// Use StreamProcessor to handle reasoning events in continuation
 	processor := messages.NewStreamProcessor()
