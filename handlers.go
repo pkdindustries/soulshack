@@ -229,6 +229,30 @@ func slashSet(ctx ChatContextInterface) {
 		} else {
 			ctx.Reply(fmt.Sprintf("IRC tools set to: %s", strings.Join(ircTools, ", ")))
 		}
+	case "thinking":
+		thinking, err := strconv.ParseBool(value)
+		if err != nil {
+			ctx.Reply("Invalid value for thinking. Please provide 'true' or 'false'.")
+			return
+		}
+		config.Model.Thinking = thinking
+		ctx.Reply(fmt.Sprintf("%s set to: %t", param, config.Model.Thinking))
+	case "showthinkingaction":
+		showThinking, err := strconv.ParseBool(value)
+		if err != nil {
+			ctx.Reply("Invalid value for showthinkingaction. Please provide 'true' or 'false'.")
+			return
+		}
+		config.Bot.ShowThinkingAction = showThinking
+		ctx.Reply(fmt.Sprintf("%s set to: %t", param, config.Bot.ShowThinkingAction))
+	case "showtoolactions":
+		showTools, err := strconv.ParseBool(value)
+		if err != nil {
+			ctx.Reply("Invalid value for showtoolactions. Please provide 'true' or 'false'.")
+			return
+		}
+		config.Bot.ShowToolActions = showTools
+		ctx.Reply(fmt.Sprintf("%s set to: %t", param, config.Bot.ShowToolActions))
 	}
 
 	ctx.GetSession().Clear()
@@ -301,6 +325,12 @@ func slashGet(ctx ChatContextInterface) {
 		} else {
 			ctx.Reply(fmt.Sprintf("mcpservers: %s", strings.Join(config.Bot.MCPServers, ", ")))
 		}
+	case "thinking":
+		ctx.Reply(fmt.Sprintf("%s: %t", param, config.Model.Thinking))
+	case "showthinkingaction":
+		ctx.Reply(fmt.Sprintf("%s: %t", param, config.Bot.ShowThinkingAction))
+	case "showtoolactions":
+		ctx.Reply(fmt.Sprintf("%s: %t", param, config.Bot.ShowToolActions))
 	}
 }
 
