@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/alexschlessinger/pollytool/llm"
@@ -153,12 +154,16 @@ func (s *SoulshackStreamProcessor) handleToolCallsAndContinue(ctx context.Contex
 
 		// Send action to show tool is being called if configured
 		// Skip for IRC tools as they already perform visible actions
-		isIRCTool := toolCall.Name == "irc_op" || toolCall.Name == "irc_kick" ||
-			toolCall.Name == "irc_topic" || toolCall.Name == "irc_action"
+		isIRCTool := strings.HasPrefix(toolCall.Name, "irc_")
 
 		if s.ctx.GetConfig().Bot.ShowToolActions && !isIRCTool {
 			channel := s.ctx.GetConfig().Server.Channel
-			s.ctx.Action(channel, fmt.Sprintf("calling %s", toolCall.Name))
+			// Strip namespace prefix for display (e.g., "script__weather" -> "weather")
+			displayName := toolCall.Name
+			if idx := strings.Index(displayName, "__"); idx != -1 {
+				displayName = displayName[idx+2:]
+			}
+			s.ctx.Action(channel, fmt.Sprintf("calling %s", displayName))
 		}
 
 		// Set context for contextual tools (IRC tools)

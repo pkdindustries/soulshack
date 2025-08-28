@@ -68,6 +68,18 @@ func (t *IrcOpTool) GetSchema() *jsonschema.Schema {
 	}
 }
 
+func (t *IrcOpTool) GetName() string {
+	return "irc_op"
+}
+
+func (t *IrcOpTool) GetType() string {
+	return "native"
+}
+
+func (t *IrcOpTool) GetSource() string {
+	return "builtin"
+}
+
 func (t *IrcOpTool) Execute(ctx context.Context, args map[string]any) (string, error) {
 	if t.ctx == nil {
 		return "", fmt.Errorf("no IRC context available")
@@ -135,6 +147,18 @@ func (t *IrcKickTool) GetSchema() *jsonschema.Schema {
 	}
 }
 
+func (t *IrcKickTool) GetName() string {
+	return "irc_kick"
+}
+
+func (t *IrcKickTool) GetType() string {
+	return "native"
+}
+
+func (t *IrcKickTool) GetSource() string {
+	return "builtin"
+}
+
 func (t *IrcKickTool) Execute(ctx context.Context, args map[string]any) (string, error) {
 	if t.ctx == nil {
 		return "", fmt.Errorf("no IRC context available")
@@ -193,6 +217,18 @@ func (t *IrcTopicTool) GetSchema() *jsonschema.Schema {
 	}
 }
 
+func (t *IrcTopicTool) GetName() string {
+	return "irc_topic"
+}
+
+func (t *IrcTopicTool) GetType() string {
+	return "native"
+}
+
+func (t *IrcTopicTool) GetSource() string {
+	return "builtin"
+}
+
 func (t *IrcTopicTool) Execute(ctx context.Context, args map[string]any) (string, error) {
 	if t.ctx == nil {
 		return "", fmt.Errorf("no IRC context available")
@@ -244,6 +280,18 @@ func (t *IrcActionTool) GetSchema() *jsonschema.Schema {
 		},
 		Required: []string{"message"},
 	}
+}
+
+func (t *IrcActionTool) GetName() string {
+	return "irc_action"
+}
+
+func (t *IrcActionTool) GetType() string {
+	return "native"
+}
+
+func (t *IrcActionTool) GetSource() string {
+	return "builtin"
 }
 
 func (t *IrcActionTool) Execute(ctx context.Context, args map[string]any) (string, error) {

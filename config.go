@@ -26,9 +26,8 @@ var ModifiableConfigKeys = []string{
 	"openaikey",
 	"anthropickey",
 	"geminikey",
-	"shelltool",
+	"tools",
 	"irctool",
-	"mcptool",
 	"showthinkingaction",
 	"showtoolactions",
 }
@@ -47,9 +46,8 @@ type BotConfig struct {
 	Addressed          bool
 	Prompt             string
 	Greeting           string
-	ShellToolPaths     []string
+	Tools              []string // Unified list of tools (shell scripts and MCP servers)
 	IrcTools           []string // list of enabled IRC tools (default: all)
-	MCPServers         []string // list of MCP server commands to run
 	ShowThinkingAction bool     // Whether to show "[thinking]" IRC action
 	ShowToolActions    bool     // Whether to show "[calling toolname]" IRC actions
 }
@@ -113,59 +111,38 @@ func (s *SystemImpl) GetSessionStore() sessions.SessionStore {
 
 func NewSystem(c *Configuration) System {
 	s := SystemImpl{}
-	// initialize tools
-	var allTools []tools.Tool
+	// Initialize empty tool registry
+	s.Tools = tools.NewToolRegistry([]tools.Tool{})
 
-	// Load shell tools from paths using pollytool
-	if len(c.Bot.ShellToolPaths) > 0 {
-		shellTools, err := tools.LoadShellTools(c.Bot.ShellToolPaths)
-		if err != nil {
-			log.Printf("config: warning loading tools: %v", err)
+	// Load tools using the unified loader
+	if len(c.Bot.Tools) > 0 {
+		for _, toolPath := range c.Bot.Tools {
+			_, err := s.Tools.LoadToolAuto(toolPath)
+			if err != nil {
+				log.Printf("config: warning loading tool %s: %v", toolPath, err)
+			}
 		}
-		allTools = append(allTools, shellTools...)
 	}
 
 	// Add IRC tools based on configuration
 	ircTools := GetIrcTools(c.Bot.IrcTools)
-	allTools = append(allTools, ircTools...)
-
-	// Add pollytool native tools
-	// Example: allTools = append(allTools, &tools.UpperCaseTool{}, &tools.WordCountTool{})
-
-	// Load MCP server tools using pollytool
-	if len(c.Bot.MCPServers) > 0 {
-		for _, server := range c.Bot.MCPServers {
-			mcpClient, err := tools.NewMCPClient(server)
-			if err != nil {
-				log.Fatalf("config: %v", err)
-				continue
-			}
-			mcpTools, err := mcpClient.ListTools()
-			if err != nil {
-				log.Fatalf("config: %v", err)
-				continue
-			}
-			allTools = append(allTools, mcpTools...)
-		}
+	for _, tool := range ircTools {
+		s.Tools.Register(tool)
 	}
 
-	s.Tools = tools.NewToolRegistry(allTools)
-
-	if len(allTools) > 0 {
-		log.Printf("config: loaded %d tools", len(allTools))
-	}
+	log.Printf("config: loaded %d tools", len(s.Tools.All()))
 
 	// initialize the api for completions using Polly
 	s.LLM = NewPollyLLM(*c.API)
 
 	// initialize sessions with pollytool's SyncMapSessionStore
 	log.Printf("sessionstore: syncmap")
-	sessionConfig := &sessions.SessionConfig{
+
+	s.Store = sessions.NewSyncMapSessionStore(&sessions.Metadata{
 		MaxHistory:   c.Session.MaxHistory,
 		TTL:          c.Session.TTL,
 		SystemPrompt: c.Bot.Prompt,
-	}
-	s.Store = sessions.NewSyncMapSessionStore(sessionConfig)
+	})
 	return &s
 }
 
@@ -185,8 +162,7 @@ func (c *Configuration) PrintConfig() {
 	fmt.Printf("clienttimeout: %s\n", c.API.Timeout)
 	fmt.Printf("maxhistory: %d\n", c.Session.MaxHistory)
 	fmt.Printf("maxtokens: %d\n", c.Model.MaxTokens)
-	fmt.Printf("shelltool: %v\n", c.Bot.ShellToolPaths)
-	fmt.Printf("mcptool: %v\n", c.Bot.MCPServers)
+	fmt.Printf("tool: %v\n", c.Bot.Tools)
 	fmt.Printf("showthinkingaction: %t\n", c.Bot.ShowThinkingAction)
 	fmt.Printf("showtoolactions: %t\n", c.Bot.ShowToolActions)
 
@@ -244,9 +220,8 @@ func NewConfiguration() *Configuration {
 			Addressed:          vip.GetBool("addressed"),
 			Prompt:             vip.GetString("prompt"),
 			Greeting:           vip.GetString("greeting"),
-			ShellToolPaths:     vip.GetStringSlice("shelltool"),
+			Tools:              vip.GetStringSlice("tool"),
 			IrcTools:           vip.GetStringSlice("irctool"),
-			MCPServers:         vip.GetStringSlice("mcptool"),
 			ShowThinkingAction: vip.GetBool("showthinkingaction"),
 			ShowToolActions:    vip.GetBool("showtoolactions"),
 		},
@@ -310,9 +285,8 @@ func initializeConfig() {
 	cmd.PersistentFlags().Float32("temperature", 0.7, "temperature for the completion")
 	cmd.PersistentFlags().Float32("top_p", 1, "top P value for the completion")
 	cmd.PersistentFlags().Bool("thinking", false, "enable thinking/reasoning for models that support it")
-	cmd.PersistentFlags().StringSlice("shelltool", []string{}, "shell tool paths to load (can be specified multiple times or comma-separated)")
+	cmd.PersistentFlags().StringSlice("tool", []string{}, "tool paths to load (shell scripts or MCP server JSON files, can be specified multiple times or comma-separated)")
 	cmd.PersistentFlags().StringSlice("irctool", []string{"irc_op", "irc_kick", "irc_topic", "irc_action"}, "IRC tools to enable (can be specified multiple times or comma-separated)")
-	cmd.PersistentFlags().StringSlice("mcptool", []string{}, "MCP server commands to run (can be specified multiple times or comma-separated)")
 	cmd.PersistentFlags().Bool("showthinkingaction", true, "show '[thinking]' IRC action when bot is reasoning")
 	cmd.PersistentFlags().Bool("showtoolactions", true, "show '[calling toolname]' IRC actions when executing tools")
 

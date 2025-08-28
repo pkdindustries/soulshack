@@ -84,7 +84,12 @@ func NewChatContext(parentctx context.Context, config *Configuration, system Sys
 	if !girc.IsValidChannel(key) {
 		key = e.Source.Name
 	}
-	ctx.Session = ctx.Sys.GetSessionStore().Get(key)
+
+	session, err := ctx.Sys.GetSessionStore().Get(key)
+	if err != nil {
+		log.Fatalf("failed to get session for key %s: %v", key, err)
+	}
+	ctx.Session = session
 	return ctx, cancel
 }
 

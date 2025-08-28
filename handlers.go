@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -115,8 +116,8 @@ func slashSet(ctx ChatContextInterface) {
 	case "geminikey":
 		config.API.GeminiKey = value
 		ctx.Reply(fmt.Sprintf("%s set to: %s", param, maskAPIKey(value)))
-	case "shelltool":
-		// Parse comma-separated shell tool paths
+	case "tools":
+		// Parse comma-separated tool paths (shell scripts or MCP servers)
 		var toolPaths []string
 		if value != "" && value != "none" {
 			toolPaths = strings.Split(value, ",")
@@ -124,7 +125,7 @@ func slashSet(ctx ChatContextInterface) {
 				toolPaths[i] = strings.TrimSpace(toolPaths[i])
 			}
 		}
-		config.Bot.ShellToolPaths = toolPaths
+		config.Bot.Tools = toolPaths
 
 		// Get the tool registry
 		sys := ctx.GetSystem()
@@ -133,65 +134,32 @@ func slashSet(ctx ChatContextInterface) {
 
 			// Clear non-IRC tools (keep IRC tools)
 			for _, tool := range registry.All() {
-				schema := tool.GetSchema()
-				if schema != nil && !strings.HasPrefix(schema.Title, "irc_") {
-					registry.Remove(schema.Title)
+				name := tool.GetName()
+				if name == "" {
+					// Fallback to schema title if GetName() is not implemented
+					schema := tool.GetSchema()
+					if schema != nil {
+						name = schema.Title
+					}
+				}
+				if name != "" && !strings.HasPrefix(name, "irc_") {
+					registry.Remove(name)
 				}
 			}
 
-			// Load and add new tools
-			if len(toolPaths) > 0 {
-				newTools, err := LoadTools(toolPaths)
+			// Load and add new tools using auto-detection
+			for _, toolPath := range toolPaths {
+				_, err := registry.LoadToolAuto(toolPath)
 				if err != nil {
-					log.Printf("warning loading tools: %v", err)
-				}
-				for _, tool := range newTools {
-					registry.Register(tool)
+					log.Printf("warning loading tool %s: %v", toolPath, err)
 				}
 			}
 		}
 
 		if len(toolPaths) == 0 {
-			ctx.Reply("shelltool disabled")
+			ctx.Reply("tools disabled")
 		} else {
-			ctx.Reply(fmt.Sprintf("shelltool set to: %s", strings.Join(toolPaths, ", ")))
-		}
-	case "mcptool":
-		// Parse comma-separated MCP server commands
-		var mcpServers []string
-		if value != "" && value != "none" {
-			mcpServers = strings.Split(value, ",")
-			for i := range mcpServers {
-				mcpServers[i] = strings.TrimSpace(mcpServers[i])
-			}
-		}
-		config.Bot.MCPServers = mcpServers
-
-		// Get the tool registry
-		sys := ctx.GetSystem()
-		if sys != nil && sys.GetToolRegistry() != nil {
-			registry := sys.GetToolRegistry()
-
-			// For now, we can't type-check pollytool's MCPTool directly
-			// TODO: Find a better way to identify and remove MCP tools
-			// For simplicity, just clear and reload all tools when MCP servers change
-
-			// Load and add new MCP tools
-			if len(mcpServers) > 0 {
-				newTools, err := LoadMCPTools(mcpServers)
-				if err != nil {
-					log.Printf("warning loading MCP tools: %v", err)
-				}
-				for _, tool := range newTools {
-					registry.Register(tool)
-				}
-			}
-		}
-
-		if len(mcpServers) == 0 {
-			ctx.Reply("mcptool disabled")
-		} else {
-			ctx.Reply(fmt.Sprintf("mcptool set to: %s", strings.Join(mcpServers, ", ")))
+			ctx.Reply(fmt.Sprintf("tools set to: %s", strings.Join(toolPaths, ", ")))
 		}
 	case "irctool":
 		// Parse comma-separated IRC tool names
@@ -307,23 +275,17 @@ func slashGet(ctx ChatContextInterface) {
 	case "geminikey":
 		masked := maskAPIKey(config.API.GeminiKey)
 		ctx.Reply(fmt.Sprintf("%s: %s", param, masked))
-	case "shelltool":
-		if len(config.Bot.ShellToolPaths) == 0 {
-			ctx.Reply("shelltool: none")
+	case "tools":
+		if len(config.Bot.Tools) == 0 {
+			ctx.Reply("tools: none")
 		} else {
-			ctx.Reply(fmt.Sprintf("shelltool: %s", strings.Join(config.Bot.ShellToolPaths, ", ")))
+			ctx.Reply(fmt.Sprintf("tools: %s", strings.Join(config.Bot.Tools, ", ")))
 		}
 	case "irctool":
 		if len(config.Bot.IrcTools) == 0 {
 			ctx.Reply("irctool: none")
 		} else {
 			ctx.Reply(fmt.Sprintf("irctool: %s", strings.Join(config.Bot.IrcTools, ", ")))
-		}
-	case "mcptool":
-		if len(config.Bot.MCPServers) == 0 {
-			ctx.Reply("mcptool: none")
-		} else {
-			ctx.Reply(fmt.Sprintf("mcptool: %s", strings.Join(config.Bot.MCPServers, ", ")))
 		}
 	case "thinking":
 		ctx.Reply(fmt.Sprintf("%s: %t", param, config.Model.Thinking))
@@ -335,12 +297,7 @@ func slashGet(ctx ChatContextInterface) {
 }
 
 func contains(slice []string, item string) bool {
-	for _, s := range slice {
-		if s == item {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(slice, item)
 }
 
 // maskAPIKey returns a masked version of an API key showing only first 4 chars
