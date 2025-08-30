@@ -154,13 +154,13 @@ configuration files use the yaml format. they can be loaded using the `--config`
 ### Tool Management Commands
 
 **Viewing tools:**
-- `/get tools` - List all loaded tools with their types and source files
-- `/get tools mcp` - List all loaded MCP servers
+- `/get tools` - Show summary of loaded tools with counts
+- `/get tools mcp` - List all loaded MCP tools
 - `/get tools shell` - List all loaded shell tools
 - `/get tools native` - List all loaded native (IRC) tools
+- `/get tools servers` - List all loaded MCP servers
 
 **Managing tools:**
-- `/set tools <paths>` - Replace all tools with comma-separated list (e.g., `/set tools weather.sh,calc.py`)
 - `/set tools add <path>` - Add a single tool without affecting others
 - `/set tools remove <name>` - Remove a specific tool by its namespaced name (e.g., `script__weather`)
 - `/set tools reload` - Reload all tools from the saved configuration
@@ -180,7 +180,6 @@ Modifiable parameters via `/set` and `/get`:
 - `openaikey` - OpenAI API key (masked when reading)
 - `anthropickey` - Anthropic API key (masked when reading)
 - `geminikey` - Gemini API key (masked when reading)
-- `tools` - tool paths (shell scripts or MCP server JSON files, comma-separated)
 - `irctool` - IRC tools to enable (comma-separated or multiple values)
 - `thinking` - enable thinking/reasoning mode for supported models (true/false)
 - `showthinkingaction` - show "[thinking]" IRC action when reasoning (true/false)
