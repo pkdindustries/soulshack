@@ -20,7 +20,7 @@ func NewPollyLLM(config APIConfig) *PollyLLM {
 		"gemini":    config.GeminiKey,
 		"ollama":    config.OllamaKey,
 	}
-	
+
 	return &PollyLLM{
 		client: llm.NewMultiPass(apiKeys),
 	}
@@ -37,18 +37,12 @@ func (p *PollyLLM) ChatCompletionStream(ctx context.Context, req *CompletionRequ
 		Tools:       req.Tools,
 		Timeout:     req.Timeout,
 	}
-	
+
 	// Set thinking effort if enabled
 	if req.Thinking {
 		pollyReq.ThinkingEffort = "medium" // Default to medium effort when enabled
 	}
-	
-	// Special handling for Ollama URLs
-	if req.Model == "local" || req.Model == "ollama" {
-		// Default to a common model if just "local" or "ollama" is specified
-		pollyReq.Model = "ollama/llama3.2"
-	}
-	
+
 	// Set base URL for ollama if provided
 	config := chatCtx.GetConfig()
 	if config != nil && config.API != nil && config.API.OllamaURL != "" {

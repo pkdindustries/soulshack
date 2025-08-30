@@ -4,12 +4,11 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
-	
-	"github.com/alexschlessinger/pollytool/tools"
 )
 
 func greeting(ctx ChatContextInterface) {
@@ -119,19 +118,16 @@ func slashSet(ctx ChatContextInterface) {
 		config.API.GeminiKey = value
 		ctx.Reply(fmt.Sprintf("%s set to: %s", param, maskAPIKey(value)))
 	case "tools":
-		// Handle tools subcommands only
+		// Simple tools management - just add and remove
 		registry := ctx.GetSystem().GetToolRegistry()
-
-		// Parse to check for subcommands
 		parts := strings.Fields(value)
 		
-		// Check if first word is a known subcommand
-		var subcommand string
-		if len(parts) > 0 {
-			subcommand = parts[0]
+		if len(parts) == 0 {
+			ctx.Reply("Usage: /set tools [add|remove]")
+			return
 		}
 		
-		// Handle subcommands
+		subcommand := parts[0]
 		switch subcommand {
 		case "add":
 			if len(parts) < 2 {
@@ -139,102 +135,52 @@ func slashSet(ctx ChatContextInterface) {
 				return
 			}
 			toolPath := strings.Join(parts[1:], " ")
-
-			// Get current tools before loading
-			toolsBefore := make(map[string]bool)
-			for _, tool := range registry.All() {
-				toolsBefore[tool.GetName()] = true
-			}
-
-			// Try to auto-detect and load
+			
+			// Try to load the tool
 			_, err := registry.LoadToolAuto(toolPath)
 			if err != nil {
-				ctx.Reply(fmt.Sprintf("Failed to load tool: %v", err))
-				return
-			}
-
-			// Find newly loaded tools
-			var newTools []string
-			for _, tool := range registry.All() {
-				name := tool.GetName()
-				if !toolsBefore[name] {
-					newTools = append(newTools, name)
-				}
-			}
-
-			if len(newTools) > 0 {
-				ctx.Reply(fmt.Sprintf("Loaded tools: %s", strings.Join(newTools, ", ")))
+				ctx.Reply(fmt.Sprintf("Failed: %v", err))
 			} else {
-				ctx.Reply("No new tools were loaded")
+				ctx.Reply(fmt.Sprintf("Added tool from: %s", toolPath))
 			}
-
+			
 		case "remove":
 			if len(parts) < 2 {
-				ctx.Reply("Usage: /set tools remove <name>")
+				ctx.Reply("Usage: /set tools remove <name or pattern>")
 				return
 			}
-			toolName := strings.Join(parts[1:], " ")
-
-			// Check if tool exists
-			_, exists := registry.Get(toolName)
-			if !exists {
-				ctx.Reply(fmt.Sprintf("Tool not found: %s", toolName))
-				return
-			}
-
-			// Remove the tool from registry
-			registry.Remove(toolName)
-			ctx.Reply(fmt.Sprintf("Removed tool: %s", toolName))
-
-		case "reload":
-			// Reload all tools from config
-			ctx.Reply("Reloading all tools...")
-
-			// Clear non-IRC tools
-			for _, tool := range registry.All() {
-				name := tool.GetName()
-				if name != "" && !strings.HasPrefix(name, "irc_") {
-					registry.Remove(name)
+			pattern := strings.Join(parts[1:], " ")
+			
+			// Check if it's a wildcard pattern
+			if strings.Contains(pattern, "*") {
+				// Wildcard removal
+				var removed []string
+				for _, tool := range registry.All() {
+					name := tool.GetName()
+					matched, _ := path.Match(pattern, name)
+					if matched {
+						registry.Remove(name)
+						removed = append(removed, name)
+					}
 				}
-			}
-
-			// Reload from config
-			for _, toolPath := range config.Bot.Tools {
-				_, err := registry.LoadToolAuto(toolPath)
-				if err != nil {
-					log.Printf("warning reloading tool %s: %v", toolPath, err)
+				
+				if len(removed) > 0 {
+					ctx.Reply(fmt.Sprintf("Removed %d tools: %s", len(removed), strings.Join(removed, ", ")))
+				} else {
+					ctx.Reply(fmt.Sprintf("No tools matched pattern: %s", pattern))
 				}
-			}
-			ctx.Reply("All tools reloaded")
-
-		case "mcp":
-			// Only support remove for MCP under /set
-			if len(parts) < 2 || parts[1] != "remove" {
-				ctx.Reply("Usage: /set tools mcp remove <server>")
-				ctx.Reply("To list MCP servers, use: /get tools mcp")
-				return
-			}
-
-			if len(parts) < 3 {
-				ctx.Reply("Usage: /set tools mcp remove <server>")
-				return
-			}
-			server := strings.Join(parts[2:], " ")
-
-			// Try to unload the server
-			err := registry.UnloadMCPServer(server)
-			if err != nil {
-				ctx.Reply(fmt.Sprintf("Failed to unload MCP server: %v", err))
 			} else {
-				ctx.Reply(fmt.Sprintf("Unloaded MCP server: %s", tools.GetMCPDisplayName(server)))
+				// Exact match removal
+				if _, exists := registry.Get(pattern); !exists {
+					ctx.Reply(fmt.Sprintf("Not found: %s", pattern))
+				} else {
+					registry.Remove(pattern)
+					ctx.Reply(fmt.Sprintf("Removed: %s", pattern))
+				}
 			}
+			
 		default:
-			// Invalid or missing subcommand
-			ctx.Reply("Usage: /set tools [add|remove|reload|mcp]")
-			ctx.Reply("  add <path> - Add a tool")
-			ctx.Reply("  remove <name> - Remove a tool")
-			ctx.Reply("  reload - Reload all tools from config")
-			ctx.Reply("  mcp remove <server> - Remove an MCP server")
+			ctx.Reply("Usage: /set tools [add|remove]")
 		}
 	case "irctool":
 		// Parse comma-separated IRC tool names
@@ -348,177 +294,29 @@ func slashGet(ctx ChatContextInterface) {
 		masked := maskAPIKey(config.API.GeminiKey)
 		ctx.Reply(fmt.Sprintf("%s: %s", param, masked))
 	case "tools":
-		// Check for subcommands in /get tools
-		args := ctx.GetArgs()
+		// Simple tool listing
 		registry := ctx.GetSystem().GetToolRegistry()
-		
-		if len(args) > 2 {
-			subcommand := args[2]
-			switch subcommand {
-			case "mcp":
-				// List MCP tools grouped by server
-				mcpToolsByServer := make(map[string][]string)
-				for _, tool := range registry.All() {
-					if tool.GetType() == "mcp" {
-						source := tool.GetSource()
-						mcpToolsByServer[source] = append(mcpToolsByServer[source], tool.GetName())
-					}
-				}
-				
-				if len(mcpToolsByServer) == 0 {
-					ctx.Reply("No MCP tools loaded")
-				} else {
-					// Build message grouped by server
-					var serverGroups []string
-					for server, toolNames := range mcpToolsByServer {
-						// Just use the server path/filename, not the full command display
-						serverGroup := fmt.Sprintf("%s: %s", server, strings.Join(toolNames, ", "))
-						serverGroups = append(serverGroups, serverGroup)
-					}
-					
-					fullMessage := "MCP tools by server: " + strings.Join(serverGroups, " | ")
-					chunks := chunkMessage(ctx, fullMessage)
-					for _, chunk := range chunks {
-						ctx.Reply(chunk)
-					}
-				}
-				return
-			
-			case "shell":
-				// List shell tools grouped by source
-				shellToolsBySource := make(map[string][]string)
-				for _, tool := range registry.All() {
-					if tool.GetType() == "shell" {
-						source := tool.GetSource()
-						if source == "" {
-							source = "unknown"
-						}
-						shellToolsBySource[source] = append(shellToolsBySource[source], tool.GetName())
-					}
-				}
-				
-				if len(shellToolsBySource) == 0 {
-					ctx.Reply("No shell tools loaded")
-				} else {
-					// If only one tool per source, show inline. Otherwise group.
-					var toolItems []string
-					for source, toolNames := range shellToolsBySource {
-						if len(toolNames) == 1 {
-							// Single tool from this source
-							if source != "unknown" {
-								toolItems = append(toolItems, fmt.Sprintf("%s (%s)", toolNames[0], source))
-							} else {
-								toolItems = append(toolItems, toolNames[0])
-							}
-						} else {
-							// Multiple tools from same source - group them
-							toolItems = append(toolItems, fmt.Sprintf("%s: %s", source, strings.Join(toolNames, ", ")))
-						}
-					}
-					
-					fullMessage := "Shell tools: " + strings.Join(toolItems, ", ")
-					chunks := chunkMessage(ctx, fullMessage)
-					for _, chunk := range chunks {
-						ctx.Reply(chunk)
-					}
-				}
-				return
-			
-			case "native":
-				// List native tools (IRC tools)
-				nativeTools := []tools.Tool{}
-				for _, tool := range registry.All() {
-					if tool.GetType() == "native" {
-						nativeTools = append(nativeTools, tool)
-					}
-				}
-				
-				if len(nativeTools) == 0 {
-					ctx.Reply("No native tools loaded")
-				} else {
-					// Build complete list of native tools
-					var toolNames []string
-					for _, tool := range nativeTools {
-						toolNames = append(toolNames, tool.GetName())
-					}
-					
-					fullMessage := "Native tools (IRC): " + strings.Join(toolNames, ", ")
-					chunks := chunkMessage(ctx, fullMessage)
-					for _, chunk := range chunks {
-						ctx.Reply(chunk)
-					}
-				}
-				return
-			
-			case "servers":
-				// List MCP servers (not individual tools)
-				mcpServers := make(map[string]bool)
-				for _, tool := range registry.All() {
-					if tool.GetType() == "mcp" {
-						mcpServers[tool.GetSource()] = true
-					}
-				}
-
-				if len(mcpServers) > 0 {
-					// Build complete list of MCP servers
-					var serverNames []string
-					for server := range mcpServers {
-						displayName := tools.GetMCPDisplayName(server)
-						serverNames = append(serverNames, displayName)
-					}
-					
-					fullMessage := "MCP servers: " + strings.Join(serverNames, ", ")
-					chunks := chunkMessage(ctx, fullMessage)
-					for _, chunk := range chunks {
-						ctx.Reply(chunk)
-					}
-				} else {
-					ctx.Reply("No MCP servers loaded")
-				}
-				return
-			}
-		}
-
-		// List all loaded tools (summary)
 		allTools := registry.All()
 		
 		if len(allTools) == 0 {
-			ctx.Reply("No tools currently loaded")
-			if len(config.Bot.Tools) > 0 {
-				ctx.Reply(fmt.Sprintf("Configured but not loaded: %s", strings.Join(config.Bot.Tools, ", ")))
-			}
+			ctx.Reply("No tools loaded")
 		} else {
-			// Count tools by type
-			shellCount := 0
-			mcpCount := 0
-			nativeCount := 0
-			mcpServers := make(map[string]bool)
-			
+			// Just list tool names, comma-separated
+			var toolNames []string
 			for _, tool := range allTools {
-				switch tool.GetType() {
-				case "shell":
-					shellCount++
-				case "mcp":
-					mcpCount++
-					mcpServers[tool.GetSource()] = true
-				case "native":
-					nativeCount++
-				}
+				toolNames = append(toolNames, tool.GetName())
 			}
 			
-			// Build summary message
-			var summary []string
-			if shellCount > 0 {
-				summary = append(summary, fmt.Sprintf("%d shell", shellCount))
+			message := "Tools: " + strings.Join(toolNames, ", ")
+			// Truncate if too long for IRC
+			maxLen := config.Session.ChunkMax
+			if maxLen <= 0 {
+				maxLen = 350
 			}
-			if mcpCount > 0 {
-				summary = append(summary, fmt.Sprintf("%d MCP (%d servers)", mcpCount, len(mcpServers)))
+			if len(message) > maxLen {
+				message = message[:maxLen-3] + "..."
 			}
-			if nativeCount > 0 {
-				summary = append(summary, fmt.Sprintf("%d native", nativeCount))
-			}
-			
-			ctx.Reply(fmt.Sprintf("Tools loaded: %s. Use /get tools [shell|mcp|native|servers] for details", strings.Join(summary, ", ")))
+			ctx.Reply(message)
 		}
 	case "irctool":
 		if len(config.Bot.IrcTools) == 0 {
@@ -562,52 +360,6 @@ func slashLeave(ctx ChatContextInterface) {
 		time.Sleep(1 * time.Second)
 		os.Exit(0)
 	}()
-}
-
-// chunkMessage splits a long message into IRC-safe chunks
-func chunkMessage(ctx ChatContextInterface, message string) []string {
-	config := ctx.GetConfig()
-	maxSize := config.Session.ChunkMax
-	if maxSize <= 0 {
-		maxSize = 350 // default
-	}
-	
-	if len(message) <= maxSize {
-		return []string{message}
-	}
-
-	var chunks []string
-	remaining := message
-
-	for len(remaining) > 0 {
-		if len(remaining) <= maxSize {
-			chunks = append(chunks, remaining)
-			break
-		}
-
-		// Find last space or comma before maxSize for cleaner breaks
-		chunk := remaining[:maxSize]
-		lastBreak := -1
-		
-		// Try to find a good break point (comma or space)
-		if idx := strings.LastIndex(chunk, ", "); idx > 0 {
-			lastBreak = idx + 1 // Keep the comma, break after the space
-		} else if idx := strings.LastIndex(chunk, " "); idx > 0 {
-			lastBreak = idx
-		}
-
-		if lastBreak > 0 {
-			// Break at word/item boundary
-			chunks = append(chunks, strings.TrimSpace(remaining[:lastBreak]))
-			remaining = strings.TrimSpace(remaining[lastBreak:])
-		} else {
-			// No good break found, break at maxSize
-			chunks = append(chunks, chunk)
-			remaining = remaining[maxSize:]
-		}
-	}
-
-	return chunks
 }
 
 func completionResponse(ctx ChatContextInterface) {

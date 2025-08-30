@@ -153,18 +153,13 @@ configuration files use the yaml format. they can be loaded using the `--config`
 
 ### Tool Management Commands
 
-**Viewing tools:**
-- `/get tools` - Show summary of loaded tools with counts
-- `/get tools mcp` - List all loaded MCP tools
-- `/get tools shell` - List all loaded shell tools
-- `/get tools native` - List all loaded native (IRC) tools
-- `/get tools servers` - List all loaded MCP servers
-
-**Managing tools:**
-- `/set tools add <path>` - Add a single tool without affecting others
-- `/set tools remove <name>` - Remove a specific tool by its namespaced name (e.g., `script__weather`)
-- `/set tools reload` - Reload all tools from the saved configuration
-- `/set tools mcp remove <server>` - Unload an MCP server and all its tools
+- `/get tools` - List all loaded tools (comma-separated)
+- `/set tools add <path>` - Add a tool (shell script or MCP JSON)
+- `/set tools remove <name or pattern>` - Remove tools by name or wildcard pattern
+  - Exact: `script__weather` - removes that specific tool
+  - Wildcards: `filesystem__*` - removes all filesystem tools
+  - `script__*` - removes all shell script tools
+  - `irc_*` - removes all IRC tools
 
 Modifiable parameters via `/set` and `/get`:
 - `model` - LLM model to use
@@ -190,12 +185,7 @@ Modifiable parameters via `/set` and `/get`:
 
 Soulshack uses a unified tool system that automatically detects the tool type. Tools are enabled via the `--tool` flag or configuration file.
 
-### Tool Display
-
-When listing tools with `/get tools`, each tool shows:
-- **Namespaced name**: e.g., `script__weather` for shell scripts, `filesystem__read_file` for MCP tools
-- **Type indicator**: `[Shell]`, `[MCP]`, or `[Native]`
-- **Source file**: The path to the script or JSON config file
+Tools have namespaced names like `script__weather` for shell scripts or `filesystem__read_file` for MCP tools.
 
 Example output:
 ```
