@@ -156,6 +156,8 @@ configuration files use the yaml format. they can be loaded using the `--config`
 **Viewing tools:**
 - `/get tools` - List all loaded tools with their types and source files
 - `/get tools mcp` - List all loaded MCP servers
+- `/get tools shell` - List all loaded shell tools
+- `/get tools native` - List all loaded native (IRC) tools
 
 **Managing tools:**
 - `/set tools <paths>` - Replace all tools with comma-separated list (e.g., `/set tools weather.sh,calc.py`)

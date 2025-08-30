@@ -382,31 +382,78 @@ func slashGet(ctx ChatContextInterface) {
 		ctx.Reply(fmt.Sprintf("%s: %s", param, masked))
 	case "tools":
 		// Check for subcommands in /get tools
-		parts := strings.Fields(param)
-		if len(parts) > 1 && parts[1] == "mcp" {
-			// List MCP servers
-			registry := ctx.GetSystem().GetToolRegistry()
-			mcpServers := make(map[string]bool)
-			for _, tool := range registry.All() {
-				if tool.GetType() == "mcp" {
-					mcpServers[tool.GetSource()] = true
+		args := ctx.GetArgs()
+		registry := ctx.GetSystem().GetToolRegistry()
+		
+		if len(args) > 2 {
+			subcommand := args[2]
+			switch subcommand {
+			case "mcp":
+				// List MCP servers
+				mcpServers := make(map[string]bool)
+				for _, tool := range registry.All() {
+					if tool.GetType() == "mcp" {
+						mcpServers[tool.GetSource()] = true
+					}
 				}
-			}
 
-			if len(mcpServers) > 0 {
-				ctx.Reply("Current MCP servers:")
-				for server := range mcpServers {
-					displayName := tools.GetMCPDisplayName(server)
-					ctx.Reply(fmt.Sprintf("  - %s", displayName))
+				if len(mcpServers) > 0 {
+					ctx.Reply("Current MCP servers:")
+					for server := range mcpServers {
+						displayName := tools.GetMCPDisplayName(server)
+						ctx.Reply(fmt.Sprintf("  - %s", displayName))
+					}
+				} else {
+					ctx.Reply("No MCP servers loaded")
 				}
-			} else {
-				ctx.Reply("No MCP servers loaded")
+				return
+			
+			case "shell":
+				// List shell tools
+				shellTools := []tools.Tool{}
+				for _, tool := range registry.All() {
+					if tool.GetType() == "shell" {
+						shellTools = append(shellTools, tool)
+					}
+				}
+				
+				if len(shellTools) == 0 {
+					ctx.Reply("No shell tools loaded")
+				} else {
+					ctx.Reply("Currently loaded shell tools:")
+					for _, tool := range shellTools {
+						source := tool.GetSource()
+						if source != "" {
+							ctx.Reply(fmt.Sprintf("  - %s (%s)", tool.GetName(), source))
+						} else {
+							ctx.Reply(fmt.Sprintf("  - %s", tool.GetName()))
+						}
+					}
+				}
+				return
+			
+			case "native":
+				// List native tools (IRC tools)
+				nativeTools := []tools.Tool{}
+				for _, tool := range registry.All() {
+					if tool.GetType() == "native" {
+						nativeTools = append(nativeTools, tool)
+					}
+				}
+				
+				if len(nativeTools) == 0 {
+					ctx.Reply("No native tools loaded")
+				} else {
+					ctx.Reply("Currently loaded native tools (IRC):")
+					for _, tool := range nativeTools {
+						ctx.Reply(fmt.Sprintf("  - %s", tool.GetName()))
+					}
+				}
+				return
 			}
-			return
 		}
 
 		// List all loaded tools
-		registry := ctx.GetSystem().GetToolRegistry()
 		allTools := registry.All()
 			
 		if len(allTools) == 0 {
