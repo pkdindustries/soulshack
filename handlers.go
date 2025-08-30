@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	
+	"github.com/alexschlessinger/pollytool/tools"
 )
 
 func greeting(ctx ChatContextInterface) {
@@ -117,31 +119,37 @@ func slashSet(ctx ChatContextInterface) {
 		config.API.GeminiKey = value
 		ctx.Reply(fmt.Sprintf("%s set to: %s", param, maskAPIKey(value)))
 	case "tools":
-		// Parse comma-separated tool paths (shell scripts or MCP servers)
-		var toolPaths []string
-		if value != "" && value != "none" {
-			toolPaths = strings.Split(value, ",")
-			for i := range toolPaths {
-				toolPaths[i] = strings.TrimSpace(toolPaths[i])
-			}
-		}
-		config.Bot.Tools = toolPaths
+		// Handle tools - either subcommands or direct setting
+		registry := ctx.GetSystem().GetToolRegistry()
 
-		// Get the tool registry
-		sys := ctx.GetSystem()
-		if sys != nil && sys.GetToolRegistry() != nil {
-			registry := sys.GetToolRegistry()
+		// Parse to check for subcommands
+		parts := strings.Fields(value)
+		
+		// Check if first word is a known subcommand
+		var subcommand string
+		if len(parts) > 0 {
+			subcommand = parts[0]
+		}
+		
+		// Handle subcommands
+		switch subcommand {
+		case "add", "remove", "reload", "mcp":
+			// These are subcommands, handle them
+			break
+		default:
+			// Not a subcommand - treat entire value as comma-separated tool list
+			var toolPaths []string
+			if value != "" && value != "none" {
+				toolPaths = strings.Split(value, ",")
+				for i := range toolPaths {
+					toolPaths[i] = strings.TrimSpace(toolPaths[i])
+				}
+			}
+			config.Bot.Tools = toolPaths
 
 			// Clear non-IRC tools (keep IRC tools)
 			for _, tool := range registry.All() {
 				name := tool.GetName()
-				if name == "" {
-					// Fallback to schema title if GetName() is not implemented
-					schema := tool.GetSchema()
-					if schema != nil {
-						name = schema.Title
-					}
-				}
 				if name != "" && !strings.HasPrefix(name, "irc_") {
 					registry.Remove(name)
 				}
@@ -154,12 +162,112 @@ func slashSet(ctx ChatContextInterface) {
 					log.Printf("warning loading tool %s: %v", toolPath, err)
 				}
 			}
+
+			if len(toolPaths) == 0 {
+				ctx.Reply("tools disabled")
+			} else {
+				ctx.Reply(fmt.Sprintf("tools set to: %s", strings.Join(toolPaths, ", ")))
+			}
+			return
 		}
 
-		if len(toolPaths) == 0 {
-			ctx.Reply("tools disabled")
-		} else {
-			ctx.Reply(fmt.Sprintf("tools set to: %s", strings.Join(toolPaths, ", ")))
+		// Handle actual subcommands
+		switch subcommand {
+		case "add":
+			if len(parts) < 2 {
+				ctx.Reply("Usage: /set tools add <path>")
+				return
+			}
+			toolPath := strings.Join(parts[1:], " ")
+
+			// Get current tools before loading
+			toolsBefore := make(map[string]bool)
+			for _, tool := range registry.All() {
+				toolsBefore[tool.GetName()] = true
+			}
+
+			// Try to auto-detect and load
+			_, err := registry.LoadToolAuto(toolPath)
+			if err != nil {
+				ctx.Reply(fmt.Sprintf("Failed to load tool: %v", err))
+				return
+			}
+
+			// Find newly loaded tools
+			var newTools []string
+			for _, tool := range registry.All() {
+				name := tool.GetName()
+				if !toolsBefore[name] {
+					newTools = append(newTools, name)
+				}
+			}
+
+			if len(newTools) > 0 {
+				ctx.Reply(fmt.Sprintf("Loaded tools: %s", strings.Join(newTools, ", ")))
+			} else {
+				ctx.Reply("No new tools were loaded")
+			}
+
+		case "remove":
+			if len(parts) < 2 {
+				ctx.Reply("Usage: /set tools remove <name>")
+				return
+			}
+			toolName := strings.Join(parts[1:], " ")
+
+			// Check if tool exists
+			_, exists := registry.Get(toolName)
+			if !exists {
+				ctx.Reply(fmt.Sprintf("Tool not found: %s", toolName))
+				return
+			}
+
+			// Remove the tool from registry
+			registry.Remove(toolName)
+			ctx.Reply(fmt.Sprintf("Removed tool: %s", toolName))
+
+		case "reload":
+			// Reload all tools from config
+			ctx.Reply("Reloading all tools...")
+
+			// Clear non-IRC tools
+			for _, tool := range registry.All() {
+				name := tool.GetName()
+				if name != "" && !strings.HasPrefix(name, "irc_") {
+					registry.Remove(name)
+				}
+			}
+
+			// Reload from config
+			for _, toolPath := range config.Bot.Tools {
+				_, err := registry.LoadToolAuto(toolPath)
+				if err != nil {
+					log.Printf("warning reloading tool %s: %v", toolPath, err)
+				}
+			}
+			ctx.Reply("All tools reloaded")
+
+		case "mcp":
+			// Only support remove for MCP under /set
+			if len(parts) < 2 || parts[1] != "remove" {
+				ctx.Reply("Usage: /set tools mcp remove <server>")
+				ctx.Reply("To list MCP servers, use: /get tools mcp")
+				return
+			}
+
+			if len(parts) < 3 {
+				ctx.Reply("Usage: /set tools mcp remove <server>")
+				return
+			}
+			server := strings.Join(parts[2:], " ")
+
+			// Try to unload the server
+			err := registry.UnloadMCPServer(server)
+			if err != nil {
+				ctx.Reply(fmt.Sprintf("Failed to unload MCP server: %v", err))
+			} else {
+				ctx.Reply(fmt.Sprintf("Unloaded MCP server: %s", tools.GetMCPDisplayName(server)))
+			}
 		}
 	case "irctool":
 		// Parse comma-separated IRC tool names
@@ -173,9 +281,7 @@ func slashSet(ctx ChatContextInterface) {
 		config.Bot.IrcTools = ircTools
 
 		// Get the tool registry
-		sys := ctx.GetSystem()
-		if sys != nil && sys.GetToolRegistry() != nil {
-			registry := sys.GetToolRegistry()
+		registry := ctx.GetSystem().GetToolRegistry()
 
 			// Remove all existing IRC tools
 			for _, tool := range registry.All() {
@@ -190,7 +296,6 @@ func slashSet(ctx ChatContextInterface) {
 			for _, tool := range newIrcTools {
 				registry.Register(tool)
 			}
-		}
 
 		if len(ircTools) == 0 {
 			ctx.Reply("irctool disabled")
@@ -276,10 +381,62 @@ func slashGet(ctx ChatContextInterface) {
 		masked := maskAPIKey(config.API.GeminiKey)
 		ctx.Reply(fmt.Sprintf("%s: %s", param, masked))
 	case "tools":
-		if len(config.Bot.Tools) == 0 {
-			ctx.Reply("tools: none")
+		// Check for subcommands in /get tools
+		parts := strings.Fields(param)
+		if len(parts) > 1 && parts[1] == "mcp" {
+			// List MCP servers
+			registry := ctx.GetSystem().GetToolRegistry()
+			mcpServers := make(map[string]bool)
+			for _, tool := range registry.All() {
+				if tool.GetType() == "mcp" {
+					mcpServers[tool.GetSource()] = true
+				}
+			}
+
+			if len(mcpServers) > 0 {
+				ctx.Reply("Current MCP servers:")
+				for server := range mcpServers {
+					displayName := tools.GetMCPDisplayName(server)
+					ctx.Reply(fmt.Sprintf("  - %s", displayName))
+				}
+			} else {
+				ctx.Reply("No MCP servers loaded")
+			}
+			return
+		}
+
+		// List all loaded tools
+		registry := ctx.GetSystem().GetToolRegistry()
+		allTools := registry.All()
+			
+		if len(allTools) == 0 {
+			ctx.Reply("No tools currently loaded")
+			if len(config.Bot.Tools) > 0 {
+				ctx.Reply(fmt.Sprintf("Configured but not loaded: %s", strings.Join(config.Bot.Tools, ", ")))
+			}
 		} else {
-			ctx.Reply(fmt.Sprintf("tools: %s", strings.Join(config.Bot.Tools, ", ")))
+			ctx.Reply("Currently loaded tools:")
+			for _, tool := range allTools {
+				toolType := tool.GetType()
+				source := tool.GetSource()
+				
+				displayType := ""
+				switch toolType {
+				case "shell":
+					displayType = "[Shell]"
+				case "mcp":
+					displayType = "[MCP]"
+				case "native":
+					displayType = "[Native]"
+				}
+				
+				// Format the source for display
+				if source != "" && source != "builtin" {
+					ctx.Reply(fmt.Sprintf("  - %s %s (%s)", tool.GetName(), displayType, source))
+				} else {
+					ctx.Reply(fmt.Sprintf("  - %s %s", tool.GetName(), displayType))
+				}
+			}
 		}
 	case "irctool":
 		if len(config.Bot.IrcTools) == 0 {

@@ -78,17 +78,21 @@ greeting: wave hello
 # TOOLS CONFIGURATION
 # ============================================================================
 
-# External shell tool scripts (must implement --schema and --execute)
-shelltool:
-  - examples/tools/datetime.sh   # Date/time queries
+# Unified tool system - automatically detects shell scripts vs MCP servers
+# Shell scripts: provide direct path to executable
+# MCP servers: provide path to JSON config file
+tool:
+  - examples/tools/datetime.sh   # Shell script for date/time queries
+  # - examples/mcp/filesystem.json  # MCP server config for file operations
+  # - examples/mcp/git.json         # MCP server config for git operations
+  # - examples/tools/weather.py     # Another shell script example
 
-# MCP (Model Context Protocol) servers
-# These are started as subprocesses and provide tools via stdin/stdout
-# mcptool:
-#   - "npx @modelcontextprotocol/server-filesystem"  # File operations
-#   - "uvx mcp-server-git"                          # Git operations
-#   - "uvx mcp-server-time"                         # Time/timezone tools
-#   - "npx @modelcontextprotocol/server-puppeteer"  # Web browser automation
+# Example MCP server JSON config (save as filesystem.json):
+# {
+#   "command": "npx",
+#   "args": ["@modelcontextprotocol/server-filesystem", "/tmp"],
+#   "env": {}
+# }
 
 # IRC management tools (enabled by default)
 # Comment out or customize to change which IRC tools are available

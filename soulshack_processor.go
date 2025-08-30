@@ -70,7 +70,8 @@ func (s *SoulshackStreamProcessor) processEvents(ctx context.Context, eventChan 
 
 		case messages.EventTypeReasoning:
 			// Start timer on first reasoning event, send action after 5 seconds if still thinking
-			if !s.sentThinkingAction && s.ctx.GetConfig().Bot.ShowThinkingAction {
+			// Only show thinking action if both thinking mode is enabled AND showthinkingaction is true
+			if !s.sentThinkingAction && s.ctx.GetConfig().Model.Thinking && s.ctx.GetConfig().Bot.ShowThinkingAction {
 				if s.thinkingStartTime == nil {
 					// First reasoning event - start timer
 					now := time.Now()

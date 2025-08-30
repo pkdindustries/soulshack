@@ -13,7 +13,7 @@ soulshack is an IRC chatbot that can talk in channels and call tools. It support
 - utilizes the openai api and compatible endpoints like ollama
 - allows dynamic configuration of bot settings through commands
 - supports ssl and SASL authentication for irc servers
-- tool calling (shell scripts, MCP servers, IRC tools)
+- unified tool system (shell scripts, MCP servers, IRC tools)
 
 ## building
 
@@ -56,17 +56,28 @@ Quick examples (model must include provider prefix):
 
 See examples/chatbot.yml for a working config file (uses an anthropic/* model as an example).
 
-To enable shell tools, pass tool paths:
+To enable tools (shell scripts or MCP servers), use the unified `--tool` flag:
 ```bash
+# Shell tools
 soulshack --channel '#soulshack' --model ollama/llama3.2 \
-  --shelltool examples/tools/datetime.sh --shelltool examples/tools/weather.py
+  --tool examples/tools/datetime.sh --tool examples/tools/weather.py
+
+# MCP servers (use JSON config files)
+soulshack --channel '#soulshack' --model ollama/llama3.2 \
+  --tool filesystem.json --tool git-server.json
+
+# Mix shell scripts and MCP servers
+soulshack --channel '#soulshack' --model ollama/llama3.2 \
+  --tool examples/tools/weather.py --tool mcp-time.json
 ```
 
-To connect to MCP (Model Context Protocol) servers:
-```bash
-soulshack --channel '#soulshack' --model ollama/llama3.2 \
-  --mcptool "npx @modelcontextprotocol/server-filesystem" \
-  --mcptool "uvx mcp-server-git"
+MCP server JSON config example (`filesystem.json`):
+```json
+{
+  "command": "npx",
+  "args": ["@modelcontextprotocol/server-filesystem", "/tmp"],
+  "env": {}
+}
 ```
 
 ## configuration
@@ -105,9 +116,11 @@ LLM/API configuration:
   -t, --apitimeout duration        timeout for each completion request (default 5m0s)
       --temperature float32        temperature for the completion (default 0.7)
       --top_p float32              top P value for the completion (default 1)
-      --shelltool strings          shell tool paths to load (can be specified multiple times or comma-separated)
+      --tool strings               tool paths to load (shell scripts or MCP server JSON files, can be specified multiple times or comma-separated)
       --irctool strings            IRC tools to enable (can be specified multiple times or comma-separated) (default: irc_op,irc_kick,irc_topic,irc_action)
-      --mcptool strings            MCP server commands to run (can be specified multiple times or comma-separated)
+      --thinking                   enable thinking/reasoning mode for supported models
+      --showthinkingaction         show "[thinking]" IRC action when reasoning (default true)
+      --showtoolactions            show "[calling toolname]" IRC actions when executing tools (default true)
 
 Behavior & session:
   -a, --addressed                  require bot be addressed by nick for response (default true)
@@ -138,6 +151,19 @@ configuration files use the yaml format. they can be loaded using the `--config`
 - `/leave`: make the bot leave the channel and exit
 - `/help`: display help for available commands
 
+### Tool Management Commands
+
+**Viewing tools:**
+- `/get tools` - List all loaded tools with their types and source files
+- `/get tools mcp` - List all loaded MCP servers
+
+**Managing tools:**
+- `/set tools <paths>` - Replace all tools with comma-separated list (e.g., `/set tools weather.sh,calc.py`)
+- `/set tools add <path>` - Add a single tool without affecting others
+- `/set tools remove <name>` - Remove a specific tool by its namespaced name (e.g., `script__weather`)
+- `/set tools reload` - Reload all tools from the saved configuration
+- `/set tools mcp remove <server>` - Unload an MCP server and all its tools
+
 Modifiable parameters via `/set` and `/get`:
 - `model` - LLM model to use
 - `addressed` - require bot to be addressed by nick
@@ -152,18 +178,37 @@ Modifiable parameters via `/set` and `/get`:
 - `openaikey` - OpenAI API key (masked when reading)
 - `anthropickey` - Anthropic API key (masked when reading)
 - `geminikey` - Gemini API key (masked when reading)
-- `shelltool` - shell tool paths (comma-separated or multiple values)
+- `tools` - tool paths (shell scripts or MCP server JSON files, comma-separated)
 - `irctool` - IRC tools to enable (comma-separated or multiple values)
-- `mcptool` - MCP server commands (comma-separated or multiple values)
+- `thinking` - enable thinking/reasoning mode for supported models (true/false)
+- `showthinkingaction` - show "[thinking]" IRC action when reasoning (true/false)
+- `showtoolactions` - show "[calling toolname]" IRC actions when executing tools (true/false)
 
 
 ## tools
 
-Soulshack supports three types of tools:
+Soulshack uses a unified tool system that automatically detects the tool type. Tools are enabled via the `--tool` flag or configuration file.
+
+### Tool Display
+
+When listing tools with `/get tools`, each tool shows:
+- **Namespaced name**: e.g., `script__weather` for shell scripts, `filesystem__read_file` for MCP tools
+- **Type indicator**: `[Shell]`, `[MCP]`, or `[Native]`
+- **Source file**: The path to the script or JSON config file
+
+Example output:
+```
+Currently loaded tools:
+  - script__weather [Shell] (examples/weather.sh)
+  - script__calculator [Shell] (/usr/local/bin/calc.sh)
+  - filesystem__read_file [MCP] (filesystem.json)
+  - filesystem__write_file [MCP] (filesystem.json)
+  - irc_op [Native]
+```
 
 ### Shell Tools
 
-Tools are enabled by providing paths to tool scripts via the `--shelltool` flag or configuration file. Each tool must be an executable that responds to the following commands:
+Shell tools are executable scripts that are automatically detected when you provide a path to an executable file. Each tool must be an executable that responds to the following commands:
 
 - --schema: Outputs a JSON schema describing the tool use.
 - --execute $json: Will be called with JSON matching your schema
@@ -232,18 +277,27 @@ echo "Usage: currentdate.sh [--schema | --execute '{\"format\": \"+%Y-%m-%d %H:%
 
 ### MCP Servers
 
-Soulshack can connect to MCP (Model Context Protocol) servers, which provide tools via a standardized protocol. MCP servers are started as subprocesses and communicate over stdin/stdout.
+Soulshack can connect to MCP (Model Context Protocol) servers, which provide tools via a standardized protocol. MCP servers must be configured using JSON files that specify the command and arguments.
 
-Examples:
+Create a JSON config file for each MCP server:
+```json
+// filesystem.json
+{
+  "command": "npx",
+  "args": ["@modelcontextprotocol/server-filesystem", "/tmp"]
+}
+
+// git.json
+{
+  "command": "uvx",
+  "args": ["mcp-server-git"]
+}
+```
+
+Then use them with the `--tool` flag:
 ```bash
-# Filesystem operations
---mcptool "npx @modelcontextprotocol/server-filesystem"
-
-# Git operations  
---mcptool "uvx mcp-server-git"
-
-# Multiple servers (use the flag multiple times)
---mcptool "uvx mcp-server-time" --mcptool "npx @modelcontextprotocol/server-puppeteer"
+# Multiple servers
+--tool filesystem.json --tool git.json --tool time-server.json
 ```
 
 MCP servers automatically expose their available tools to the bot. For more information about MCP, see [modelcontextprotocol.io](https://modelcontextprotocol.io).
