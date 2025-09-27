@@ -82,6 +82,21 @@ func runBot(r *cobra.Command, _ []string) {
 		ctx, cancel := NewChatContext(context.Background(), config, sys, irc, &e)
 		defer cancel()
 		if ctx.Valid() {
+			// Get lock for this channel to serialize message processing
+			channelKey := e.Params[0]
+			if !girc.IsValidChannel(channelKey) {
+				// For private messages, use the sender's name as the key
+				channelKey = e.Source.Name
+			}
+			lock := getChannelLock(channelKey)
+
+			// Try to acquire lock with context timeout
+			if !lock.LockWithContext(ctx) {
+				ctx.Reply("Request timed out waiting for previous operation to complete")
+				return
+			}
+			defer lock.Unlock()
+
 			log.Println(">>", strings.Join(e.Params[1:], " "))
 			switch ctx.GetCommand() {
 			case "/set":

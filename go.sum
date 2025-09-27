@@ -12,8 +12,8 @@ cloud.google.com/go/longrunning v0.6.7 h1:IGtfDWHhQCgCjwQjV9iiLnUta9LBCo8R9QmAFs
 cloud.google.com/go/longrunning v0.6.7/go.mod h1:EAFV3IZAKmM56TyiE6VAP3VoTzhZzySwI/YI1s/nRsY=
 dario.cat/mergo v1.0.2 h1:85+piFYR1tMbRrLcDwR18y4UKJ3aH1Tbzi24VRW1TK8=
 dario.cat/mergo v1.0.2/go.mod h1:E/hbnu0NxMFBjpMIE34DRGLWqDy0g5FuKDhCb31ngxA=
-github.com/alexschlessinger/pollytool v0.0.0-20250827180645-a6f4b6d517d1 h1:Tc3DB7Ed3mkCXoc/fEtSEOJedVebO64pm+Sk5sQbB2k=
-github.com/alexschlessinger/pollytool v0.0.0-20250827180645-a6f4b6d517d1/go.mod h1:obYQyuDZTKDVMcajrXlW9cJDnDIyPy7afJD97z/VWzw=
+github.com/alexschlessinger/pollytool v0.0.0-20250923193535-0d14be98db03 h1:ixlZpb8gXtp4w7TJQy65QKa8AXmevfjDeab5ripE0Cc=
+github.com/alexschlessinger/pollytool v0.0.0-20250923193535-0d14be98db03/go.mod h1:obYQyuDZTKDVMcajrXlW9cJDnDIyPy7afJD97z/VWzw=
 github.com/anthropics/anthropic-sdk-go v1.9.1 h1:raRhZKmayVSVZtLpLDd6IsMXvxLeeSU03/2IBTerWlg=
 github.com/anthropics/anthropic-sdk-go v1.9.1/go.mod h1:WTz31rIUHUHqai2UslPpw5CwXrQP3geYBioRV4WOLvE=
 github.com/common-nighthawk/go-figure v0.0.0-20210622060536-734e95fb86be h1:J5BL2kskAlV9ckgEsNQXscjIaLiOYiZ75d4e94E6dcQ=
