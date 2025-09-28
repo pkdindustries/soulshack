@@ -56,7 +56,7 @@ Quick examples (model must include provider prefix):
 
 See examples/chatbot.yml for a working config file (uses an anthropic/* model as an example).
 
-To enable tools (shell scripts or MCP servers), use the unified `--tool` flag:
+To enable tools (shell scripts, MCP servers, or IRC tools), use the unified `--tool` flag:
 ```bash
 # Shell tools
 soulshack --channel '#soulshack' --model ollama/llama3.2 \
@@ -66,9 +66,13 @@ soulshack --channel '#soulshack' --model ollama/llama3.2 \
 soulshack --channel '#soulshack' --model ollama/llama3.2 \
   --tool filesystem.json --tool git-server.json
 
-# Mix shell scripts and MCP servers
+# IRC tools (use irc_ prefix)
 soulshack --channel '#soulshack' --model ollama/llama3.2 \
-  --tool examples/tools/weather.py --tool mcp-time.json
+  --tool irc_op --tool irc_kick --tool irc_action
+
+# Mix all tool types together
+soulshack --channel '#soulshack' --model ollama/llama3.2 \
+  --tool examples/tools/weather.py --tool mcp-time.json --tool irc_topic
 ```
 
 MCP server JSON config example (`filesystem.json`):
@@ -116,8 +120,7 @@ LLM/API configuration:
   -t, --apitimeout duration        timeout for each completion request (default 5m0s)
       --temperature float32        temperature for the completion (default 0.7)
       --top_p float32              top P value for the completion (default 1)
-      --tool strings               tool paths to load (shell scripts or MCP server JSON files, can be specified multiple times or comma-separated)
-      --irctool strings            IRC tools to enable (can be specified multiple times or comma-separated) (default: irc_op,irc_kick,irc_topic,irc_action)
+      --tool strings               tools to load (shell scripts, MCP server JSON files, or IRC tools with irc_ prefix, can be specified multiple times or comma-separated)
       --thinking                   enable thinking/reasoning mode for supported models
       --showthinkingaction         show "[thinking]" IRC action when reasoning (default true)
       --showtoolactions            show "[calling toolname]" IRC actions when executing tools (default true)
@@ -154,7 +157,7 @@ configuration files use the yaml format. they can be loaded using the `--config`
 ### Tool Management Commands
 
 - `/get tools` - List all loaded tools (comma-separated)
-- `/set tools add <path>` - Add a tool (shell script or MCP JSON)
+- `/set tools add <spec>` - Add a tool (shell script path, MCP JSON path, or irc_* name)
 - `/set tools remove <name or pattern>` - Remove tools by name or wildcard pattern
   - Exact: `script__weather` - removes that specific tool
   - Wildcards: `filesystem__*` - removes all filesystem tools
@@ -175,7 +178,6 @@ Modifiable parameters via `/set` and `/get`:
 - `openaikey` - OpenAI API key (masked when reading)
 - `anthropickey` - Anthropic API key (masked when reading)
 - `geminikey` - Gemini API key (masked when reading)
-- `irctool` - IRC tools to enable (comma-separated or multiple values)
 - `thinking` - enable thinking/reasoning mode for supported models (true/false)
 - `showthinkingaction` - show "[thinking]" IRC action when reasoning (true/false)
 - `showtoolactions` - show "[calling toolname]" IRC actions when executing tools (true/false)
@@ -185,17 +187,11 @@ Modifiable parameters via `/set` and `/get`:
 
 Soulshack uses a unified tool system that automatically detects the tool type. Tools are enabled via the `--tool` flag or configuration file.
 
-Tools have namespaced names like `script__weather` for shell scripts or `filesystem__read_file` for MCP tools.
+Tools have namespaced names:
+- Shell scripts: `filename__weather`
+- MCP tools: `filesystem__read_file`
+- IRC tools: `irc_op` (no namespace prefix)
 
-Example output:
-```
-Currently loaded tools:
-  - script__weather [Shell] (examples/weather.sh)
-  - script__calculator [Shell] (/usr/local/bin/calc.sh)
-  - filesystem__read_file [MCP] (filesystem.json)
-  - filesystem__write_file [MCP] (filesystem.json)
-  - irc_op [Native]
-```
 
 ### Shell Tools
 
@@ -295,11 +291,25 @@ MCP servers automatically expose their available tools to the bot. For more info
 
 ### IRC Tools
 
-Built-in IRC channel management tools can be enabled via `--irctool`:
+Built-in IRC channel management tools are loaded using the same `--tool` flag with `irc_` prefix:
 - `irc_op` - Grant/revoke operator status
 - `irc_kick` - Kick users from the channel
-- `irc_topic` - Change the channel topic  
+- `irc_topic` - Change the channel topic
 - `irc_action` - Send /me actions
+
+Example:
+```bash
+# Enable specific IRC tools
+soulshack --channel '#soulshack' --model ollama/llama3.2 \
+  --tool irc_op --tool irc_action
+
+# Or configure in YAML
+tool:
+  - irc_op
+  - irc_kick
+  - irc_topic
+  - irc_action
+```
 
 These tools require appropriate channel permissions 
 
