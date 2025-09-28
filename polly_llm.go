@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/alexschlessinger/pollytool/llm"
+	"github.com/alexschlessinger/pollytool/messages"
 )
 
 // PollyLLM wraps pollytool's MultiPass to implement soulshack's LLM interface
@@ -59,8 +60,30 @@ func (p *PollyLLM) ChatCompletionStream(ctx context.Context, req *CompletionRequ
 		maxChunkSize = config.Session.ChunkMax
 	}
 
-	processor := NewSoulshackStreamProcessor(chatCtx, maxChunkSize, registry, p.client)
+	// Create byte channel for IRC output
+	byteChan := make(chan []byte, 10)
 
-	// Process the completion stream and return byte channel
-	return processor.ProcessCompletionStream(ctx, pollyReq)
+	go func() {
+		defer close(byteChan)
+
+		// Create IRC processor with all necessary context
+		processor := NewIRCEventProcessor(chatCtx, byteChan, maxChunkSize, registry, p.client)
+		processor.SetRequest(pollyReq)
+
+		// Get event stream from LLM
+		eventChan := p.client.ChatCompletionStream(ctx, pollyReq, nil)
+
+		// Process events using the standardized processor
+		response := messages.ProcessEventStream(ctx, eventChan, processor)
+
+		// Flush any remaining buffer content
+		processor.flushBuffer()
+
+		// Handle tool continuation if needed
+		if len(response.ToolCalls) > 0 {
+			processor.HandleToolContinuation(ctx, pollyReq)
+		}
+	}()
+
+	return byteChan
 }
