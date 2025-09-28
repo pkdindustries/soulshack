@@ -78,11 +78,16 @@ greeting: wave hello
 # TOOLS CONFIGURATION
 # ============================================================================
 
-# Unified tool system - automatically detects shell scripts vs MCP servers
+# Unified tool system - handles shell scripts, MCP servers, and IRC tools
 # Shell scripts: provide direct path to executable
 # MCP servers: provide path to JSON config file
+# IRC tools: use irc_ prefix (e.g., irc_op, irc_kick)
 tool:
   - examples/tools/datetime.sh   # Shell script for date/time queries
+  - irc_op                        # Grant/revoke op status
+  - irc_kick                      # Kick users from channel
+  - irc_topic                     # Change channel topic
+  - irc_action                    # Send /me actions
   # - examples/mcp/filesystem.json  # MCP server config for file operations
   # - examples/mcp/git.json         # MCP server config for git operations
   # - examples/tools/weather.py     # Another shell script example
@@ -93,17 +98,6 @@ tool:
 #   "args": ["@modelcontextprotocol/server-filesystem", "/tmp"],
 #   "env": {}
 # }
-
-# IRC management tools (enabled by default)
-# Comment out or customize to change which IRC tools are available
-# irctool:
-#   - irc_op                     # Grant/revoke op status
-#   - irc_kick                   # Kick users from channel
-#   - irc_topic                  # Change channel topic
-#   - irc_action                 # Send /me actions
-
-# To disable all IRC tools:
-# irctool: []
 
 # ============================================================================
 # DEBUGGING

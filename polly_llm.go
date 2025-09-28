@@ -9,7 +9,8 @@ import (
 
 // PollyLLM wraps pollytool's MultiPass to implement soulshack's LLM interface
 type PollyLLM struct {
-	client *llm.MultiPass
+	client          *llm.MultiPass
+	streamProcessor *messages.StreamProcessor
 }
 
 // NewPollyLLM creates a new pollytool-based LLM client
@@ -23,7 +24,8 @@ func NewPollyLLM(config APIConfig) *PollyLLM {
 	}
 
 	return &PollyLLM{
-		client: llm.NewMultiPass(apiKeys),
+		client:          llm.NewMultiPass(apiKeys),
+		streamProcessor: messages.NewStreamProcessor(),
 	}
 }
 
@@ -67,11 +69,11 @@ func (p *PollyLLM) ChatCompletionStream(ctx context.Context, req *CompletionRequ
 		defer close(byteChan)
 
 		// Create IRC processor with all necessary context
-		processor := NewIRCEventProcessor(chatCtx, byteChan, maxChunkSize, registry, p.client)
+		processor := NewIRCEventProcessor(chatCtx, byteChan, maxChunkSize, registry, p.client, p.streamProcessor)
 		processor.SetRequest(pollyReq)
 
 		// Get event stream from LLM
-		eventChan := p.client.ChatCompletionStream(ctx, pollyReq, nil)
+		eventChan := p.client.ChatCompletionStream(ctx, pollyReq, p.streamProcessor)
 
 		// Process events using the standardized processor
 		response := messages.ProcessEventStream(ctx, eventChan, processor)

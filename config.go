@@ -27,7 +27,6 @@ var ModifiableConfigKeys = []string{
 	"anthropickey",
 	"geminikey",
 	"tools",
-	"irctool",
 	"showthinkingaction",
 	"showtoolactions",
 }
@@ -46,8 +45,7 @@ type BotConfig struct {
 	Addressed          bool
 	Prompt             string
 	Greeting           string
-	Tools              []string // Unified list of tools (shell scripts and MCP servers)
-	IrcTools           []string // list of enabled IRC tools (default: all)
+	Tools              []string // Unified list of tools (shell, MCP, and IRC tools)
 	ShowThinkingAction bool     // Whether to show "[thinking]" IRC action
 	ShowToolActions    bool     // Whether to show "[calling toolname]" IRC actions
 }
@@ -114,20 +112,13 @@ func NewSystem(c *Configuration) System {
 	// Initialize empty tool registry
 	s.Tools = tools.NewToolRegistry([]tools.Tool{})
 
-	// Load tools using the unified loader
+	// Load all tools from configuration (shell, MCP, and IRC tools)
 	if len(c.Bot.Tools) > 0 {
-		for _, toolPath := range c.Bot.Tools {
-			_, err := s.Tools.LoadToolAuto(toolPath)
-			if err != nil {
-				log.Printf("config: warning loading tool %s: %v", toolPath, err)
+		for _, toolSpec := range c.Bot.Tools {
+			if err := LoadToolWithIRC(s.Tools, toolSpec); err != nil {
+				log.Printf("config: warning loading tool %s: %v", toolSpec, err)
 			}
 		}
-	}
-
-	// Add IRC tools based on configuration
-	ircTools := GetIrcTools(c.Bot.IrcTools)
-	for _, tool := range ircTools {
-		s.Tools.Register(tool)
 	}
 
 	log.Printf("config: loaded %d tools", len(s.Tools.All()))
@@ -221,7 +212,6 @@ func NewConfiguration() *Configuration {
 			Prompt:             vip.GetString("prompt"),
 			Greeting:           vip.GetString("greeting"),
 			Tools:              vip.GetStringSlice("tool"),
-			IrcTools:           vip.GetStringSlice("irctool"),
 			ShowThinkingAction: vip.GetBool("showthinkingaction"),
 			ShowToolActions:    vip.GetBool("showtoolactions"),
 		},

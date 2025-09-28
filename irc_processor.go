@@ -22,6 +22,7 @@ type IRCEventProcessor struct {
 	maxChunkSize       int
 	registry           *tools.ToolRegistry
 	client             llm.LLM
+	streamProcessor    llm.EventStreamProcessor // Add stream processor
 	originalModel      string
 	response           messages.ChatMessage // Store the response message
 
@@ -41,14 +42,16 @@ func NewIRCEventProcessor(
 	maxChunkSize int,
 	registry *tools.ToolRegistry,
 	client llm.LLM,
+	streamProcessor llm.EventStreamProcessor,
 ) *IRCEventProcessor {
 	return &IRCEventProcessor{
-		ctx:          ctx,
-		byteChan:     byteChan,
-		chunkBuffer:  &bytes.Buffer{},
-		maxChunkSize: maxChunkSize,
-		registry:     registry,
-		client:       client,
+		ctx:             ctx,
+		byteChan:        byteChan,
+		chunkBuffer:     &bytes.Buffer{},
+		maxChunkSize:    maxChunkSize,
+		registry:        registry,
+		client:          client,
+		streamProcessor: streamProcessor,
 	}
 }
 
@@ -209,11 +212,11 @@ func (p *IRCEventProcessor) HandleToolContinuation(ctx context.Context, req *llm
 	}
 
 	// Create a new processor for the continuation
-	continuationProcessor := NewIRCEventProcessor(p.ctx, p.byteChan, p.maxChunkSize, p.registry, p.client)
+	continuationProcessor := NewIRCEventProcessor(p.ctx, p.byteChan, p.maxChunkSize, p.registry, p.client, p.streamProcessor)
 	continuationProcessor.originalModel = p.originalModel
 
 	// Get new event stream with tool results
-	eventChan := p.client.ChatCompletionStream(ctx, req, nil)
+	eventChan := p.client.ChatCompletionStream(ctx, req, p.streamProcessor)
 
 	// Process the continuation
 	response := messages.ProcessEventStream(ctx, eventChan, continuationProcessor)

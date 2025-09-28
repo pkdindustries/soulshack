@@ -91,11 +91,17 @@ func runBot(r *cobra.Command, _ []string) {
 			lock := getChannelLock(channelKey)
 
 			// Try to acquire lock with context timeout
+			log.Printf("Acquiring lock for channel '%s'", channelKey)
 			if !lock.LockWithContext(ctx) {
+				log.Printf("Failed to acquire lock for channel '%s' (timeout)", channelKey)
 				ctx.Reply("Request timed out waiting for previous operation to complete")
 				return
 			}
-			defer lock.Unlock()
+			log.Printf("Lock acquired for channel '%s'", channelKey)
+			defer func() {
+				log.Printf("Releasing lock for channel '%s'", channelKey)
+				lock.Unlock()
+			}()
 
 			log.Println(">>", strings.Join(e.Params[1:], " "))
 			switch ctx.GetCommand() {

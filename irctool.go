@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 
 	"github.com/alexschlessinger/pollytool/tools"
 	"github.com/modelcontextprotocol/go-sdk/jsonschema"
@@ -15,23 +16,30 @@ type IRCContextualTool interface {
 	SetIRCContext(ctx ChatContextInterface)
 }
 
-// GetIrcTools returns enabled IRC-related tools as pollytool tools
-func GetIrcTools(enabledTools []string) []tools.Tool {
-	allTools := map[string]tools.Tool{
-		"irc_op":     &IrcOpTool{},
-		"irc_kick":   &IrcKickTool{},
-		"irc_topic":  &IrcTopicTool{},
-		"irc_action": &IrcActionTool{},
+// LoadToolWithIRC wraps registry.LoadToolAuto to handle IRC tools
+func LoadToolWithIRC(registry *tools.ToolRegistry, toolSpec string) error {
+	// Check if it's an IRC tool
+	if strings.HasPrefix(toolSpec, "irc_") {
+		allTools := map[string]tools.Tool{
+			"irc_op":     &IrcOpTool{},
+			"irc_kick":   &IrcKickTool{},
+			"irc_topic":  &IrcTopicTool{},
+			"irc_action": &IrcActionTool{},
+		}
+
+		tool, exists := allTools[toolSpec]
+		if !exists {
+			return fmt.Errorf("unknown IRC tool: %s", toolSpec)
+		}
+
+		registry.Register(tool)
+		log.Printf("registered IRC tool: %s", toolSpec)
+		return nil
 	}
 
-	// Return only enabled tools
-	var result []tools.Tool
-	for _, name := range enabledTools {
-		if tool, ok := allTools[name]; ok {
-			result = append(result, tool)
-		}
-	}
-	return result
+	// Otherwise delegate to polly's LoadToolAuto
+	_, err := registry.LoadToolAuto(toolSpec)
+	return err
 }
 
 // IrcOpTool grants or revokes operator status

@@ -136,12 +136,12 @@ func slashSet(ctx ChatContextInterface) {
 			}
 			toolPath := strings.Join(parts[1:], " ")
 			
-			// Try to load the tool
-			_, err := registry.LoadToolAuto(toolPath)
+			// Try to load the tool (handles shell, MCP, and IRC tools)
+			err := LoadToolWithIRC(registry, toolPath)
 			if err != nil {
 				ctx.Reply(fmt.Sprintf("Failed: %v", err))
 			} else {
-				ctx.Reply(fmt.Sprintf("Added tool from: %s", toolPath))
+				ctx.Reply(fmt.Sprintf("Added tool: %s", toolPath))
 			}
 			
 		case "remove":
@@ -181,39 +181,6 @@ func slashSet(ctx ChatContextInterface) {
 			
 		default:
 			ctx.Reply("Usage: /set tools [add|remove]")
-		}
-	case "irctool":
-		// Parse comma-separated IRC tool names
-		var ircTools []string
-		if value != "" && value != "none" {
-			ircTools = strings.Split(value, ",")
-			for i := range ircTools {
-				ircTools[i] = strings.TrimSpace(ircTools[i])
-			}
-		}
-		config.Bot.IrcTools = ircTools
-
-		// Get the tool registry
-		registry := ctx.GetSystem().GetToolRegistry()
-
-			// Remove all existing IRC tools
-			for _, tool := range registry.All() {
-				schema := tool.GetSchema()
-				if schema != nil && strings.HasPrefix(schema.Title, "irc_") {
-					registry.Remove(schema.Title)
-				}
-			}
-
-			// Add newly enabled IRC tools
-			newIrcTools := GetIrcTools(ircTools)
-			for _, tool := range newIrcTools {
-				registry.Register(tool)
-			}
-
-		if len(ircTools) == 0 {
-			ctx.Reply("irctool disabled")
-		} else {
-			ctx.Reply(fmt.Sprintf("irctool set to: %s", strings.Join(ircTools, ", ")))
 		}
 	case "thinking":
 		thinking, err := strconv.ParseBool(value)
@@ -317,12 +284,6 @@ func slashGet(ctx ChatContextInterface) {
 				message = message[:maxLen-3] + "..."
 			}
 			ctx.Reply(message)
-		}
-	case "irctool":
-		if len(config.Bot.IrcTools) == 0 {
-			ctx.Reply("irctool: none")
-		} else {
-			ctx.Reply(fmt.Sprintf("irctool: %s", strings.Join(config.Bot.IrcTools, ", ")))
 		}
 	case "thinking":
 		ctx.Reply(fmt.Sprintf("%s: %t", param, config.Model.Thinking))
