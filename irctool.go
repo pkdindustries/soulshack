@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 
 	"github.com/alexschlessinger/pollytool/tools"
 	"github.com/modelcontextprotocol/go-sdk/jsonschema"
@@ -22,6 +23,9 @@ func RegisterIRCTools(registry *tools.ToolRegistry) {
 	})
 	registry.RegisterNative("irc_kick", func() tools.Tool {
 		return &IrcKickTool{}
+	})
+	registry.RegisterNative("irc_ban", func() tools.Tool {
+		return &IrcBanTool{}
 	})
 	registry.RegisterNative("irc_topic", func() tools.Tool {
 		return &IrcTopicTool{}
@@ -182,6 +186,103 @@ func (t *IrcKickTool) Execute(ctx context.Context, args map[string]any) (string,
 
 	log.Printf("IRC KICK: Kicked %s from %s for: %s", nick, channel, reason)
 	return fmt.Sprintf("Kicked %s: %s", nick, reason), nil
+}
+
+// IrcBanTool bans or unbans a user from the channel
+type IrcBanTool struct {
+	ctx ChatContextInterface
+}
+
+func (t *IrcBanTool) SetContext(ctx any) {
+	if chatCtx, ok := ctx.(ChatContextInterface); ok {
+		t.ctx = chatCtx
+	}
+}
+
+func (t *IrcBanTool) SetIRCContext(ctx ChatContextInterface) {
+	t.ctx = ctx
+}
+
+func (t *IrcBanTool) GetSchema() *jsonschema.Schema {
+	return &jsonschema.Schema{
+		Title:       "irc_ban",
+		Description: "Ban or unban a user from the IRC channel",
+		Type:        "object",
+		Properties: map[string]*jsonschema.Schema{
+			"target": {
+				Type:        "string",
+				Description: "The nick or hostmask to ban/unban",
+			},
+			"ban": {
+				Type:        "boolean",
+				Description: "true to ban, false to unban",
+			},
+		},
+		Required: []string{"target", "ban"},
+	}
+}
+
+func (t *IrcBanTool) GetName() string {
+	return "irc_ban"
+}
+
+func (t *IrcBanTool) GetType() string {
+	return "native"
+}
+
+func (t *IrcBanTool) GetSource() string {
+	return "builtin"
+}
+
+func (t *IrcBanTool) Execute(ctx context.Context, args map[string]any) (string, error) {
+	if t.ctx == nil {
+		return "", fmt.Errorf("no IRC context available")
+	}
+
+	// Check admin permission
+	if !t.ctx.IsAdmin() {
+		return "You are not authorized to use this tool", nil
+	}
+
+	target, ok := args["target"].(string)
+	if !ok {
+		return "", fmt.Errorf("target must be a string")
+	}
+
+	ban, ok := args["ban"].(bool)
+	if !ok {
+		return "", fmt.Errorf("ban must be a boolean")
+	}
+
+	mode := "-b"
+	action := "Unbanned"
+	if ban {
+		mode = "+b"
+		action = "Banned"
+	}
+
+	// If target doesn't contain wildcards or !, assume it's a nick and convert to hostmask
+	banMask := target
+	if !strings.Contains(target, "!") && !strings.Contains(target, "*") {
+		// Try to look up the user to get their actual ident and host
+		if ident, host, found := t.ctx.LookupUser(target); found {
+			// Create a ban mask that bans *!ident@host
+			// This is more specific than *!*@host and prevents banning other users on the same host
+			banMask = fmt.Sprintf("*!%s@%s", ident, host)
+			log.Printf("IRC BAN: Found user %s with ident=%s host=%s, using ban mask %s", target, ident, host, banMask)
+		} else {
+			// User not found in channel, use simple pattern
+			banMask = target + "!*@*"
+			log.Printf("IRC BAN: User %s not found in channel, using simple pattern %s", target, banMask)
+		}
+	}
+
+	// Execute the IRC command
+	channel := t.ctx.GetConfig().Server.Channel
+	t.ctx.Mode(channel, mode, banMask)
+
+	log.Printf("IRC BAN: %s %s in %s", action, banMask, channel)
+	return fmt.Sprintf("%s %s", action, banMask), nil
 }
 
 // IrcTopicTool sets the channel topic

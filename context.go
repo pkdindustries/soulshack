@@ -29,6 +29,7 @@ type Server interface {
 	Kick(string, string, string) bool
 	Topic(string, string) bool
 	Oper(string, string) bool
+	LookupUser(string) (string, string, bool)
 }
 
 type System interface {
@@ -175,6 +176,15 @@ func (c ChatContext) Reply(message string) {
 func (c ChatContext) Action(target string, message string) bool {
 	c.client.Cmd.Action(target, message)
 	return true
+}
+
+func (c ChatContext) LookupUser(nick string) (string, string, bool) {
+	user := c.client.LookupUser(nick)
+	if user == nil {
+		return "", "", false
+	}
+	// Return ident and host separately for flexibility
+	return user.Ident, user.Host, true
 }
 
 // checks if the message is valid for processing

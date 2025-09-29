@@ -16,15 +16,15 @@ import (
 
 // IRCEventProcessor handles event processing for IRC with chunking and actions
 type IRCEventProcessor struct {
-	ctx                ChatContextInterface
-	byteChan           chan<- []byte
-	chunkBuffer        *bytes.Buffer
-	maxChunkSize       int
-	registry           *tools.ToolRegistry
-	client             llm.LLM
-	streamProcessor    llm.EventStreamProcessor // Add stream processor
-	originalModel      string
-	response           messages.ChatMessage // Store the response message
+	ctx             ChatContextInterface
+	byteChan        chan<- []byte
+	chunkBuffer     *bytes.Buffer
+	maxChunkSize    int
+	registry        *tools.ToolRegistry
+	client          llm.LLM
+	streamProcessor llm.EventStreamProcessor // Add stream processor
+	originalModel   string
+	response        messages.ChatMessage // Store the response message
 
 	// IRC-specific state
 	sentThinkingAction bool
@@ -32,7 +32,7 @@ type IRCEventProcessor struct {
 	thinkingTimer      *time.Timer
 
 	// For handling tool continuation
-	req                *llm.CompletionRequest
+	req *llm.CompletionRequest
 }
 
 // NewIRCEventProcessor creates a new IRC event processor
@@ -156,12 +156,8 @@ func (p *IRCEventProcessor) HandleToolContinuation(ctx context.Context, req *llm
 			})
 			continue
 		}
-
-		// Send action to show tool is being called if configured
-		// Skip for IRC tools as they already perform visible actions
-		isIRCTool := strings.HasPrefix(toolCall.Name, "irc_")
-
-		if p.ctx.GetConfig().Bot.ShowToolActions && !isIRCTool {
+		// Show action for tool call if enabled and not the irc_action tool
+		if p.ctx.GetConfig().Bot.ShowToolActions && toolCall.Name != "irc_action" {
 			channel := p.ctx.GetConfig().Server.Channel
 			// Strip namespace prefix for display (e.g., "script__weather" -> "weather")
 			displayName := toolCall.Name
