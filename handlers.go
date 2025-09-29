@@ -136,8 +136,8 @@ func slashSet(ctx ChatContextInterface) {
 			}
 			toolPath := strings.Join(parts[1:], " ")
 			
-			// Try to load the tool (handles shell, MCP, and IRC tools)
-			err := LoadToolWithIRC(registry, toolPath)
+			// Try to load the tool (polly now handles native, shell, and MCP tools)
+			_, err := registry.LoadToolAuto(toolPath)
 			if err != nil {
 				ctx.Reply(fmt.Sprintf("Failed: %v", err))
 			} else {

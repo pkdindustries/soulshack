@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"strings"
 
 	"github.com/alexschlessinger/pollytool/tools"
 	"github.com/modelcontextprotocol/go-sdk/jsonschema"
@@ -16,30 +15,20 @@ type IRCContextualTool interface {
 	SetIRCContext(ctx ChatContextInterface)
 }
 
-// LoadToolWithIRC wraps registry.LoadToolAuto to handle IRC tools
-func LoadToolWithIRC(registry *tools.ToolRegistry, toolSpec string) error {
-	// Check if it's an IRC tool
-	if strings.HasPrefix(toolSpec, "irc_") {
-		allTools := map[string]tools.Tool{
-			"irc_op":     &IrcOpTool{},
-			"irc_kick":   &IrcKickTool{},
-			"irc_topic":  &IrcTopicTool{},
-			"irc_action": &IrcActionTool{},
-		}
-
-		tool, exists := allTools[toolSpec]
-		if !exists {
-			return fmt.Errorf("unknown IRC tool: %s", toolSpec)
-		}
-
-		registry.Register(tool)
-		log.Printf("registered IRC tool: %s", toolSpec)
-		return nil
-	}
-
-	// Otherwise delegate to polly's LoadToolAuto
-	_, err := registry.LoadToolAuto(toolSpec)
-	return err
+// RegisterIRCTools registers IRC tools as native tools with polly's registry
+func RegisterIRCTools(registry *tools.ToolRegistry) {
+	registry.RegisterNative("irc_op", func() tools.Tool {
+		return &IrcOpTool{}
+	})
+	registry.RegisterNative("irc_kick", func() tools.Tool {
+		return &IrcKickTool{}
+	})
+	registry.RegisterNative("irc_topic", func() tools.Tool {
+		return &IrcTopicTool{}
+	})
+	registry.RegisterNative("irc_action", func() tools.Tool {
+		return &IrcActionTool{}
+	})
 }
 
 // IrcOpTool grants or revokes operator status

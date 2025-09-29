@@ -3,7 +3,7 @@ module pkdindustries/soulshack
 go 1.24.0
 
 require (
-	github.com/alexschlessinger/pollytool v0.0.0-20250923193535-0d14be98db03
+	github.com/alexschlessinger/pollytool v0.0.0-20250929020513-7b6c01f0db86
 	github.com/lrstanley/girc v1.1.0
 	github.com/modelcontextprotocol/go-sdk v0.2.0
 	github.com/spf13/cobra v1.9.1

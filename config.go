@@ -112,10 +112,13 @@ func NewSystem(c *Configuration) System {
 	// Initialize empty tool registry
 	s.Tools = tools.NewToolRegistry([]tools.Tool{})
 
-	// Load all tools from configuration (shell, MCP, and IRC tools)
+	// Register native IRC tools with polly's registry
+	RegisterIRCTools(s.Tools)
+
+	// Load all tools from configuration (polly now handles native, shell, and MCP tools)
 	if len(c.Bot.Tools) > 0 {
 		for _, toolSpec := range c.Bot.Tools {
-			if err := LoadToolWithIRC(s.Tools, toolSpec); err != nil {
+			if _, err := s.Tools.LoadToolAuto(toolSpec); err != nil {
 				log.Printf("config: warning loading tool %s: %v", toolSpec, err)
 			}
 		}
@@ -275,8 +278,7 @@ func initializeConfig() {
 	cmd.PersistentFlags().Float32("temperature", 0.7, "temperature for the completion")
 	cmd.PersistentFlags().Float32("top_p", 1, "top P value for the completion")
 	cmd.PersistentFlags().Bool("thinking", false, "enable thinking/reasoning for models that support it")
-	cmd.PersistentFlags().StringSlice("tool", []string{}, "tool paths to load (shell scripts or MCP server JSON files, can be specified multiple times or comma-separated)")
-	cmd.PersistentFlags().StringSlice("irctool", []string{"irc_op", "irc_kick", "irc_topic", "irc_action"}, "IRC tools to enable (can be specified multiple times or comma-separated)")
+	cmd.PersistentFlags().StringSlice("tool", []string{}, "tools to load (shell scripts, MCP server JSON files, or native tools like irc_op, can be specified multiple times or comma-separated)")
 	cmd.PersistentFlags().Bool("showthinkingaction", true, "show '[thinking]' IRC action when bot is reasoning")
 	cmd.PersistentFlags().Bool("showtoolactions", true, "show '[calling toolname]' IRC actions when executing tools")
 
