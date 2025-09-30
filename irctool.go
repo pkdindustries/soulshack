@@ -88,19 +88,22 @@ func (t *IrcOpTool) SetIRCContext(ctx ChatContextInterface) {
 func (t *IrcOpTool) GetSchema() *jsonschema.Schema {
 	return &jsonschema.Schema{
 		Title:       "irc_op",
-		Description: "Grant or revoke IRC operator status",
+		Description: "Grant or revoke IRC operator status for one or more users",
 		Type:        "object",
 		Properties: map[string]*jsonschema.Schema{
-			"nick": {
-				Type:        "string",
-				Description: "The nick to op/deop",
+			"users": {
+				Type:        "array",
+				Description: "List of user nicknames to op/deop",
+				Items: &jsonschema.Schema{
+					Type: "string",
+				},
 			},
 			"grant": {
 				Type:        "boolean",
 				Description: "true to grant op, false to revoke",
 			},
 		},
-		Required: []string{"nick", "grant"},
+		Required: []string{"users", "grant"},
 	}
 }
 
@@ -131,9 +134,23 @@ func (t *IrcOpTool) Execute(ctx context.Context, args map[string]any) (string, e
 		return "Bot does not have operator status in the channel", nil
 	}
 
-	nick, ok := args["nick"].(string)
+	usersRaw, ok := args["users"].([]any)
 	if !ok {
-		return "", fmt.Errorf("nick must be a string")
+		return "", fmt.Errorf("users must be an array")
+	}
+
+	if len(usersRaw) == 0 {
+		return "", fmt.Errorf("users array cannot be empty")
+	}
+
+	// Convert []any to []string
+	users := make([]string, len(usersRaw))
+	for i, u := range usersRaw {
+		user, ok := u.(string)
+		if !ok {
+			return "", fmt.Errorf("all users must be strings")
+		}
+		users[i] = user
 	}
 
 	grant, ok := args["grant"].(bool)
@@ -146,12 +163,15 @@ func (t *IrcOpTool) Execute(ctx context.Context, args map[string]any) (string, e
 		mode = "+o"
 	}
 
-	// Execute the IRC command
+	// Execute the IRC command for each user
 	channel := t.ctx.GetConfig().Server.Channel
-	t.ctx.Mode(channel, mode, nick)
+	for _, nick := range users {
+		t.ctx.Mode(channel, mode, nick)
+	}
 
-	log.Printf("IRC OP: Set mode %s for %s in %s", mode, nick, channel)
-	return fmt.Sprintf("Set mode %s for %s", mode, nick), nil
+	usersStr := strings.Join(users, ", ")
+	log.Printf("IRC OP: Set mode %s for %s in %s", mode, usersStr, channel)
+	return fmt.Sprintf("Set mode %s for %s", mode, usersStr), nil
 }
 
 // IrcKickTool kicks a user from the channel
@@ -172,19 +192,22 @@ func (t *IrcKickTool) SetIRCContext(ctx ChatContextInterface) {
 func (t *IrcKickTool) GetSchema() *jsonschema.Schema {
 	return &jsonschema.Schema{
 		Title:       "irc_kick",
-		Description: "Kick a user from the IRC channel",
+		Description: "Kick one or more users from the IRC channel",
 		Type:        "object",
 		Properties: map[string]*jsonschema.Schema{
-			"nick": {
-				Type:        "string",
-				Description: "The nick to kick",
+			"users": {
+				Type:        "array",
+				Description: "List of user nicknames to kick",
+				Items: &jsonschema.Schema{
+					Type: "string",
+				},
 			},
 			"reason": {
 				Type:        "string",
 				Description: "The reason for kicking",
 			},
 		},
-		Required: []string{"nick", "reason"},
+		Required: []string{"users", "reason"},
 	}
 }
 
@@ -215,9 +238,23 @@ func (t *IrcKickTool) Execute(ctx context.Context, args map[string]any) (string,
 		return "Bot does not have operator status in the channel", nil
 	}
 
-	nick, ok := args["nick"].(string)
+	usersRaw, ok := args["users"].([]any)
 	if !ok {
-		return "", fmt.Errorf("nick must be a string")
+		return "", fmt.Errorf("users must be an array")
+	}
+
+	if len(usersRaw) == 0 {
+		return "", fmt.Errorf("users array cannot be empty")
+	}
+
+	// Convert []any to []string
+	users := make([]string, len(usersRaw))
+	for i, u := range usersRaw {
+		user, ok := u.(string)
+		if !ok {
+			return "", fmt.Errorf("all users must be strings")
+		}
+		users[i] = user
 	}
 
 	reason, ok := args["reason"].(string)
@@ -225,12 +262,15 @@ func (t *IrcKickTool) Execute(ctx context.Context, args map[string]any) (string,
 		return "", fmt.Errorf("reason must be a string")
 	}
 
-	// Execute the IRC command
+	// Execute the IRC command for each user
 	channel := t.ctx.GetConfig().Server.Channel
-	t.ctx.Kick(channel, nick, reason)
+	for _, nick := range users {
+		t.ctx.Kick(channel, nick, reason)
+	}
 
-	log.Printf("IRC KICK: Kicked %s from %s for: %s", nick, channel, reason)
-	return fmt.Sprintf("Kicked %s: %s", nick, reason), nil
+	usersStr := strings.Join(users, ", ")
+	log.Printf("IRC KICK: Kicked %s from %s for: %s", usersStr, channel, reason)
+	return fmt.Sprintf("Kicked %s: %s", usersStr, reason), nil
 }
 
 // IrcBanTool bans or unbans a user from the channel
