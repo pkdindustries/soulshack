@@ -30,6 +30,8 @@ type Server interface {
 	Topic(string, string) bool
 	Oper(string, string) bool
 	LookupUser(string) (string, string, bool)
+	LookupChannel(string) *girc.Channel
+	GetClient() *girc.Client
 }
 
 type System interface {
@@ -185,6 +187,10 @@ func (c ChatContext) LookupUser(nick string) (string, string, bool) {
 	}
 	// Return ident and host separately for flexibility
 	return user.Ident, user.Host, true
+}
+
+func (c ChatContext) LookupChannel(channel string) *girc.Channel {
+	return c.client.LookupChannel(channel)
 }
 
 // checks if the message is valid for processing

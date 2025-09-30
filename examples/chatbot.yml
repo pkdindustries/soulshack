@@ -84,11 +84,18 @@ greeting: wave hello
 # IRC tools: use irc_ prefix (e.g., irc_op, irc_kick)
 tool:
   - examples/tools/datetime.sh   # Shell script for date/time queries
+
   - irc_op                        # Grant/revoke op status
   - irc_kick                      # Kick users from channel
+  - irc_ban                       # Ban/unban users (smart hostmask lookup)
+  - irc_mode_set                  # Set channel modes (+m, +t, +n, +i, +k, +l)
+  - irc_invite                    # Invite users to channel
+  - irc_mode_query                # Query current channel modes
+  - irc_names                     # List users in channel with prefixes
+  - irc_whois                     # Get detailed user info (instant, cached)
   - irc_topic                     # Change channel topic
   - irc_action                    # Send /me actions
-  - irc_ban                       # ban / unban
+
   # - examples/mcp/filesystem.json  # MCP server config for file operations
   # - examples/mcp/git.json         # MCP server config for git operations
   # - examples/tools/weather.py     # Another shell script example

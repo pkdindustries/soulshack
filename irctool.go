@@ -33,6 +33,21 @@ func RegisterIRCTools(registry *tools.ToolRegistry) {
 	registry.RegisterNative("irc_action", func() tools.Tool {
 		return &IrcActionTool{}
 	})
+	registry.RegisterNative("irc_mode_set", func() tools.Tool {
+		return &IrcModeSetTool{}
+	})
+	registry.RegisterNative("irc_mode_query", func() tools.Tool {
+		return &IrcModeQueryTool{}
+	})
+	registry.RegisterNative("irc_invite", func() tools.Tool {
+		return &IrcInviteTool{}
+	})
+	registry.RegisterNative("irc_names", func() tools.Tool {
+		return &IrcNamesTool{}
+	})
+	registry.RegisterNative("irc_whois", func() tools.Tool {
+		return &IrcWhoisTool{}
+	})
 }
 
 // IrcOpTool grants or revokes operator status
@@ -254,10 +269,8 @@ func (t *IrcBanTool) Execute(ctx context.Context, args map[string]any) (string, 
 		return "", fmt.Errorf("ban must be a boolean")
 	}
 
-	mode := "-b"
 	action := "Unbanned"
 	if ban {
-		mode = "+b"
 		action = "Banned"
 	}
 
@@ -277,9 +290,14 @@ func (t *IrcBanTool) Execute(ctx context.Context, args map[string]any) (string, 
 		}
 	}
 
-	// Execute the IRC command
+	// Execute the IRC command using girc's dedicated Ban/Unban methods
 	channel := t.ctx.GetConfig().Server.Channel
-	t.ctx.Mode(channel, mode, banMask)
+	client := t.ctx.GetClient()
+	if ban {
+		client.Cmd.Ban(channel, banMask)
+	} else {
+		client.Cmd.Unban(channel, banMask)
+	}
 
 	log.Printf("IRC BAN: %s %s in %s", action, banMask, channel)
 	return fmt.Sprintf("%s %s", action, banMask), nil
@@ -408,4 +426,400 @@ func (t *IrcActionTool) Execute(ctx context.Context, args map[string]any) (strin
 
 	log.Printf("IRC ACTION: Sent action: %s", message)
 	return fmt.Sprintf("* %s", message), nil
+}
+
+// IrcModeSetTool sets channel-wide modes
+type IrcModeSetTool struct {
+	ctx ChatContextInterface
+}
+
+func (t *IrcModeSetTool) SetContext(ctx any) {
+	if chatCtx, ok := ctx.(ChatContextInterface); ok {
+		t.ctx = chatCtx
+	}
+}
+
+func (t *IrcModeSetTool) SetIRCContext(ctx ChatContextInterface) {
+	t.ctx = ctx
+}
+
+func (t *IrcModeSetTool) GetSchema() *jsonschema.Schema {
+	return &jsonschema.Schema{
+		Title:       "irc_mode_set",
+		Description: "Set or unset channel-wide modes like +m (moderated), +t (topic protection), +n (no external messages), +i (invite only), +k (channel key), +l (user limit)",
+		Type:        "object",
+		Properties: map[string]*jsonschema.Schema{
+			"modes": {
+				Type:        "string",
+				Description: "The mode string to set, e.g., '+m', '-t', '+mnt', '+k password', '+l 50'",
+			},
+		},
+		Required: []string{"modes"},
+	}
+}
+
+func (t *IrcModeSetTool) GetName() string {
+	return "irc_mode_set"
+}
+
+func (t *IrcModeSetTool) GetType() string {
+	return "native"
+}
+
+func (t *IrcModeSetTool) GetSource() string {
+	return "builtin"
+}
+
+func (t *IrcModeSetTool) Execute(ctx context.Context, args map[string]any) (string, error) {
+	if t.ctx == nil {
+		return "", fmt.Errorf("no IRC context available")
+	}
+
+	// Check admin permission
+	if !t.ctx.IsAdmin() {
+		return "You are not authorized to use this tool", nil
+	}
+
+	modes, ok := args["modes"].(string)
+	if !ok {
+		return "", fmt.Errorf("modes must be a string")
+	}
+
+	// Parse mode string - first part is the mode flags, rest are parameters
+	parts := strings.Fields(modes)
+	if len(parts) == 0 {
+		return "", fmt.Errorf("modes string cannot be empty")
+	}
+
+	modeFlags := parts[0]
+	modeParams := parts[1:]
+
+	// Execute the IRC MODE command for channel-wide modes
+	channel := t.ctx.GetConfig().Server.Channel
+	client := t.ctx.GetClient()
+	if len(modeParams) > 0 {
+		client.Cmd.Mode(channel, modeFlags, modeParams...)
+	} else {
+		client.Cmd.Mode(channel, modeFlags)
+	}
+
+	log.Printf("IRC MODE SET: Set modes %s on %s", modes, channel)
+	return fmt.Sprintf("Set channel mode %s on %s", modes, channel), nil
+}
+
+// IrcModeQueryTool queries current channel modes
+type IrcModeQueryTool struct {
+	ctx ChatContextInterface
+}
+
+func (t *IrcModeQueryTool) SetContext(ctx any) {
+	if chatCtx, ok := ctx.(ChatContextInterface); ok {
+		t.ctx = chatCtx
+	}
+}
+
+func (t *IrcModeQueryTool) SetIRCContext(ctx ChatContextInterface) {
+	t.ctx = ctx
+}
+
+func (t *IrcModeQueryTool) GetSchema() *jsonschema.Schema {
+	return &jsonschema.Schema{
+		Title:       "irc_mode_query",
+		Description: "Query the current channel modes (uses cached state, instant response)",
+		Type:        "object",
+		Properties:  map[string]*jsonschema.Schema{},
+		Required:    []string{},
+	}
+}
+
+func (t *IrcModeQueryTool) GetName() string {
+	return "irc_mode_query"
+}
+
+func (t *IrcModeQueryTool) GetType() string {
+	return "native"
+}
+
+func (t *IrcModeQueryTool) GetSource() string {
+	return "builtin"
+}
+
+func (t *IrcModeQueryTool) Execute(ctx context.Context, args map[string]any) (string, error) {
+	if t.ctx == nil {
+		return "", fmt.Errorf("no IRC context available")
+	}
+
+	channel := t.ctx.GetConfig().Server.Channel
+	ch := t.ctx.LookupChannel(channel)
+
+	if ch == nil {
+		return fmt.Sprintf("Channel %s not found in state (not joined yet?)", channel), nil
+	}
+
+	// Get modes as string from girc's CModes type
+	modeStr := ch.Modes.String()
+
+	if modeStr == "" {
+		return fmt.Sprintf("Channel %s has no modes set", channel), nil
+	}
+
+	log.Printf("IRC MODE QUERY: Channel %s modes: %s", channel, modeStr)
+	return fmt.Sprintf("Channel %s modes: %s", channel, modeStr), nil
+}
+
+// IrcInviteTool invites users to the channel
+type IrcInviteTool struct {
+	ctx ChatContextInterface
+}
+
+func (t *IrcInviteTool) SetContext(ctx any) {
+	if chatCtx, ok := ctx.(ChatContextInterface); ok {
+		t.ctx = chatCtx
+	}
+}
+
+func (t *IrcInviteTool) SetIRCContext(ctx ChatContextInterface) {
+	t.ctx = ctx
+}
+
+func (t *IrcInviteTool) GetSchema() *jsonschema.Schema {
+	return &jsonschema.Schema{
+		Title:       "irc_invite",
+		Description: "Invite one or more users to the IRC channel",
+		Type:        "object",
+		Properties: map[string]*jsonschema.Schema{
+			"users": {
+				Type:        "array",
+				Description: "List of user nicknames to invite",
+				Items: &jsonschema.Schema{
+					Type: "string",
+				},
+			},
+		},
+		Required: []string{"users"},
+	}
+}
+
+func (t *IrcInviteTool) GetName() string {
+	return "irc_invite"
+}
+
+func (t *IrcInviteTool) GetType() string {
+	return "native"
+}
+
+func (t *IrcInviteTool) GetSource() string {
+	return "builtin"
+}
+
+func (t *IrcInviteTool) Execute(ctx context.Context, args map[string]any) (string, error) {
+	if t.ctx == nil {
+		return "", fmt.Errorf("no IRC context available")
+	}
+
+	// Check admin permission
+	if !t.ctx.IsAdmin() {
+		return "You are not authorized to use this tool", nil
+	}
+
+	usersRaw, ok := args["users"].([]any)
+	if !ok {
+		return "", fmt.Errorf("users must be an array")
+	}
+
+	if len(usersRaw) == 0 {
+		return "", fmt.Errorf("users array cannot be empty")
+	}
+
+	// Convert []any to []string
+	users := make([]string, len(usersRaw))
+	for i, u := range usersRaw {
+		user, ok := u.(string)
+		if !ok {
+			return "", fmt.Errorf("all users must be strings")
+		}
+		users[i] = user
+	}
+
+	// Execute the IRC INVITE command
+	channel := t.ctx.GetConfig().Server.Channel
+	client := t.ctx.GetClient()
+	client.Cmd.Invite(channel, users...)
+
+	usersStr := strings.Join(users, ", ")
+	log.Printf("IRC INVITE: Invited %s to %s", usersStr, channel)
+	return fmt.Sprintf("Invited %s to %s", usersStr, channel), nil
+}
+
+// IrcNamesTool lists all users in the channel
+type IrcNamesTool struct {
+	ctx ChatContextInterface
+}
+
+func (t *IrcNamesTool) SetContext(ctx any) {
+	if chatCtx, ok := ctx.(ChatContextInterface); ok {
+		t.ctx = chatCtx
+	}
+}
+
+func (t *IrcNamesTool) SetIRCContext(ctx ChatContextInterface) {
+	t.ctx = ctx
+}
+
+func (t *IrcNamesTool) GetSchema() *jsonschema.Schema {
+	return &jsonschema.Schema{
+		Title:       "irc_names",
+		Description: "List all users currently in the IRC channel (uses cached state, instant response)",
+		Type:        "object",
+		Properties:  map[string]*jsonschema.Schema{},
+		Required:    []string{},
+	}
+}
+
+func (t *IrcNamesTool) GetName() string {
+	return "irc_names"
+}
+
+func (t *IrcNamesTool) GetType() string {
+	return "native"
+}
+
+func (t *IrcNamesTool) GetSource() string {
+	return "builtin"
+}
+
+func (t *IrcNamesTool) Execute(ctx context.Context, args map[string]any) (string, error) {
+	if t.ctx == nil {
+		return "", fmt.Errorf("no IRC context available")
+	}
+
+	channel := t.ctx.GetConfig().Server.Channel
+	ch := t.ctx.LookupChannel(channel)
+
+	if ch == nil {
+		return fmt.Sprintf("Channel %s not found in state (not joined yet?)", channel), nil
+	}
+
+	client := t.ctx.GetClient()
+	users := ch.Users(client)
+
+	if len(users) == 0 {
+		return fmt.Sprintf("No users found in %s", channel), nil
+	}
+
+	// Get lists of admins and trusted users for prefix determination
+	admins := ch.Admins(client)
+	trusted := ch.Trusted(client)
+
+	// Create maps for quick lookup
+	adminMap := make(map[string]bool)
+	for _, admin := range admins {
+		adminMap[admin.Nick] = true
+	}
+	trustedMap := make(map[string]bool)
+	for _, t := range trusted {
+		trustedMap[t.Nick] = true
+	}
+
+	// Build list of nicks with their prefixes (@, +, etc.)
+	var nicks []string
+	for _, user := range users {
+		prefix := ""
+		if adminMap[user.Nick] {
+			prefix = "@"
+		} else if trustedMap[user.Nick] {
+			prefix = "+"
+		}
+		nicks = append(nicks, prefix+user.Nick)
+	}
+
+	nicksStr := strings.Join(nicks, ", ")
+	log.Printf("IRC NAMES: %s (%d users): %s", channel, len(users), nicksStr)
+	return fmt.Sprintf("Users in %s (%d): %s", channel, len(users), nicksStr), nil
+}
+
+// IrcWhoisTool gets detailed information about a user
+type IrcWhoisTool struct {
+	ctx ChatContextInterface
+}
+
+func (t *IrcWhoisTool) SetContext(ctx any) {
+	if chatCtx, ok := ctx.(ChatContextInterface); ok {
+		t.ctx = chatCtx
+	}
+}
+
+func (t *IrcWhoisTool) SetIRCContext(ctx ChatContextInterface) {
+	t.ctx = ctx
+}
+
+func (t *IrcWhoisTool) GetSchema() *jsonschema.Schema {
+	return &jsonschema.Schema{
+		Title:       "irc_whois",
+		Description: "Get detailed information about a user (uses cached state, instant response)",
+		Type:        "object",
+		Properties: map[string]*jsonschema.Schema{
+			"nick": {
+				Type:        "string",
+				Description: "The nickname to look up",
+			},
+		},
+		Required: []string{"nick"},
+	}
+}
+
+func (t *IrcWhoisTool) GetName() string {
+	return "irc_whois"
+}
+
+func (t *IrcWhoisTool) GetType() string {
+	return "native"
+}
+
+func (t *IrcWhoisTool) GetSource() string {
+	return "builtin"
+}
+
+func (t *IrcWhoisTool) Execute(ctx context.Context, args map[string]any) (string, error) {
+	if t.ctx == nil {
+		return "", fmt.Errorf("no IRC context available")
+	}
+
+	nick, ok := args["nick"].(string)
+	if !ok {
+		return "", fmt.Errorf("nick must be a string")
+	}
+
+	client := t.ctx.GetClient()
+	user := client.LookupUser(nick)
+
+	if user == nil {
+		return fmt.Sprintf("User %s not found in cached state", nick), nil
+	}
+
+	// Build detailed info from cached state
+	var info strings.Builder
+	info.WriteString(fmt.Sprintf("User: %s\n", user.Nick))
+	info.WriteString(fmt.Sprintf("Hostmask: %s!%s@%s\n", user.Nick, user.Ident, user.Host))
+
+	// Add extras if available
+	if user.Extras.Name != "" {
+		info.WriteString(fmt.Sprintf("Real name: %s\n", user.Extras.Name))
+	}
+	if user.Extras.Account != "" {
+		info.WriteString(fmt.Sprintf("Account: %s (authenticated)\n", user.Extras.Account))
+	}
+	if user.Extras.Away != "" {
+		info.WriteString(fmt.Sprintf("Away: %s\n", user.Extras.Away))
+	}
+
+	// List channels
+	channels := user.ChannelList
+	if len(channels) > 0 {
+		info.WriteString(fmt.Sprintf("Channels (%d): %s\n", len(channels), strings.Join(channels, ", ")))
+	}
+
+	result := strings.TrimSpace(info.String())
+	log.Printf("IRC WHOIS: %s", result)
+	return result, nil
 }
