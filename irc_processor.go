@@ -158,13 +158,20 @@ func (p *IRCEventProcessor) HandleToolContinuation(ctx context.Context, req *llm
 		}
 		// Show action for tool call if enabled and not the irc_action tool
 		if p.ctx.GetConfig().Bot.ShowToolActions && toolCall.Name != "irc_action" {
-			channel := p.ctx.GetConfig().Server.Channel
 			// Strip namespace prefix for display (e.g., "script__weather" -> "weather")
 			displayName := toolCall.Name
 			if idx := strings.Index(displayName, "__"); idx != -1 {
 				displayName = displayName[idx+2:]
 			}
-			p.ctx.Action(channel, fmt.Sprintf("calling %s", displayName))
+			message := fmt.Sprintf("calling %s", displayName)
+			if p.ctx.IsPrivate() {
+				// For private messages, send a regular reply
+				p.ctx.Reply(message)
+			} else {
+				// For channels, use an action
+				channel := p.ctx.GetConfig().Server.Channel
+				p.ctx.Action(channel, message)
+			}
 		}
 
 		// Set context for contextual tools (IRC tools)
