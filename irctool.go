@@ -16,6 +16,26 @@ type IRCContextualTool interface {
 	SetIRCContext(ctx ChatContextInterface)
 }
 
+// isBotOpped checks if the bot has operator status in the channel
+func isBotOpped(ctx ChatContextInterface) bool {
+	channel := ctx.GetConfig().Server.Channel
+	client := ctx.GetClient()
+	botNick := client.GetNick()
+
+	ch := ctx.LookupChannel(channel)
+	if ch == nil {
+		return false
+	}
+
+	admins := ch.Admins(client)
+	for _, admin := range admins {
+		if admin.Nick == botNick {
+			return true
+		}
+	}
+	return false
+}
+
 // RegisterIRCTools registers IRC tools as native tools with polly's registry
 func RegisterIRCTools(registry *tools.ToolRegistry) {
 	registry.RegisterNative("irc_op", func() tools.Tool {
@@ -106,6 +126,11 @@ func (t *IrcOpTool) Execute(ctx context.Context, args map[string]any) (string, e
 		return "You are not authorized to use this tool", nil
 	}
 
+	// Check if bot has operator status
+	if !isBotOpped(t.ctx) {
+		return "Bot does not have operator status in the channel", nil
+	}
+
 	nick, ok := args["nick"].(string)
 	if !ok {
 		return "", fmt.Errorf("nick must be a string")
@@ -185,6 +210,11 @@ func (t *IrcKickTool) Execute(ctx context.Context, args map[string]any) (string,
 		return "You are not authorized to use this tool", nil
 	}
 
+	// Check if bot has operator status
+	if !isBotOpped(t.ctx) {
+		return "Bot does not have operator status in the channel", nil
+	}
+
 	nick, ok := args["nick"].(string)
 	if !ok {
 		return "", fmt.Errorf("nick must be a string")
@@ -257,6 +287,11 @@ func (t *IrcBanTool) Execute(ctx context.Context, args map[string]any) (string, 
 	// Check admin permission
 	if !t.ctx.IsAdmin() {
 		return "You are not authorized to use this tool", nil
+	}
+
+	// Check if bot has operator status
+	if !isBotOpped(t.ctx) {
+		return "Bot does not have operator status in the channel", nil
 	}
 
 	target, ok := args["target"].(string)
@@ -353,6 +388,11 @@ func (t *IrcTopicTool) Execute(ctx context.Context, args map[string]any) (string
 	// Check admin permission
 	if !t.ctx.IsAdmin() {
 		return "You are not authorized to use this tool", nil
+	}
+
+	// Check if bot has operator status
+	if !isBotOpped(t.ctx) {
+		return "Bot does not have operator status in the channel", nil
 	}
 
 	topic, ok := args["topic"].(string)
@@ -478,6 +518,11 @@ func (t *IrcModeSetTool) Execute(ctx context.Context, args map[string]any) (stri
 	// Check admin permission
 	if !t.ctx.IsAdmin() {
 		return "You are not authorized to use this tool", nil
+	}
+
+	// Check if bot has operator status
+	if !isBotOpped(t.ctx) {
+		return "Bot does not have operator status in the channel", nil
 	}
 
 	modes, ok := args["modes"].(string)
@@ -620,6 +665,11 @@ func (t *IrcInviteTool) Execute(ctx context.Context, args map[string]any) (strin
 	// Check admin permission
 	if !t.ctx.IsAdmin() {
 		return "You are not authorized to use this tool", nil
+	}
+
+	// Check if bot has operator status
+	if !isBotOpped(t.ctx) {
+		return "Bot does not have operator status in the channel", nil
 	}
 
 	usersRaw, ok := args["users"].([]any)
