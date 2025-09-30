@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/alexschlessinger/pollytool/tools"
-	"github.com/modelcontextprotocol/go-sdk/jsonschema"
+	"github.com/google/jsonschema-go/jsonschema"
 )
 
 // IRCContextualTool extends pollytool's ContextualTool for IRC-specific context
