@@ -175,9 +175,8 @@ func (p *IRCEventProcessor) HandleToolContinuation(ctx context.Context, req *llm
 		}
 
 		// Set context for contextual tools (IRC tools)
-		if contextualTool, ok := tool.(tools.ContextualTool); ok {
-			contextualTool.SetContext(p.ctx)
-		}
+		// We now pass this via the context.Context below
+		ctx = context.WithValue(ctx, kContextKey, p.ctx)
 
 		// Execute tool
 		log.Printf("Executing tool: %s(%v)", toolCall.Name, args)

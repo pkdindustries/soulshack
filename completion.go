@@ -58,15 +58,15 @@ func complete(ctx ChatContextInterface) (<-chan string, error) {
 	session := ctx.GetSession()
 	config := ctx.GetConfig()
 	sys := ctx.GetSystem()
-	
+
 	// Get all tools from registry
 	var allTools []tools.Tool
 	if sys.GetToolRegistry() != nil {
 		allTools = sys.GetToolRegistry().All()
 	}
-	
+
 	req := NewCompletionRequest(config, session, allTools)
-	llm := sys.GetLLM()
+	llm := NewPollyLLM(*config.API)
 
 	// Get the byte stream from the new interface
 	byteChan := llm.ChatCompletionStream(context.Background(), req, ctx)
@@ -76,7 +76,7 @@ func complete(ctx ChatContextInterface) (<-chan string, error) {
 
 	go func() {
 		defer close(outputChan)
-		
+
 		for bytes := range byteChan {
 			outputChan <- string(bytes)
 		}

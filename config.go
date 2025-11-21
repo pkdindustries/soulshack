@@ -87,12 +87,7 @@ type Configuration struct {
 
 type SystemImpl struct {
 	Store sessions.SessionStore
-	LLM   LLM
 	Tools *tools.ToolRegistry
-}
-
-func (s *SystemImpl) GetLLM() LLM {
-	return s.LLM
 }
 
 func (s *SystemImpl) GetToolRegistry() *tools.ToolRegistry {
@@ -125,9 +120,6 @@ func NewSystem(c *Configuration) System {
 	}
 
 	log.Printf("config: loaded %d tools", len(s.Tools.All()))
-
-	// initialize the api for completions using Polly
-	s.LLM = NewPollyLLM(*c.API)
 
 	// initialize sessions with pollytool's SyncMapSessionStore
 	log.Printf("sessionstore: syncmap")

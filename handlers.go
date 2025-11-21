@@ -121,12 +121,12 @@ func slashSet(ctx ChatContextInterface) {
 		// Simple tools management - just add and remove
 		registry := ctx.GetSystem().GetToolRegistry()
 		parts := strings.Fields(value)
-		
+
 		if len(parts) == 0 {
 			ctx.Reply("Usage: /set tools [add|remove]")
 			return
 		}
-		
+
 		subcommand := parts[0]
 		switch subcommand {
 		case "add":
@@ -135,7 +135,7 @@ func slashSet(ctx ChatContextInterface) {
 				return
 			}
 			toolPath := strings.Join(parts[1:], " ")
-			
+
 			// Try to load the tool (polly now handles native, shell, and MCP tools)
 			_, err := registry.LoadToolAuto(toolPath)
 			if err != nil {
@@ -143,14 +143,14 @@ func slashSet(ctx ChatContextInterface) {
 			} else {
 				ctx.Reply(fmt.Sprintf("Added tool: %s", toolPath))
 			}
-			
+
 		case "remove":
 			if len(parts) < 2 {
 				ctx.Reply("Usage: /set tools remove <name or pattern>")
 				return
 			}
 			pattern := strings.Join(parts[1:], " ")
-			
+
 			// Check if it's a wildcard pattern
 			if strings.Contains(pattern, "*") {
 				// Wildcard removal
@@ -163,7 +163,7 @@ func slashSet(ctx ChatContextInterface) {
 						removed = append(removed, name)
 					}
 				}
-				
+
 				if len(removed) > 0 {
 					ctx.Reply(fmt.Sprintf("Removed %d tools: %s", len(removed), strings.Join(removed, ", ")))
 				} else {
@@ -178,7 +178,7 @@ func slashSet(ctx ChatContextInterface) {
 					ctx.Reply(fmt.Sprintf("Removed: %s", pattern))
 				}
 			}
-			
+
 		default:
 			ctx.Reply("Usage: /set tools [add|remove]")
 		}
@@ -264,7 +264,7 @@ func slashGet(ctx ChatContextInterface) {
 		// Simple tool listing
 		registry := ctx.GetSystem().GetToolRegistry()
 		allTools := registry.All()
-		
+
 		if len(allTools) == 0 {
 			ctx.Reply("No tools loaded")
 		} else {
@@ -273,7 +273,7 @@ func slashGet(ctx ChatContextInterface) {
 			for _, tool := range allTools {
 				toolNames = append(toolNames, tool.GetName())
 			}
-			
+
 			message := "Tools: " + strings.Join(toolNames, ", ")
 			// Truncate if too long for IRC
 			maxLen := config.Session.ChunkMax

@@ -13,7 +13,17 @@ import (
 // IRCContextualTool extends pollytool's ContextualTool for IRC-specific context
 type IRCContextualTool interface {
 	tools.ContextualTool
-	SetIRCContext(ctx ChatContextInterface)
+}
+
+type contextKey string
+
+const kContextKey contextKey = "irc_context"
+
+func GetIRCContext(ctx context.Context) (ChatContextInterface, error) {
+	if chatCtx, ok := ctx.Value(kContextKey).(ChatContextInterface); ok {
+		return chatCtx, nil
+	}
+	return nil, fmt.Errorf("no IRC context available")
 }
 
 // isBotOpped checks if the bot has operator status in the channel
@@ -72,17 +82,9 @@ func RegisterIRCTools(registry *tools.ToolRegistry) {
 
 // IrcOpTool grants or revokes operator status
 type IrcOpTool struct {
-	ctx ChatContextInterface
 }
 
 func (t *IrcOpTool) SetContext(ctx any) {
-	if chatCtx, ok := ctx.(ChatContextInterface); ok {
-		t.ctx = chatCtx
-	}
-}
-
-func (t *IrcOpTool) SetIRCContext(ctx ChatContextInterface) {
-	t.ctx = ctx
 }
 
 func (t *IrcOpTool) GetSchema() *jsonschema.Schema {
@@ -120,17 +122,18 @@ func (t *IrcOpTool) GetSource() string {
 }
 
 func (t *IrcOpTool) Execute(ctx context.Context, args map[string]any) (string, error) {
-	if t.ctx == nil {
-		return "", fmt.Errorf("no IRC context available")
+	chatCtx, err := GetIRCContext(ctx)
+	if err != nil {
+		return "", err
 	}
 
 	// Check admin permission
-	if !t.ctx.IsAdmin() {
+	if !chatCtx.IsAdmin() {
 		return "You are not authorized to use this tool", nil
 	}
 
 	// Check if bot has operator status
-	if !isBotOpped(t.ctx) {
+	if !isBotOpped(chatCtx) {
 		return "Bot does not have operator status in the channel", nil
 	}
 
@@ -164,9 +167,9 @@ func (t *IrcOpTool) Execute(ctx context.Context, args map[string]any) (string, e
 	}
 
 	// Execute the IRC command for each user
-	channel := t.ctx.GetConfig().Server.Channel
+	channel := chatCtx.GetConfig().Server.Channel
 	for _, nick := range users {
-		t.ctx.Mode(channel, mode, nick)
+		chatCtx.Mode(channel, mode, nick)
 	}
 
 	usersStr := strings.Join(users, ", ")
@@ -176,17 +179,9 @@ func (t *IrcOpTool) Execute(ctx context.Context, args map[string]any) (string, e
 
 // IrcKickTool kicks a user from the channel
 type IrcKickTool struct {
-	ctx ChatContextInterface
 }
 
 func (t *IrcKickTool) SetContext(ctx any) {
-	if chatCtx, ok := ctx.(ChatContextInterface); ok {
-		t.ctx = chatCtx
-	}
-}
-
-func (t *IrcKickTool) SetIRCContext(ctx ChatContextInterface) {
-	t.ctx = ctx
 }
 
 func (t *IrcKickTool) GetSchema() *jsonschema.Schema {
@@ -224,17 +219,18 @@ func (t *IrcKickTool) GetSource() string {
 }
 
 func (t *IrcKickTool) Execute(ctx context.Context, args map[string]any) (string, error) {
-	if t.ctx == nil {
-		return "", fmt.Errorf("no IRC context available")
+	chatCtx, err := GetIRCContext(ctx)
+	if err != nil {
+		return "", err
 	}
 
 	// Check admin permission
-	if !t.ctx.IsAdmin() {
+	if !chatCtx.IsAdmin() {
 		return "You are not authorized to use this tool", nil
 	}
 
 	// Check if bot has operator status
-	if !isBotOpped(t.ctx) {
+	if !isBotOpped(chatCtx) {
 		return "Bot does not have operator status in the channel", nil
 	}
 
@@ -263,9 +259,9 @@ func (t *IrcKickTool) Execute(ctx context.Context, args map[string]any) (string,
 	}
 
 	// Execute the IRC command for each user
-	channel := t.ctx.GetConfig().Server.Channel
+	channel := chatCtx.GetConfig().Server.Channel
 	for _, nick := range users {
-		t.ctx.Kick(channel, nick, reason)
+		chatCtx.Kick(channel, nick, reason)
 	}
 
 	usersStr := strings.Join(users, ", ")
@@ -275,17 +271,9 @@ func (t *IrcKickTool) Execute(ctx context.Context, args map[string]any) (string,
 
 // IrcBanTool bans or unbans a user from the channel
 type IrcBanTool struct {
-	ctx ChatContextInterface
 }
 
 func (t *IrcBanTool) SetContext(ctx any) {
-	if chatCtx, ok := ctx.(ChatContextInterface); ok {
-		t.ctx = chatCtx
-	}
-}
-
-func (t *IrcBanTool) SetIRCContext(ctx ChatContextInterface) {
-	t.ctx = ctx
 }
 
 func (t *IrcBanTool) GetSchema() *jsonschema.Schema {
@@ -320,17 +308,18 @@ func (t *IrcBanTool) GetSource() string {
 }
 
 func (t *IrcBanTool) Execute(ctx context.Context, args map[string]any) (string, error) {
-	if t.ctx == nil {
-		return "", fmt.Errorf("no IRC context available")
+	chatCtx, err := GetIRCContext(ctx)
+	if err != nil {
+		return "", err
 	}
 
 	// Check admin permission
-	if !t.ctx.IsAdmin() {
+	if !chatCtx.IsAdmin() {
 		return "You are not authorized to use this tool", nil
 	}
 
 	// Check if bot has operator status
-	if !isBotOpped(t.ctx) {
+	if !isBotOpped(chatCtx) {
 		return "Bot does not have operator status in the channel", nil
 	}
 
@@ -353,7 +342,7 @@ func (t *IrcBanTool) Execute(ctx context.Context, args map[string]any) (string, 
 	banMask := target
 	if !strings.Contains(target, "!") && !strings.Contains(target, "*") {
 		// Try to look up the user to get their actual ident and host
-		if ident, host, found := t.ctx.LookupUser(target); found {
+		if ident, host, found := chatCtx.LookupUser(target); found {
 			// Create a ban mask that bans *!ident@host
 			// This is more specific than *!*@host and prevents banning other users on the same host
 			banMask = fmt.Sprintf("*!%s@%s", ident, host)
@@ -366,8 +355,8 @@ func (t *IrcBanTool) Execute(ctx context.Context, args map[string]any) (string, 
 	}
 
 	// Execute the IRC command using girc's dedicated Ban/Unban methods
-	channel := t.ctx.GetConfig().Server.Channel
-	client := t.ctx.GetClient()
+	channel := chatCtx.GetConfig().Server.Channel
+	client := chatCtx.GetClient()
 	if ban {
 		client.Cmd.Ban(channel, banMask)
 	} else {
@@ -380,17 +369,9 @@ func (t *IrcBanTool) Execute(ctx context.Context, args map[string]any) (string, 
 
 // IrcTopicTool sets the channel topic
 type IrcTopicTool struct {
-	ctx ChatContextInterface
 }
 
 func (t *IrcTopicTool) SetContext(ctx any) {
-	if chatCtx, ok := ctx.(ChatContextInterface); ok {
-		t.ctx = chatCtx
-	}
-}
-
-func (t *IrcTopicTool) SetIRCContext(ctx ChatContextInterface) {
-	t.ctx = ctx
 }
 
 func (t *IrcTopicTool) GetSchema() *jsonschema.Schema {
@@ -421,17 +402,18 @@ func (t *IrcTopicTool) GetSource() string {
 }
 
 func (t *IrcTopicTool) Execute(ctx context.Context, args map[string]any) (string, error) {
-	if t.ctx == nil {
-		return "", fmt.Errorf("no IRC context available")
+	chatCtx, err := GetIRCContext(ctx)
+	if err != nil {
+		return "", err
 	}
 
 	// Check admin permission
-	if !t.ctx.IsAdmin() {
+	if !chatCtx.IsAdmin() {
 		return "You are not authorized to use this tool", nil
 	}
 
 	// Check if bot has operator status
-	if !isBotOpped(t.ctx) {
+	if !isBotOpped(chatCtx) {
 		return "Bot does not have operator status in the channel", nil
 	}
 
@@ -441,8 +423,8 @@ func (t *IrcTopicTool) Execute(ctx context.Context, args map[string]any) (string
 	}
 
 	// Execute the IRC command
-	channel := t.ctx.GetConfig().Server.Channel
-	t.ctx.Topic(channel, topic)
+	channel := chatCtx.GetConfig().Server.Channel
+	chatCtx.Topic(channel, topic)
 
 	log.Printf("IRC TOPIC: Set topic in %s to: %s", channel, topic)
 	return fmt.Sprintf("Set topic: %s", topic), nil
@@ -450,17 +432,9 @@ func (t *IrcTopicTool) Execute(ctx context.Context, args map[string]any) (string
 
 // IrcActionTool sends an action message to the channel
 type IrcActionTool struct {
-	ctx ChatContextInterface
 }
 
 func (t *IrcActionTool) SetContext(ctx any) {
-	if chatCtx, ok := ctx.(ChatContextInterface); ok {
-		t.ctx = chatCtx
-	}
-}
-
-func (t *IrcActionTool) SetIRCContext(ctx ChatContextInterface) {
-	t.ctx = ctx
 }
 
 func (t *IrcActionTool) GetSchema() *jsonschema.Schema {
@@ -491,8 +465,9 @@ func (t *IrcActionTool) GetSource() string {
 }
 
 func (t *IrcActionTool) Execute(ctx context.Context, args map[string]any) (string, error) {
-	if t.ctx == nil {
-		return "", fmt.Errorf("no IRC context available")
+	chatCtx, err := GetIRCContext(ctx)
+	if err != nil {
+		return "", err
 	}
 
 	message, ok := args["message"].(string)
@@ -501,8 +476,8 @@ func (t *IrcActionTool) Execute(ctx context.Context, args map[string]any) (strin
 	}
 
 	// Send IRC action directly to the configured channel
-	channel := t.ctx.GetConfig().Server.Channel
-	t.ctx.Action(channel, message)
+	channel := chatCtx.GetConfig().Server.Channel
+	chatCtx.Action(channel, message)
 
 	log.Printf("IRC ACTION: Sent action: %s", message)
 	return fmt.Sprintf("* %s", message), nil
@@ -510,17 +485,9 @@ func (t *IrcActionTool) Execute(ctx context.Context, args map[string]any) (strin
 
 // IrcModeSetTool sets channel-wide modes
 type IrcModeSetTool struct {
-	ctx ChatContextInterface
 }
 
 func (t *IrcModeSetTool) SetContext(ctx any) {
-	if chatCtx, ok := ctx.(ChatContextInterface); ok {
-		t.ctx = chatCtx
-	}
-}
-
-func (t *IrcModeSetTool) SetIRCContext(ctx ChatContextInterface) {
-	t.ctx = ctx
 }
 
 func (t *IrcModeSetTool) GetSchema() *jsonschema.Schema {
@@ -551,17 +518,18 @@ func (t *IrcModeSetTool) GetSource() string {
 }
 
 func (t *IrcModeSetTool) Execute(ctx context.Context, args map[string]any) (string, error) {
-	if t.ctx == nil {
-		return "", fmt.Errorf("no IRC context available")
+	chatCtx, err := GetIRCContext(ctx)
+	if err != nil {
+		return "", err
 	}
 
 	// Check admin permission
-	if !t.ctx.IsAdmin() {
+	if !chatCtx.IsAdmin() {
 		return "You are not authorized to use this tool", nil
 	}
 
 	// Check if bot has operator status
-	if !isBotOpped(t.ctx) {
+	if !isBotOpped(chatCtx) {
 		return "Bot does not have operator status in the channel", nil
 	}
 
@@ -580,8 +548,8 @@ func (t *IrcModeSetTool) Execute(ctx context.Context, args map[string]any) (stri
 	modeParams := parts[1:]
 
 	// Execute the IRC MODE command for channel-wide modes
-	channel := t.ctx.GetConfig().Server.Channel
-	client := t.ctx.GetClient()
+	channel := chatCtx.GetConfig().Server.Channel
+	client := chatCtx.GetClient()
 	if len(modeParams) > 0 {
 		client.Cmd.Mode(channel, modeFlags, modeParams...)
 	} else {
@@ -594,17 +562,9 @@ func (t *IrcModeSetTool) Execute(ctx context.Context, args map[string]any) (stri
 
 // IrcModeQueryTool queries current channel modes
 type IrcModeQueryTool struct {
-	ctx ChatContextInterface
 }
 
 func (t *IrcModeQueryTool) SetContext(ctx any) {
-	if chatCtx, ok := ctx.(ChatContextInterface); ok {
-		t.ctx = chatCtx
-	}
-}
-
-func (t *IrcModeQueryTool) SetIRCContext(ctx ChatContextInterface) {
-	t.ctx = ctx
 }
 
 func (t *IrcModeQueryTool) GetSchema() *jsonschema.Schema {
@@ -630,12 +590,13 @@ func (t *IrcModeQueryTool) GetSource() string {
 }
 
 func (t *IrcModeQueryTool) Execute(ctx context.Context, args map[string]any) (string, error) {
-	if t.ctx == nil {
-		return "", fmt.Errorf("no IRC context available")
+	chatCtx, err := GetIRCContext(ctx)
+	if err != nil {
+		return "", err
 	}
 
-	channel := t.ctx.GetConfig().Server.Channel
-	ch := t.ctx.LookupChannel(channel)
+	channel := chatCtx.GetConfig().Server.Channel
+	ch := chatCtx.LookupChannel(channel)
 
 	if ch == nil {
 		return fmt.Sprintf("Channel %s not found in state (not joined yet?)", channel), nil
@@ -654,17 +615,9 @@ func (t *IrcModeQueryTool) Execute(ctx context.Context, args map[string]any) (st
 
 // IrcInviteTool invites users to the channel
 type IrcInviteTool struct {
-	ctx ChatContextInterface
 }
 
 func (t *IrcInviteTool) SetContext(ctx any) {
-	if chatCtx, ok := ctx.(ChatContextInterface); ok {
-		t.ctx = chatCtx
-	}
-}
-
-func (t *IrcInviteTool) SetIRCContext(ctx ChatContextInterface) {
-	t.ctx = ctx
 }
 
 func (t *IrcInviteTool) GetSchema() *jsonschema.Schema {
@@ -698,17 +651,18 @@ func (t *IrcInviteTool) GetSource() string {
 }
 
 func (t *IrcInviteTool) Execute(ctx context.Context, args map[string]any) (string, error) {
-	if t.ctx == nil {
-		return "", fmt.Errorf("no IRC context available")
+	chatCtx, err := GetIRCContext(ctx)
+	if err != nil {
+		return "", err
 	}
 
 	// Check admin permission
-	if !t.ctx.IsAdmin() {
+	if !chatCtx.IsAdmin() {
 		return "You are not authorized to use this tool", nil
 	}
 
 	// Check if bot has operator status
-	if !isBotOpped(t.ctx) {
+	if !isBotOpped(chatCtx) {
 		return "Bot does not have operator status in the channel", nil
 	}
 
@@ -732,8 +686,8 @@ func (t *IrcInviteTool) Execute(ctx context.Context, args map[string]any) (strin
 	}
 
 	// Execute the IRC INVITE command
-	channel := t.ctx.GetConfig().Server.Channel
-	client := t.ctx.GetClient()
+	channel := chatCtx.GetConfig().Server.Channel
+	client := chatCtx.GetClient()
 	client.Cmd.Invite(channel, users...)
 
 	usersStr := strings.Join(users, ", ")
@@ -743,17 +697,9 @@ func (t *IrcInviteTool) Execute(ctx context.Context, args map[string]any) (strin
 
 // IrcNamesTool lists all users in the channel
 type IrcNamesTool struct {
-	ctx ChatContextInterface
 }
 
 func (t *IrcNamesTool) SetContext(ctx any) {
-	if chatCtx, ok := ctx.(ChatContextInterface); ok {
-		t.ctx = chatCtx
-	}
-}
-
-func (t *IrcNamesTool) SetIRCContext(ctx ChatContextInterface) {
-	t.ctx = ctx
 }
 
 func (t *IrcNamesTool) GetSchema() *jsonschema.Schema {
@@ -779,18 +725,19 @@ func (t *IrcNamesTool) GetSource() string {
 }
 
 func (t *IrcNamesTool) Execute(ctx context.Context, args map[string]any) (string, error) {
-	if t.ctx == nil {
-		return "", fmt.Errorf("no IRC context available")
+	chatCtx, err := GetIRCContext(ctx)
+	if err != nil {
+		return "", err
 	}
 
-	channel := t.ctx.GetConfig().Server.Channel
-	ch := t.ctx.LookupChannel(channel)
+	channel := chatCtx.GetConfig().Server.Channel
+	ch := chatCtx.LookupChannel(channel)
 
 	if ch == nil {
 		return fmt.Sprintf("Channel %s not found in state (not joined yet?)", channel), nil
 	}
 
-	client := t.ctx.GetClient()
+	client := chatCtx.GetClient()
 	users := ch.Users(client)
 
 	if len(users) == 0 {

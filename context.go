@@ -35,7 +35,6 @@ type Server interface {
 }
 
 type System interface {
-	GetLLM() LLM
 	GetToolRegistry() *tools.ToolRegistry
 	GetSessionStore() sessions.SessionStore
 }
