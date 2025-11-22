@@ -206,6 +206,38 @@ func slashSet(ctx ChatContextInterface) {
 		}
 		config.Bot.ShowToolActions = showTools
 		ctx.Reply(fmt.Sprintf("%s set to: %t", param, config.Bot.ShowToolActions))
+	case "sessionduration":
+		duration, err := time.ParseDuration(value)
+		if err != nil {
+			ctx.Reply("Invalid value for sessionduration. Please provide a valid duration (e.g. 10m, 1h).")
+			return
+		}
+		config.Session.TTL = duration
+		ctx.Reply(fmt.Sprintf("%s set to: %s", param, config.Session.TTL))
+	case "apitimeout":
+		duration, err := time.ParseDuration(value)
+		if err != nil {
+			ctx.Reply("Invalid value for apitimeout. Please provide a valid duration (e.g. 30s, 5m).")
+			return
+		}
+		config.API.Timeout = duration
+		ctx.Reply(fmt.Sprintf("%s set to: %s", param, config.API.Timeout))
+	case "sessionhistory":
+		history, err := strconv.Atoi(value)
+		if err != nil {
+			ctx.Reply("Invalid value for sessionhistory. Please provide a valid integer.")
+			return
+		}
+		config.Session.MaxHistory = history
+		ctx.Reply(fmt.Sprintf("%s set to: %d", param, config.Session.MaxHistory))
+	case "chunkmax":
+		chunkMax, err := strconv.Atoi(value)
+		if err != nil {
+			ctx.Reply("Invalid value for chunkmax. Please provide a valid integer.")
+			return
+		}
+		config.Session.ChunkMax = chunkMax
+		ctx.Reply(fmt.Sprintf("%s set to: %d", param, config.Session.ChunkMax))
 	}
 
 	ctx.GetSession().Clear()
@@ -291,6 +323,14 @@ func slashGet(ctx ChatContextInterface) {
 		ctx.Reply(fmt.Sprintf("%s: %t", param, config.Bot.ShowThinkingAction))
 	case "showtoolactions":
 		ctx.Reply(fmt.Sprintf("%s: %t", param, config.Bot.ShowToolActions))
+	case "sessionduration":
+		ctx.Reply(fmt.Sprintf("%s: %s", param, config.Session.TTL))
+	case "apitimeout":
+		ctx.Reply(fmt.Sprintf("%s: %s", param, config.API.Timeout))
+	case "sessionhistory":
+		ctx.Reply(fmt.Sprintf("%s: %d", param, config.Session.MaxHistory))
+	case "chunkmax":
+		ctx.Reply(fmt.Sprintf("%s: %d", param, config.Session.ChunkMax))
 	}
 }
 

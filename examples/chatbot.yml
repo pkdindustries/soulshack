@@ -95,6 +95,7 @@ tool:
   - irc_whois                     # Get detailed user info (instant, cached)
   - irc_topic                     # Change channel topic
   - irc_action                    # Send /me actions
+  - irc_history
 
   # - examples/mcp/filesystem.json  # MCP server config for file operations
   # - examples/mcp/git.json         # MCP server config for git operations

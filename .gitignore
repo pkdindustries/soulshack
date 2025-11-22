@@ -2,3 +2,6 @@
 *.env
 soulshack
 __debug_bin*
+perp.json
+.history/*
+examples/soulshack.yml

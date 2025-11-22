@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"time"
 
 	"github.com/alexschlessinger/pollytool/tools"
 	"github.com/google/jsonschema-go/jsonschema"
@@ -77,6 +78,9 @@ func RegisterIRCTools(registry *tools.ToolRegistry) {
 	})
 	registry.RegisterNative("irc_whois", func() tools.Tool {
 		return &IrcWhoisTool{}
+	})
+	registry.RegisterNative("irc_history", func() tools.Tool {
+		return &IrcHistoryTool{}
 	})
 }
 
@@ -859,4 +863,132 @@ func (t *IrcWhoisTool) Execute(ctx context.Context, args map[string]any) (string
 	result := strings.TrimSpace(info.String())
 	log.Printf("IRC WHOIS: %s", result)
 	return result, nil
+}
+
+// IrcHistoryTool retrieves chat history for a channel
+type IrcHistoryTool struct {
+}
+
+func (t *IrcHistoryTool) SetContext(ctx any) {
+}
+
+func (t *IrcHistoryTool) GetSchema() *jsonschema.Schema {
+	return &jsonschema.Schema{
+		Title:       "irc_history",
+		Description: "Get recent chat history for a specific channel",
+		Type:        "object",
+		Properties: map[string]*jsonschema.Schema{
+			"channel": {
+				Type:        "string",
+				Description: "The channel or user to get history for. Defaults to the current channel/user if omitted.",
+			},
+			"limit": {
+				Type:        "integer",
+				Description: "Number of messages to retrieve (default 50)",
+			},
+			"search": {
+				Type:        "string",
+				Description: "Filter history by this search term (optional, case-insensitive. if user use just the nick, no brackets or braces)",
+			},
+			"start_time": {
+				Type:        "string",
+				Description: "Start time for filtering (RFC3339 format, e.g. 2023-01-01T00:00:00Z)",
+			},
+			"end_time": {
+				Type:        "string",
+				Description: "End time for filtering (RFC3339 format)",
+			},
+			"count_only": {
+				Type:        "boolean",
+				Description: "If true, returns only the count of matching messages",
+			},
+		},
+		// channel is now optional, defaults to current context
+		Required: []string{},
+	}
+}
+
+func (t *IrcHistoryTool) GetName() string {
+	return "irc_history"
+}
+
+func (t *IrcHistoryTool) GetType() string {
+	return "native"
+}
+
+func (t *IrcHistoryTool) GetSource() string {
+	return "builtin"
+}
+
+func (t *IrcHistoryTool) Execute(ctx context.Context, args map[string]any) (string, error) {
+	chatCtx, err := GetIRCContext(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	channel := ""
+	if c, ok := args["channel"].(string); ok && c != "" {
+		channel = c
+	} else {
+		// Default to current context
+		if chatCtx.IsPrivate() {
+			// For PMs, history is stored under the sender's nick
+			channel = chatCtx.GetSource()
+		} else {
+			// For channels, use the configured channel
+			channel = chatCtx.GetConfig().Server.Channel
+		}
+	}
+
+	filter := HistoryFilter{
+		Limit: 50, // Default limit
+	}
+
+	if l, ok := args["limit"].(float64); ok {
+		filter.Limit = int(l)
+	}
+
+	if s, ok := args["search"].(string); ok {
+		filter.Search = s
+	}
+
+	if st, ok := args["start_time"].(string); ok {
+		t, err := time.Parse(time.RFC3339, st)
+		if err != nil {
+			return "", fmt.Errorf("invalid start_time format (use RFC3339): %v", err)
+		}
+		filter.StartTime = t
+	}
+
+	if et, ok := args["end_time"].(string); ok {
+		t, err := time.Parse(time.RFC3339, et)
+		if err != nil {
+			return "", fmt.Errorf("invalid end_time format (use RFC3339): %v", err)
+		}
+		filter.EndTime = t
+	}
+
+	if c, ok := args["count_only"].(bool); ok {
+		filter.CountOnly = c
+	}
+
+	historyStore := chatCtx.GetSystem().GetHistory()
+	if historyStore == nil {
+		return "History storage is not available", nil
+	}
+
+	messages, count, err := historyStore.Get(channel, filter)
+	if err != nil {
+		return "", fmt.Errorf("failed to retrieve history: %v", err)
+	}
+
+	if filter.CountOnly {
+		return fmt.Sprintf("Count: %d", count), nil
+	}
+
+	if len(messages) == 0 {
+		return fmt.Sprintf("No history found for %s", channel), nil
+	}
+
+	return strings.Join(messages, "\n"), nil
 }

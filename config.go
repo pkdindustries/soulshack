@@ -29,6 +29,10 @@ var ModifiableConfigKeys = []string{
 	"tools",
 	"showthinkingaction",
 	"showtoolactions",
+	"sessionduration",
+	"apitimeout",
+	"sessionhistory",
+	"chunkmax",
 }
 
 type ModelConfig struct {
@@ -85,9 +89,16 @@ type Configuration struct {
 	API     *APIConfig
 }
 
+type System interface {
+	GetToolRegistry() *tools.ToolRegistry
+	GetSessionStore() sessions.SessionStore
+	GetHistory() HistoryStore
+}
+
 type SystemImpl struct {
-	Store sessions.SessionStore
-	Tools *tools.ToolRegistry
+	Store   sessions.SessionStore
+	Tools   *tools.ToolRegistry
+	History HistoryStore
 }
 
 func (s *SystemImpl) GetToolRegistry() *tools.ToolRegistry {
@@ -100,6 +111,10 @@ func (s *SystemImpl) SetToolRegistry(reg *tools.ToolRegistry) {
 
 func (s *SystemImpl) GetSessionStore() sessions.SessionStore {
 	return s.Store
+}
+
+func (s *SystemImpl) GetHistory() HistoryStore {
+	return s.History
 }
 
 func NewSystem(c *Configuration) System {
@@ -129,6 +144,15 @@ func NewSystem(c *Configuration) System {
 		TTL:          c.Session.TTL,
 		SystemPrompt: c.Bot.Prompt,
 	})
+
+	// Initialize history store
+	history, err := NewFileHistory(".history")
+	if err != nil {
+		log.Printf("warning: failed to initialize history store: %v", err)
+	} else {
+		s.History = history
+	}
+
 	return &s
 }
 
