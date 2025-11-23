@@ -2,13 +2,12 @@ package main
 
 import (
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
 	"github.com/alexschlessinger/pollytool/sessions"
 	"github.com/alexschlessinger/pollytool/tools"
-	vip "github.com/spf13/viper"
+	"github.com/urfave/cli/v2"
 	"go.uber.org/zap"
 )
 
@@ -203,117 +202,56 @@ func (c *Configuration) PrintConfig() {
 	fmt.Printf("greeting: %s\n", c.Bot.Greeting)
 }
 
-func NewConfiguration() *Configuration {
-	configfile := vip.GetString("config")
-	if configfile != "" {
-		vip.SetConfigFile(configfile)
-		if _, err := os.Stat(configfile); os.IsNotExist(err) {
-			zap.S().Fatal("Config file not found", "path", configfile)
-		}
-		if err := vip.ReadInConfig(); err != nil {
-			zap.S().Fatal("Failed to read config file", "error", err) // Added this line for consistency
-		} else {
-			zap.S().Info("Using config file", "path", vip.ConfigFileUsed())
-		}
+func NewConfiguration(c *cli.Context) *Configuration {
+	if c.IsSet("config") {
+		zap.S().Info("Using config file", "path", c.String("config"))
 	}
 
 	config := &Configuration{
 		Server: &ServerConfig{
-			Nick:        vip.GetString("nick"),
-			Server:      vip.GetString("server"),
-			Port:        vip.GetInt("port"),
-			Channel:     vip.GetString("channel"),
-			SSL:         vip.GetBool("tls"),
-			TLSInsecure: vip.GetBool("tlsinsecure"),
-			SASLNick:    vip.GetString("saslnick"),
-			SASLPass:    vip.GetString("saslpass"),
+			Nick:        c.String("nick"),
+			Server:      c.String("server"),
+			Port:        c.Int("port"),
+			Channel:     c.String("channel"),
+			SSL:         c.Bool("tls"),
+			TLSInsecure: c.Bool("tlsinsecure"),
+			SASLNick:    c.String("saslnick"),
+			SASLPass:    c.String("saslpass"),
 		},
 		Bot: &BotConfig{
-			Admins:             vip.GetStringSlice("admins"),
-			Verbose:            vip.GetBool("verbose"),
-			Addressed:          vip.GetBool("addressed"),
-			Prompt:             vip.GetString("prompt"),
-			Greeting:           vip.GetString("greeting"),
-			Tools:              vip.GetStringSlice("tool"),
-			ShowThinkingAction: vip.GetBool("showthinkingaction"),
-			ShowToolActions:    vip.GetBool("showtoolactions"),
+			Admins:             c.StringSlice("admins"),
+			Verbose:            c.Bool("verbose"),
+			Addressed:          c.Bool("addressed"),
+			Prompt:             c.String("prompt"),
+			Greeting:           c.String("greeting"),
+			Tools:              c.StringSlice("tool"),
+			ShowThinkingAction: c.Bool("showthinkingaction"),
+			ShowToolActions:    c.Bool("showtoolactions"),
 		},
 		Model: &ModelConfig{
-			Model:       vip.GetString("model"),
-			MaxTokens:   vip.GetInt("maxtokens"),
-			Temperature: float32(vip.GetFloat64("temperature")),
-			TopP:        float32(vip.GetFloat64("top_p")),
-			Thinking:    vip.GetBool("thinking"),
+			Model:       c.String("model"),
+			MaxTokens:   c.Int("maxtokens"),
+			Temperature: float32(c.Float64("temperature")),
+			TopP:        float32(c.Float64("top_p")),
+			Thinking:    c.Bool("thinking"),
 		},
 
 		Session: &SessionConfig{
-			ChunkMax:   vip.GetInt("chunkmax"),
-			MaxHistory: vip.GetInt("sessionhistory"),
-			TTL:        vip.GetDuration("sessionduration"),
+			ChunkMax:   c.Int("chunkmax"),
+			MaxHistory: c.Int("sessionhistory"),
+			TTL:        c.Duration("sessionduration"),
 		},
 
 		API: &APIConfig{
-			Timeout:      vip.GetDuration("apitimeout"),
-			OpenAIKey:    vip.GetString("openaikey"),
-			OpenAIURL:    vip.GetString("openaiurl"),
-			AnthropicKey: vip.GetString("anthropickey"),
-			GeminiKey:    vip.GetString("geminikey"),
-			OllamaURL:    vip.GetString("ollamaurl"),
-			OllamaKey:    vip.GetString("ollamakey"),
+			Timeout:      c.Duration("apitimeout"),
+			OpenAIKey:    c.String("openaikey"),
+			OpenAIURL:    c.String("openaiurl"),
+			AnthropicKey: c.String("anthropickey"),
+			GeminiKey:    c.String("geminikey"),
+			OllamaURL:    c.String("ollamaurl"),
+			OllamaKey:    c.String("ollamakey"),
 		},
 	}
 
 	return config
-}
-
-func initializeConfig() {
-	cmd := root
-	// irc client configuration
-	cmd.PersistentFlags().StringP("nick", "n", "soulshack", "bot's nickname on the irc server")
-	cmd.PersistentFlags().StringP("server", "s", "localhost", "irc server address")
-	cmd.PersistentFlags().BoolP("tls", "e", false, "enable TLS for the IRC connection")
-	cmd.PersistentFlags().BoolP("tlsinsecure", "", false, "skip TLS certificate verification")
-	cmd.PersistentFlags().IntP("port", "p", 6667, "irc server port")
-	cmd.PersistentFlags().StringP("channel", "c", "", "irc channel to join")
-	cmd.PersistentFlags().StringP("saslnick", "", "", "nick used for SASL")
-	cmd.PersistentFlags().StringP("saslpass", "", "", "password for SASL plain")
-
-	// bot configuration
-	cmd.PersistentFlags().StringP("config", "b", "", "use the named configuration file")
-	cmd.PersistentFlags().StringSliceP("admins", "A", []string{}, "comma-separated list of allowed hostmasks to administrate the bot (e.g. alex!~alex@localhost, josh!~josh@localhost)")
-
-	// informational
-	cmd.PersistentFlags().BoolP("verbose", "v", false, "enable verbose logging of sessions and configuration")
-
-	// API configuration
-	cmd.PersistentFlags().String("openaikey", "", "OpenAI API key")
-	cmd.PersistentFlags().String("openaiurl", "", "OpenAI API URL (for custom endpoints)")
-	cmd.PersistentFlags().String("anthropickey", "", "Anthropic API key")
-	cmd.PersistentFlags().String("geminikey", "", "Google Gemini API key")
-	cmd.PersistentFlags().String("ollamaurl", "http://localhost:11434", "Ollama API URL")
-	cmd.PersistentFlags().String("ollamakey", "", "Ollama API key (Bearer token for authentication)")
-	cmd.PersistentFlags().Int("maxtokens", 4096, "maximum number of tokens to generate")
-	cmd.PersistentFlags().String("model", "ollama/llama3.2", "model to be used for responses")
-	cmd.PersistentFlags().DurationP("apitimeout", "t", time.Minute*5, "timeout for each completion request")
-	cmd.PersistentFlags().Float32("temperature", 0.7, "temperature for the completion")
-	cmd.PersistentFlags().Float32("top_p", 1, "top P value for the completion")
-	cmd.PersistentFlags().Bool("thinking", false, "enable thinking/reasoning for models that support it")
-	cmd.PersistentFlags().StringSlice("tool", []string{}, "tools to load (shell scripts, MCP server JSON files, or native tools like irc_op, can be specified multiple times or comma-separated)")
-	cmd.PersistentFlags().Bool("showthinkingaction", true, "show '[thinking]' IRC action when bot is reasoning")
-	cmd.PersistentFlags().Bool("showtoolactions", true, "show '[calling toolname]' IRC actions when executing tools")
-
-	// timeouts and behavior
-	cmd.PersistentFlags().BoolP("addressed", "a", true, "require bot be addressed by nick for response")
-	cmd.PersistentFlags().DurationP("sessionduration", "S", time.Minute*10, "message context will be cleared after it is unused for this duration")
-	cmd.PersistentFlags().IntP("sessionhistory", "H", 250, "maximum number of lines of context to keep per session")
-	cmd.PersistentFlags().IntP("chunkmax", "m", 350, "maximum number of characters to send as a single message")
-
-	// personality / prompting
-	cmd.PersistentFlags().String("greeting", "hello.", "prompt to be used when the bot joins the channel")
-	cmd.PersistentFlags().String("prompt", "you are a helpful chatbot. do not use caps. do not use emoji.", "initial system prompt")
-
-	vip.BindPFlags(cmd.PersistentFlags())
-
-	vip.SetEnvPrefix("SOULSHACK")
-	vip.AutomaticEnv()
 }
