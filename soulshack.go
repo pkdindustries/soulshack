@@ -11,14 +11,13 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	"log"
 	"strings"
 	"time"
 
 	"github.com/common-nighthawk/go-figure"
-	"github.com/spf13/cobra"
-
 	"github.com/lrstanley/girc"
+	"github.com/spf13/cobra"
+	"go.uber.org/zap"
 )
 
 var root = &cobra.Command{
@@ -33,7 +32,7 @@ func main() {
 	initializeConfig()
 
 	if err := root.Execute(); err != nil {
-		log.Fatal(err)
+		zap.S().Fatal(err)
 	}
 }
 
@@ -46,6 +45,9 @@ func getBanner() string {
 func runBot(r *cobra.Command, _ []string) {
 
 	config := NewConfiguration()
+	InitLogger(config.Bot.Verbose)
+	defer zap.L().Sync() // Flushes buffer, if any
+
 	sys := NewSystem(config)
 
 	irc := girc.New(girc.Config{
@@ -66,7 +68,7 @@ func runBot(r *cobra.Command, _ []string) {
 	}
 
 	irc.Handlers.AddBg(girc.CONNECTED, func(irc *girc.Client, e girc.Event) {
-		log.Println("joining channel:", config.Server.Channel)
+		zap.S().Infof("Joining channel: %s", config.Server.Channel)
 		irc.Cmd.Join(config.Server.Channel)
 	})
 
@@ -91,15 +93,15 @@ func runBot(r *cobra.Command, _ []string) {
 			lock := getChannelLock(channelKey)
 
 			// Try to acquire lock with context timeout
-			log.Printf("Acquiring lock for channel '%s'", channelKey)
+			ctx.GetLogger().Debugf("Acquiring lock for channel '%s'", channelKey)
 			if !lock.LockWithContext(ctx) {
-				log.Printf("Failed to acquire lock for channel '%s' (timeout)", channelKey)
+				ctx.GetLogger().Warnf("Failed to acquire lock for channel '%s' (timeout)", channelKey)
 				ctx.Reply("Request timed out waiting for previous operation to complete")
 				return
 			}
-			log.Printf("Lock acquired for channel '%s'", channelKey)
+			ctx.GetLogger().Debugf("Lock acquired for channel '%s'", channelKey)
 			defer func() {
-				log.Printf("Releasing lock for channel '%s'", channelKey)
+				ctx.GetLogger().Debugf("Releasing lock for channel '%s'", channelKey)
 				lock.Unlock()
 			}()
 
@@ -115,7 +117,7 @@ func runBot(r *cobra.Command, _ []string) {
 				ctx.GetSystem().GetHistory().Add(historyKey, e.Source.Name, e.Last())
 			}
 
-			log.Println(">>", strings.Join(e.Params[1:], " "))
+			ctx.GetLogger().Infof(">> %s", strings.Join(e.Params[1:], " "))
 			switch ctx.GetCommand() {
 			case "/set":
 				slashSet(ctx)
@@ -138,14 +140,19 @@ func runBot(r *cobra.Command, _ []string) {
 	// Reconnect loop with a maximum retry limit
 	maxRetries := 5
 	for range maxRetries {
-		log.Printf("connecting to server:%s, port:%d, tls:%t, sasl:%t", irc.Config.Server, irc.Config.Port, irc.Config.SSL, irc.Config.SASL != nil)
+		zap.S().Infow("Connecting to server",
+			"server", irc.Config.Server,
+			"port", irc.Config.Port,
+			"tls", irc.Config.SSL,
+			"sasl", irc.Config.SASL != nil,
+		)
 		if err := irc.Connect(); err != nil {
-			log.Println("connection error:", err)
-			log.Println("reconnecting in 5 seconds...")
+			zap.S().Errorw("Connection failed", "error", err)
+			zap.S().Info("Reconnecting in 5 seconds")
 			time.Sleep(5 * time.Second)
 			continue
 		}
 		return
 	}
-	log.Println("maximum retry limit reached, exiting...")
+	zap.S().Info("Maximum retry limit reached; exiting")
 }

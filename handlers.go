@@ -2,13 +2,14 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"path"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
+
+	"go.uber.org/zap"
 )
 
 func greeting(ctx ChatContextInterface) {
@@ -40,6 +41,8 @@ func slashSet(ctx ChatContextInterface) {
 	param, v := ctx.GetArgs()[1], ctx.GetArgs()[2:]
 	value := strings.Join(v, " ")
 	config := ctx.GetConfig()
+
+	ctx.GetLogger().With("param", param, "value", value).Debug("Configuration change request")
 
 	if !contains(ModifiableConfigKeys, param) {
 		ctx.Reply(fmt.Sprintf("Available keys: %s", strings.Join(ModifiableConfigKeys, " ")))
@@ -356,7 +359,7 @@ func slashLeave(ctx ChatContextInterface) {
 		return
 	}
 
-	log.Println("exiting...")
+	zap.S().Info("Exiting application")
 	go func() {
 		time.Sleep(1 * time.Second)
 		os.Exit(0)
@@ -369,7 +372,7 @@ func completionResponse(ctx ChatContextInterface) {
 	outch, err := CompleteWithText(ctx, fmt.Sprintf("(nick:%s) %s", ctx.GetSource(), msg))
 
 	if err != nil {
-		log.Println("completionResponse:", err)
+		ctx.GetLogger().Errorw("Completion response error", "error", err)
 		ctx.Reply(err.Error())
 		return
 	}

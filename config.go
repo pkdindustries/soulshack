@@ -2,13 +2,14 @@ package main
 
 import (
 	"fmt"
-	"log"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/alexschlessinger/pollytool/sessions"
 	"github.com/alexschlessinger/pollytool/tools"
 	vip "github.com/spf13/viper"
+	"go.uber.org/zap"
 )
 
 var ModifiableConfigKeys = []string{
@@ -129,15 +130,15 @@ func NewSystem(c *Configuration) System {
 	if len(c.Bot.Tools) > 0 {
 		for _, toolSpec := range c.Bot.Tools {
 			if _, err := s.Tools.LoadToolAuto(toolSpec); err != nil {
-				log.Printf("config: warning loading tool %s: %v", toolSpec, err)
+				zap.S().Warnw("Warning loading tool", "tool", toolSpec, "error", err)
+				continue
 			}
 		}
 	}
-
-	log.Printf("config: loaded %d tools", len(s.Tools.All()))
+	zap.S().Infow("Loaded tools", "count", len(s.Tools.All()))
 
 	// initialize sessions with pollytool's SyncMapSessionStore
-	log.Printf("sessionstore: syncmap")
+	zap.S().Info("Initialized session store: syncmap")
 
 	s.Store = sessions.NewSyncMapSessionStore(&sessions.Metadata{
 		MaxHistory:   c.Session.MaxHistory,
@@ -146,9 +147,9 @@ func NewSystem(c *Configuration) System {
 	})
 
 	// Initialize history store
-	history, err := NewFileHistory(".history")
+	history, err := NewFileHistory(".history") // Assuming NewFileHistory is the correct function, not NewHistory
 	if err != nil {
-		log.Printf("warning: failed to initialize history store: %v", err)
+		zap.S().Warnw("Failed to initialize history store", "error", err)
 	} else {
 		s.History = history
 	}
@@ -206,10 +207,13 @@ func NewConfiguration() *Configuration {
 	configfile := vip.GetString("config")
 	if configfile != "" {
 		vip.SetConfigFile(configfile)
+		if _, err := os.Stat(configfile); os.IsNotExist(err) {
+			zap.S().Fatal("Config file not found", "path", configfile)
+		}
 		if err := vip.ReadInConfig(); err != nil {
-			log.Fatal("config: config file not found", configfile)
+			zap.S().Fatal("Failed to read config file", "error", err) // Added this line for consistency
 		} else {
-			log.Println("config: using config file:", vip.ConfigFileUsed())
+			zap.S().Info("Using config file", "path", vip.ConfigFileUsed())
 		}
 	}
 

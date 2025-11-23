@@ -2,8 +2,11 @@ package main
 
 import (
 	"context"
-	"log"
+	"crypto/rand"
+	"encoding/hex"
 	"strings"
+
+	"go.uber.org/zap"
 
 	"github.com/alexschlessinger/pollytool/sessions"
 	"github.com/lrstanley/girc"
@@ -38,18 +41,21 @@ type ChatContextInterface interface {
 	GetSession() sessions.Session
 	GetConfig() *Configuration
 	GetSystem() System
+	GetLogger() *zap.SugaredLogger
 	Message
 	Server
 }
 
 type ChatContext struct {
 	context.Context
-	Sys     System
-	Session sessions.Session
-	Config  *Configuration
-	client  *girc.Client
-	event   *girc.Event
-	args    []string
+	Sys       System
+	Session   sessions.Session
+	Config    *Configuration
+	client    *girc.Client
+	event     *girc.Event
+	args      []string
+	logger    *zap.SugaredLogger
+	requestID string
 }
 
 var _ ChatContextInterface = (*ChatContext)(nil)
@@ -57,13 +63,22 @@ var _ ChatContextInterface = (*ChatContext)(nil)
 func NewChatContext(parentctx context.Context, config *Configuration, system System, ircclient *girc.Client, e *girc.Event) (ChatContextInterface, context.CancelFunc) {
 	timedctx, cancel := context.WithTimeout(parentctx, config.API.Timeout)
 
+	// Generate a unique request ID for correlation
+	requestID := generateRequestID()
+
 	ctx := ChatContext{
-		Context: timedctx,
-		Config:  config,
-		Sys:     system,
-		client:  ircclient,
-		event:   e,
-		args:    strings.Fields(e.Last()),
+		Context:   timedctx,
+		Config:    config,
+		Sys:       system,
+		client:    ircclient,
+		event:     e,
+		args:      strings.Fields(e.Last()),
+		requestID: requestID,
+		logger: zap.S().With(
+			"request_id", requestID,
+			"channel", e.Params[0],
+			"source", e.Source.Name,
+		),
 	}
 
 	if ctx.IsAddressed() {
@@ -83,7 +98,7 @@ func NewChatContext(parentctx context.Context, config *Configuration, system Sys
 
 	session, err := ctx.Sys.GetSessionStore().Get(key)
 	if err != nil {
-		log.Fatalf("failed to get session for key %s: %v", key, err)
+		zap.S().Fatalw("Failed to get session for key", "key", key, "error", err)
 	}
 	ctx.Session = session
 	return ctx, cancel
@@ -95,6 +110,10 @@ func (c ChatContext) GetSystem() System {
 
 func (c ChatContext) GetConfig() *Configuration {
 	return c.Config
+}
+
+func (c ChatContext) GetLogger() *zap.SugaredLogger {
+	return c.logger
 }
 
 func (c ChatContext) Oper(channel, nick string) bool {
@@ -149,15 +168,15 @@ func (c ChatContext) GetSource() string {
 
 func (c ChatContext) IsAdmin() bool {
 	hostmask := c.event.Source.String()
-	log.Println("checking hostmask:", hostmask)
+	c.logger.Debugw("Checking hostmask", "hostmask", hostmask)
 	// XXX: if no admins are configured, all hostmasks are admins
 	if len(c.Config.Bot.Admins) == 0 {
-		log.Println("all hostmasks are admin, please configure admins")
+		c.logger.Warn("All hostmasks are admin; please configure admins")
 		return true
 	}
 	for _, user := range c.Config.Bot.Admins {
 		if user == hostmask {
-			log.Println(hostmask, "is admin")
+			c.logger.Debugw("User is admin", "hostmask", hostmask)
 			return true
 		}
 	}
@@ -209,4 +228,11 @@ func (c ChatContext) IsPrivate() bool {
 
 func (c ChatContext) GetCommand() string {
 	return strings.ToLower(c.args[0])
+}
+
+// generateRequestID creates a unique 8-character request ID for correlation
+func generateRequestID() string {
+	b := make([]byte, 4)
+	rand.Read(b)
+	return hex.EncodeToString(b)
 }

@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"strings"
 	"time"
 
@@ -71,19 +70,23 @@ func (p *IRCEventProcessor) OnReasoning(content string, totalLength int) {
 					p.sentThinkingAction = true
 				}
 			})
-			log.Printf("Started thinking timer")
+			p.ctx.GetLogger().Debug("Started thinking timer")
 		}
 	}
+
+	p.ctx.GetLogger().Debugf("Reasoning update: %q", content)
 }
 
 // OnContent handles regular content streaming with IRC chunking
 func (p *IRCEventProcessor) OnContent(content string, firstChunk bool) {
+	p.ctx.GetLogger().Debugf("Received content chunk: %q", content)
 	// Stream content through chunking
 	p.processContent(content)
 }
 
 // OnToolCall handles tool call events
 func (p *IRCEventProcessor) OnToolCall(toolCall messages.ChatMessageToolCall) {
+	p.ctx.GetLogger().Debugf("Received tool call: %s (ID: %s)", toolCall.Name, toolCall.ID)
 	// Tool calls are handled in OnComplete in the current implementation
 	// This could be used for real-time tool call notifications if needed
 }
@@ -95,7 +98,7 @@ func (p *IRCEventProcessor) OnComplete(message *messages.ChatMessage) {
 		p.thinkingTimer.Stop()
 		p.thinkingTimer = nil
 		p.thinkingStartTime = nil
-		log.Printf("Cancelled thinking timer (completed before 5 seconds)")
+		p.ctx.GetLogger().Debug("Cancelled thinking timer")
 	}
 
 	if message != nil {
@@ -109,12 +112,15 @@ func (p *IRCEventProcessor) OnComplete(message *messages.ChatMessage) {
 
 		// Store the message for GetResponse
 		p.response = *message
+
+		p.ctx.GetLogger().Debugf("Message complete (Role: %s, ContentLen: %d, ToolCalls: %d)", message.Role, len(message.Content), len(message.ToolCalls))
 	}
 }
 
 // OnError handles errors during streaming
 func (p *IRCEventProcessor) OnError(err error) {
 	if err != nil {
+		p.ctx.GetLogger().Debugf("Stream error: %v", err)
 		errMsg := fmt.Sprintf("Error: %v", err)
 		p.processContent(errMsg)
 	}
@@ -136,7 +142,7 @@ func (p *IRCEventProcessor) HandleToolContinuation(ctx context.Context, req *llm
 		// Parse arguments
 		var args map[string]any
 		if err := json.Unmarshal([]byte(toolCall.Arguments), &args); err != nil {
-			log.Printf("Failed to parse tool arguments: %v", err)
+			p.ctx.GetLogger().Errorf("Failed to parse tool arguments: %v", err)
 			p.ctx.GetSession().AddMessage(messages.ChatMessage{
 				Role:       messages.MessageRoleTool,
 				Content:    fmt.Sprintf("Error parsing arguments: %v", err),
@@ -145,10 +151,13 @@ func (p *IRCEventProcessor) HandleToolContinuation(ctx context.Context, req *llm
 			continue
 		}
 
+		// Create a logger with tool context
+		toolLogger := WithTool(p.ctx.GetLogger(), toolCall.Name, args)
+
 		// Get and execute tool
 		tool, exists := p.registry.Get(toolCall.Name)
 		if !exists {
-			log.Printf("Tool not found: %s", toolCall.Name)
+			p.ctx.GetLogger().Warnf("Tool not found: %s", toolCall.Name)
 			p.ctx.GetSession().AddMessage(messages.ChatMessage{
 				Role:       messages.MessageRoleTool,
 				Content:    fmt.Sprintf("Tool not found: %s", toolCall.Name),
@@ -178,19 +187,29 @@ func (p *IRCEventProcessor) HandleToolContinuation(ctx context.Context, req *llm
 		// We now pass this via the context.Context below
 		ctx = context.WithValue(ctx, kContextKey, p.ctx)
 
-		// Execute tool
-		log.Printf("Executing tool: %s(%v)", toolCall.Name, args)
+		// Execute tool with timing
+		startTime := time.Now()
+		toolLogger.Info("Executing tool")
 		result, err := tool.Execute(ctx, args)
+		duration := time.Since(startTime)
+
 		if err != nil {
 			result = fmt.Sprintf("Error: %v", err)
+			toolLogger.With(
+				"duration_ms", duration.Milliseconds(),
+				"error", err.Error(),
+			).Error("Tool execution failed")
+		} else {
+			// Log tool output (truncate if too long)
+			outputPreview := result
+			if len(outputPreview) > 200 && !p.ctx.GetConfig().Bot.Verbose {
+				outputPreview = outputPreview[:200] + "..."
+			}
+			toolLogger.With(
+				"duration_ms", duration.Milliseconds(),
+				"result_size", len(result),
+			).Infof("Tool execution completed: %s", outputPreview)
 		}
-
-		// Log tool output (truncate if too long)
-		outputPreview := result
-		if len(outputPreview) > 200 {
-			outputPreview = outputPreview[:200] + "..."
-		}
-		log.Printf("Tool %s output: %s", toolCall.Name, outputPreview)
 
 		// Add tool result to session
 		p.ctx.GetSession().AddMessage(messages.ChatMessage{

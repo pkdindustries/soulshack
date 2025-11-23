@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"log"
 	"time"
 
 	"github.com/alexschlessinger/pollytool/messages"
@@ -48,7 +47,11 @@ func CompleteWithText(ctx ChatContextInterface, msg string) (<-chan string, erro
 		Role:    messages.MessageRoleUser,
 		Content: msg,
 	}
-	log.Printf("complete: %s %.64s...", cmsg.Role, cmsg.Content)
+	truncated := cmsg.Content
+	if len(truncated) > 100 {
+		truncated = truncated[:100] + "..."
+	}
+	ctx.GetLogger().Infof("Processing user message: %q", truncated)
 	ctx.GetSession().AddMessage(cmsg)
 
 	return complete(ctx)
