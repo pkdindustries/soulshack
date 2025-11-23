@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/alexschlessinger/pollytool/tools"
 	"github.com/google/jsonschema-go/jsonschema"
@@ -880,7 +879,7 @@ func (t *IrcHistoryTool) SetContext(ctx any) {
 func (t *IrcHistoryTool) GetSchema() *jsonschema.Schema {
 	return &jsonschema.Schema{
 		Title:       "irc_history",
-		Description: "Get recent chat history for a specific channel",
+		Description: "Get recent chat history for a specific channel. This accesses the full channel history logs, which is distinct from the current chat session context.",
 		Type:        "object",
 		Properties: map[string]*jsonschema.Schema{
 			"channel": {
@@ -894,18 +893,6 @@ func (t *IrcHistoryTool) GetSchema() *jsonschema.Schema {
 			"search": {
 				Type:        "string",
 				Description: "Filter history by this search term (optional, case-insensitive. if user use just the nick, no brackets or braces)",
-			},
-			"start_time": {
-				Type:        "string",
-				Description: "Start time for filtering (RFC3339 format, e.g. 2023-01-01T00:00:00Z)",
-			},
-			"end_time": {
-				Type:        "string",
-				Description: "End time for filtering (RFC3339 format)",
-			},
-			"count_only": {
-				Type:        "boolean",
-				Description: "If true, returns only the count of matching messages",
 			},
 		},
 		// channel is now optional, defaults to current context
@@ -957,38 +944,14 @@ func (t *IrcHistoryTool) Execute(ctx context.Context, args map[string]any) (stri
 		filter.Search = s
 	}
 
-	if st, ok := args["start_time"].(string); ok {
-		t, err := time.Parse(time.RFC3339, st)
-		if err != nil {
-			return "", fmt.Errorf("invalid start_time format (use RFC3339): %v", err)
-		}
-		filter.StartTime = t
-	}
-
-	if et, ok := args["end_time"].(string); ok {
-		t, err := time.Parse(time.RFC3339, et)
-		if err != nil {
-			return "", fmt.Errorf("invalid end_time format (use RFC3339): %v", err)
-		}
-		filter.EndTime = t
-	}
-
-	if c, ok := args["count_only"].(bool); ok {
-		filter.CountOnly = c
-	}
-
 	historyStore := chatCtx.GetSystem().GetHistory()
 	if historyStore == nil {
 		return "History storage is not available", nil
 	}
 
-	messages, count, err := historyStore.Get(channel, filter)
+	messages, _, err := historyStore.Get(channel, filter)
 	if err != nil {
 		return "", fmt.Errorf("failed to retrieve history: %v", err)
-	}
-
-	if filter.CountOnly {
-		return fmt.Sprintf("Count: %d", count), nil
 	}
 
 	if len(messages) == 0 {

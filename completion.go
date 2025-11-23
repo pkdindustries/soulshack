@@ -77,8 +77,14 @@ func complete(ctx ChatContextInterface) (<-chan string, error) {
 	// Convert bytes to strings for IRC output
 	outputChan := make(chan string, 10)
 
+	startTime := time.Now()
+
 	go func() {
 		defer close(outputChan)
+		defer func() {
+			duration := time.Since(startTime)
+			ctx.GetLogger().Infow("Request completed", "duration_ms", duration.Milliseconds())
+		}()
 
 		for bytes := range byteChan {
 			outputChan <- string(bytes)
