@@ -1,4 +1,4 @@
-package main
+package bot
 
 import (
 	"fmt"
@@ -10,11 +10,22 @@ import (
 	"time"
 
 	"go.uber.org/zap"
+
+	"pkdindustries/soulshack/internal/core"
+	"pkdindustries/soulshack/internal/llm"
 )
 
-func greeting(ctx ChatContextInterface) {
+var ModifiableConfigKeys = []string{
+	"addressed", "prompt", "model", "maxtokens", "temperature", "top_p",
+	"admins", "openaiurl", "ollamaurl", "ollamakey", "openaikey",
+	"anthropickey", "geminikey", "tools", "thinking", "showthinkingaction",
+	"showtoolactions", "sessionduration", "apitimeout", "sessionhistory",
+	"chunkmax",
+}
+
+func Greeting(ctx core.ChatContextInterface) {
 	config := ctx.GetConfig()
-	outch, err := CompleteWithText(ctx, config.Bot.Greeting)
+	outch, err := llm.CompleteWithText(ctx, config.Bot.Greeting)
 
 	if err != nil {
 		ctx.Reply(err.Error())
@@ -27,7 +38,7 @@ func greeting(ctx ChatContextInterface) {
 
 }
 
-func slashSet(ctx ChatContextInterface) {
+func SlashSet(ctx core.ChatContextInterface) {
 	if !ctx.IsAdmin() {
 		ctx.Reply("You don't have permission to perform this action.")
 		return
@@ -246,7 +257,7 @@ func slashSet(ctx ChatContextInterface) {
 	ctx.GetSession().Clear()
 }
 
-func slashGet(ctx ChatContextInterface) {
+func SlashGet(ctx core.ChatContextInterface) {
 
 	if len(ctx.GetArgs()) < 2 {
 		ctx.Reply(fmt.Sprintf("Usage: /get <key>. Available keys: %s", strings.Join(ModifiableConfigKeys, ", ")))
@@ -352,7 +363,7 @@ func maskAPIKey(key string) string {
 	return key[:4] + strings.Repeat("*", len(key)-4)
 }
 
-func slashLeave(ctx ChatContextInterface) {
+func SlashLeave(ctx core.ChatContextInterface) {
 
 	if !ctx.IsAdmin() {
 		ctx.Reply("You don't have permission to perform this action.")
@@ -366,10 +377,10 @@ func slashLeave(ctx ChatContextInterface) {
 	}()
 }
 
-func completionResponse(ctx ChatContextInterface) {
+func CompletionResponse(ctx core.ChatContextInterface) {
 	msg := strings.Join(ctx.GetArgs(), " ")
 
-	outch, err := CompleteWithText(ctx, fmt.Sprintf("(nick:%s) %s", ctx.GetSource(), msg))
+	outch, err := llm.CompleteWithText(ctx, fmt.Sprintf("(nick:%s) %s", ctx.GetSource(), msg))
 
 	if err != nil {
 		ctx.GetLogger().Errorw("Completion response error", "error", err)

@@ -1,10 +1,11 @@
-package main
+package irc
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"pkdindustries/soulshack/internal/core"
 	"strings"
 	"time"
 
@@ -15,7 +16,7 @@ import (
 
 // IRCEventProcessor handles event processing for IRC with chunking and actions
 type IRCEventProcessor struct {
-	ctx             ChatContextInterface
+	ctx             core.ChatContextInterface
 	byteChan        chan<- []byte
 	chunkBuffer     *bytes.Buffer
 	maxChunkSize    int
@@ -36,7 +37,7 @@ type IRCEventProcessor struct {
 
 // NewIRCEventProcessor creates a new IRC event processor
 func NewIRCEventProcessor(
-	ctx ChatContextInterface,
+	ctx core.ChatContextInterface,
 	byteChan chan<- []byte,
 	maxChunkSize int,
 	registry *tools.ToolRegistry,
@@ -107,7 +108,7 @@ func (p *IRCEventProcessor) OnComplete(message *messages.ChatMessage) {
 
 		// If message has content, ensure buffer is flushed
 		if message.Content != "" && len(message.ToolCalls) == 0 {
-			p.flushBuffer()
+			p.FlushBuffer()
 		}
 
 		// Store the message for GetResponse
@@ -152,7 +153,7 @@ func (p *IRCEventProcessor) HandleToolContinuation(ctx context.Context, req *llm
 		}
 
 		// Create a logger with tool context
-		toolLogger := WithTool(p.ctx.GetLogger(), toolCall.Name, args)
+		toolLogger := core.WithTool(p.ctx.GetLogger(), toolCall.Name, args)
 
 		// Get and execute tool
 		tool, exists := p.registry.Get(toolCall.Name)
@@ -307,8 +308,8 @@ func (p *IRCEventProcessor) extractChunk() []byte {
 	return chunk
 }
 
-// flushBuffer sends any remaining content in the buffer
-func (p *IRCEventProcessor) flushBuffer() {
+// FlushBuffer sends any remaining content in the buffer
+func (p *IRCEventProcessor) FlushBuffer() {
 	if p.chunkBuffer.Len() > 0 {
 		p.byteChan <- p.chunkBuffer.Bytes()
 		p.chunkBuffer.Reset()

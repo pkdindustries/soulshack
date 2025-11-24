@@ -1,4 +1,4 @@
-package main
+package core
 
 import (
 	"context"
@@ -39,8 +39,8 @@ func (c *ChannelLock) Unlock() {
 // channelLocks stores a lock for each channel to serialize message processing
 var channelLocks sync.Map
 
-// getChannelLock returns the lock for a given channel, creating it if needed
-func getChannelLock(channel string) *ChannelLock {
+// GetChannelLock returns the lock for a given channel, creating it if needed
+func GetChannelLock(channel string) *ChannelLock {
 	if lock, ok := channelLocks.Load(channel); ok {
 		return lock.(*ChannelLock)
 	}

@@ -1,7 +1,9 @@
-package main
+package llm
 
 import (
 	"context"
+	"pkdindustries/soulshack/internal/config"
+	"pkdindustries/soulshack/internal/core"
 	"time"
 
 	"github.com/alexschlessinger/pollytool/messages"
@@ -11,7 +13,7 @@ import (
 
 type LLM interface {
 	// New simplified interface - single byte channel output
-	ChatCompletionStream(context.Context, *CompletionRequest, ChatContextInterface) <-chan []byte
+	ChatCompletionStream(context.Context, *CompletionRequest, core.ChatContextInterface) <-chan []byte
 }
 
 type CompletionRequest struct {
@@ -27,7 +29,7 @@ type CompletionRequest struct {
 	Thinking    bool
 }
 
-func NewCompletionRequest(config *Configuration, session sessions.Session, tools []tools.Tool) *CompletionRequest {
+func NewCompletionRequest(config *config.Configuration, session sessions.Session, tools []tools.Tool) *CompletionRequest {
 	return &CompletionRequest{
 		APIKey:      config.API.OpenAIKey,
 		BaseURL:     config.API.OpenAIURL,
@@ -42,7 +44,7 @@ func NewCompletionRequest(config *Configuration, session sessions.Session, tools
 	}
 }
 
-func CompleteWithText(ctx ChatContextInterface, msg string) (<-chan string, error) {
+func CompleteWithText(ctx core.ChatContextInterface, msg string) (<-chan string, error) {
 	cmsg := messages.ChatMessage{
 		Role:    messages.MessageRoleUser,
 		Content: msg,
@@ -57,7 +59,7 @@ func CompleteWithText(ctx ChatContextInterface, msg string) (<-chan string, erro
 	return complete(ctx)
 }
 
-func complete(ctx ChatContextInterface) (<-chan string, error) {
+func complete(ctx core.ChatContextInterface) (<-chan string, error) {
 	session := ctx.GetSession()
 	config := ctx.GetConfig()
 	sys := ctx.GetSystem()

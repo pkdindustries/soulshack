@@ -1,10 +1,14 @@
-package main
+package llm
 
 import (
 	"context"
 
 	"github.com/alexschlessinger/pollytool/llm"
 	"github.com/alexschlessinger/pollytool/messages"
+
+	"pkdindustries/soulshack/internal/config"
+	"pkdindustries/soulshack/internal/core"
+	"pkdindustries/soulshack/internal/irc"
 )
 
 // PollyLLM wraps pollytool's MultiPass to implement soulshack's LLM interface
@@ -14,7 +18,7 @@ type PollyLLM struct {
 }
 
 // NewPollyLLM creates a new pollytool-based LLM client
-func NewPollyLLM(config APIConfig) *PollyLLM {
+func NewPollyLLM(config config.APIConfig) *PollyLLM {
 	// Map soulshack's API keys to pollytool's expected format
 	apiKeys := map[string]string{
 		"openai":    config.OpenAIKey,
@@ -30,7 +34,7 @@ func NewPollyLLM(config APIConfig) *PollyLLM {
 }
 
 // ChatCompletionStream returns a single byte channel with chunked output for IRC
-func (p *PollyLLM) ChatCompletionStream(ctx context.Context, req *CompletionRequest, chatCtx ChatContextInterface) <-chan []byte {
+func (p *PollyLLM) ChatCompletionStream(ctx context.Context, req *CompletionRequest, chatCtx core.ChatContextInterface) <-chan []byte {
 	// Convert soulshack request to pollytool request
 	pollyReq := &llm.CompletionRequest{
 		Model:       req.Model,
@@ -69,7 +73,7 @@ func (p *PollyLLM) ChatCompletionStream(ctx context.Context, req *CompletionRequ
 		defer close(byteChan)
 
 		// Create IRC processor with all necessary context
-		processor := NewIRCEventProcessor(chatCtx, byteChan, maxChunkSize, registry, p.client, p.streamProcessor)
+		processor := irc.NewIRCEventProcessor(chatCtx, byteChan, maxChunkSize, registry, p.client, p.streamProcessor)
 		processor.SetRequest(pollyReq)
 
 		// Get event stream from LLM
@@ -79,7 +83,7 @@ func (p *PollyLLM) ChatCompletionStream(ctx context.Context, req *CompletionRequ
 		response := messages.ProcessEventStream(ctx, eventChan, processor)
 
 		// Flush any remaining buffer content
-		processor.flushBuffer()
+		processor.FlushBuffer()
 
 		// Handle tool continuation if needed
 		if len(response.ToolCalls) > 0 {

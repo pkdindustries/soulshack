@@ -1,8 +1,9 @@
-package main
+package irc
 
 import (
 	"context"
 	"fmt"
+	"pkdindustries/soulshack/internal/core"
 	"strings"
 
 	"github.com/alexschlessinger/pollytool/tools"
@@ -18,15 +19,15 @@ type contextKey string
 
 const kContextKey contextKey = "irc_context"
 
-func GetIRCContext(ctx context.Context) (ChatContextInterface, error) {
-	if chatCtx, ok := ctx.Value(kContextKey).(ChatContextInterface); ok {
+func GetIRCContext(ctx context.Context) (core.ChatContextInterface, error) {
+	if chatCtx, ok := ctx.Value(kContextKey).(core.ChatContextInterface); ok {
 		return chatCtx, nil
 	}
 	return nil, fmt.Errorf("no IRC context available")
 }
 
 // isBotOpped checks if the bot has operator status in the channel
-func isBotOpped(ctx ChatContextInterface) bool {
+func isBotOpped(ctx core.ChatContextInterface) bool {
 	channel := ctx.GetConfig().Server.Channel
 	client := ctx.GetClient()
 	botNick := client.GetNick()
@@ -779,16 +780,16 @@ func (t *IrcNamesTool) Execute(ctx context.Context, args map[string]any) (string
 
 // IrcWhoisTool gets detailed information about a user
 type IrcWhoisTool struct {
-	ctx ChatContextInterface
+	ctx core.ChatContextInterface
 }
 
 func (t *IrcWhoisTool) SetContext(ctx any) {
-	if chatCtx, ok := ctx.(ChatContextInterface); ok {
+	if chatCtx, ok := ctx.(core.ChatContextInterface); ok {
 		t.ctx = chatCtx
 	}
 }
 
-func (t *IrcWhoisTool) SetIRCContext(ctx ChatContextInterface) {
+func (t *IrcWhoisTool) SetIRCContext(ctx core.ChatContextInterface) {
 	t.ctx = ctx
 }
 
@@ -932,7 +933,7 @@ func (t *IrcHistoryTool) Execute(ctx context.Context, args map[string]any) (stri
 		}
 	}
 
-	filter := HistoryFilter{
+	filter := core.HistoryFilter{
 		Limit: 50, // Default limit
 	}
 

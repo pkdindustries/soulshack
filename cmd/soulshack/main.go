@@ -20,6 +20,10 @@ import (
 	"github.com/urfave/cli/v2"
 	"github.com/urfave/cli/v2/altsrc"
 	"go.uber.org/zap"
+
+	"pkdindustries/soulshack/internal/bot"
+	"pkdindustries/soulshack/internal/config"
+	"pkdindustries/soulshack/internal/core"
 )
 
 func main() {
@@ -93,44 +97,44 @@ func getBanner() string {
 
 func runBot(c *cli.Context) error {
 
-	config := NewConfiguration(c)
-	InitLogger(config.Bot.Verbose)
+	cfg := config.NewConfiguration(c)
+	core.InitLogger(cfg.Bot.Verbose)
 	defer zap.L().Sync() // Flushes buffer, if any
 
-	sys := NewSystem(config)
+	sys := bot.NewSystem(cfg)
 
-	irc := girc.New(girc.Config{
-		Server:    config.Server.Server,
-		Port:      config.Server.Port,
-		Nick:      config.Server.Nick,
+	ircClient := girc.New(girc.Config{
+		Server:    cfg.Server.Server,
+		Port:      cfg.Server.Port,
+		Nick:      cfg.Server.Nick,
 		User:      "soulshack",
 		Name:      "soulshack",
-		SSL:       config.Server.SSL,
-		TLSConfig: &tls.Config{InsecureSkipVerify: config.Server.TLSInsecure},
+		SSL:       cfg.Server.SSL,
+		TLSConfig: &tls.Config{InsecureSkipVerify: cfg.Server.TLSInsecure},
 	})
 
-	if config.Server.SASLNick != "" && config.Server.SASLPass != "" {
-		irc.Config.SASL = &girc.SASLPlain{
-			User: config.Server.SASLNick,
-			Pass: config.Server.SASLPass,
+	if cfg.Server.SASLNick != "" && cfg.Server.SASLPass != "" {
+		ircClient.Config.SASL = &girc.SASLPlain{
+			User: cfg.Server.SASLNick,
+			Pass: cfg.Server.SASLPass,
 		}
 	}
 
-	irc.Handlers.AddBg(girc.CONNECTED, func(irc *girc.Client, e girc.Event) {
-		zap.S().Infof("Joining channel: %s", config.Server.Channel)
-		irc.Cmd.Join(config.Server.Channel)
+	ircClient.Handlers.AddBg(girc.CONNECTED, func(client *girc.Client, e girc.Event) {
+		zap.S().Infof("Joining channel: %s", cfg.Server.Channel)
+		client.Cmd.Join(cfg.Server.Channel)
 	})
 
-	irc.Handlers.AddBg(girc.JOIN, func(irc *girc.Client, e girc.Event) {
-		if e.Source.Name == config.Server.Nick {
-			ctx, cancel := NewChatContext(context.Background(), config, sys, irc, &e)
+	ircClient.Handlers.AddBg(girc.JOIN, func(client *girc.Client, e girc.Event) {
+		if e.Source.Name == cfg.Server.Nick {
+			ctx, cancel := core.NewChatContext(context.Background(), cfg, sys, client, &e)
 			defer cancel()
-			greeting(ctx)
+			bot.Greeting(ctx)
 		}
 	})
 
-	irc.Handlers.AddBg(girc.PRIVMSG, func(irc *girc.Client, e girc.Event) {
-		ctx, cancel := NewChatContext(context.Background(), config, sys, irc, &e)
+	ircClient.Handlers.AddBg(girc.PRIVMSG, func(client *girc.Client, e girc.Event) {
+		ctx, cancel := core.NewChatContext(context.Background(), cfg, sys, client, &e)
 		defer cancel()
 		if ctx.Valid() {
 			// Get lock for this channel to serialize message processing
@@ -139,7 +143,7 @@ func runBot(c *cli.Context) error {
 				// For private messages, use the sender's name as the key
 				channelKey = e.Source.Name
 			}
-			lock := getChannelLock(channelKey)
+			lock := core.GetChannelLock(channelKey)
 
 			// Try to acquire lock with context timeout
 			ctx.GetLogger().Debugf("Acquiring lock for channel '%s'", channelKey)
@@ -169,11 +173,11 @@ func runBot(c *cli.Context) error {
 			ctx.GetLogger().Infof(">> %s", strings.Join(e.Params[1:], " "))
 			switch ctx.GetCommand() {
 			case "/set":
-				slashSet(ctx)
+				bot.SlashSet(ctx)
 			case "/get":
-				slashGet(ctx)
+				bot.SlashGet(ctx)
 			case "/leave":
-				slashLeave(ctx)
+				bot.SlashLeave(ctx)
 			case "/help":
 				fallthrough
 			case "/?":
@@ -181,7 +185,7 @@ func runBot(c *cli.Context) error {
 			case "/version":
 				ctx.Reply(c.App.Version)
 			default:
-				completionResponse(ctx)
+				bot.CompletionResponse(ctx)
 			}
 		}
 	})
@@ -190,12 +194,12 @@ func runBot(c *cli.Context) error {
 	maxRetries := 5
 	for range maxRetries {
 		zap.S().Infow("Connecting to server",
-			"server", irc.Config.Server,
-			"port", irc.Config.Port,
-			"tls", irc.Config.SSL,
-			"sasl", irc.Config.SASL != nil,
+			"server", ircClient.Config.Server,
+			"port", ircClient.Config.Port,
+			"tls", ircClient.Config.SSL,
+			"sasl", ircClient.Config.SASL != nil,
 		)
-		if err := irc.Connect(); err != nil {
+		if err := ircClient.Connect(); err != nil {
 			zap.S().Errorw("Connection failed", "error", err)
 			zap.S().Info("Reconnecting in 5 seconds")
 			time.Sleep(5 * time.Second)

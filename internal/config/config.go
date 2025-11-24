@@ -1,57 +1,20 @@
-package main
+package config
 
 import (
 	"fmt"
 	"strings"
 	"time"
 
-	"github.com/alexschlessinger/pollytool/sessions"
-	"github.com/alexschlessinger/pollytool/tools"
 	"github.com/urfave/cli/v2"
 	"go.uber.org/zap"
 )
 
-var ModifiableConfigKeys = []string{
-	"model",
-	"addressed",
-	"prompt",
-	"maxtokens",
-	"temperature",
-	"top_p",
-	"thinking",
-	"admins",
-	"openaiurl",
-	"ollamaurl",
-	"ollamakey",
-	"openaikey",
-	"anthropickey",
-	"geminikey",
-	"tools",
-	"showthinkingaction",
-	"showtoolactions",
-	"sessionduration",
-	"apitimeout",
-	"sessionhistory",
-	"chunkmax",
-}
-
-type ModelConfig struct {
-	Model       string
-	MaxTokens   int
-	Temperature float32
-	TopP        float32
-	Thinking    bool
-}
-
-type BotConfig struct {
-	Admins             []string
-	Verbose            bool
-	Addressed          bool
-	Prompt             string
-	Greeting           string
-	Tools              []string // Unified list of tools (shell, MCP, and IRC tools)
-	ShowThinkingAction bool     // Whether to show "[thinking]" IRC action
-	ShowToolActions    bool     // Whether to show "[calling toolname]" IRC actions
+type Configuration struct {
+	Server  *ServerConfig
+	Bot     *BotConfig
+	Model   *ModelConfig
+	Session *SessionConfig
+	API     *APIConfig
 }
 
 type ServerConfig struct {
@@ -65,95 +28,39 @@ type ServerConfig struct {
 	SASLPass    string
 }
 
+type BotConfig struct {
+	Admins             []string
+	Verbose            bool
+	Addressed          bool
+	Prompt             string
+	Greeting           string
+	Tools              []string
+	ShowThinkingAction bool
+	ShowToolActions    bool
+}
+
+type ModelConfig struct {
+	Model       string
+	MaxTokens   int
+	Temperature float32
+	TopP        float32
+	Thinking    bool
+}
+
 type SessionConfig struct {
+	ChunkMax   int
 	MaxHistory int
 	TTL        time.Duration
-	ChunkMax   int
 }
 
 type APIConfig struct {
+	Timeout      time.Duration
 	OpenAIKey    string
 	OpenAIURL    string
 	AnthropicKey string
 	GeminiKey    string
 	OllamaURL    string
 	OllamaKey    string
-	Timeout      time.Duration
-}
-
-type Configuration struct {
-	Server  *ServerConfig
-	Bot     *BotConfig
-	Model   *ModelConfig
-	Session *SessionConfig
-	API     *APIConfig
-}
-
-type System interface {
-	GetToolRegistry() *tools.ToolRegistry
-	GetSessionStore() sessions.SessionStore
-	GetHistory() HistoryStore
-}
-
-type SystemImpl struct {
-	Store   sessions.SessionStore
-	Tools   *tools.ToolRegistry
-	History HistoryStore
-}
-
-func (s *SystemImpl) GetToolRegistry() *tools.ToolRegistry {
-	return s.Tools
-}
-
-func (s *SystemImpl) SetToolRegistry(reg *tools.ToolRegistry) {
-	s.Tools = reg
-}
-
-func (s *SystemImpl) GetSessionStore() sessions.SessionStore {
-	return s.Store
-}
-
-func (s *SystemImpl) GetHistory() HistoryStore {
-	return s.History
-}
-
-func NewSystem(c *Configuration) System {
-	s := SystemImpl{}
-	// Initialize empty tool registry
-	s.Tools = tools.NewToolRegistry([]tools.Tool{})
-
-	// Register native IRC tools with polly's registry
-	RegisterIRCTools(s.Tools)
-
-	// Load all tools from configuration (polly now handles native, shell, and MCP tools)
-	if len(c.Bot.Tools) > 0 {
-		for _, toolSpec := range c.Bot.Tools {
-			if _, err := s.Tools.LoadToolAuto(toolSpec); err != nil {
-				zap.S().Warnw("Warning loading tool", "tool", toolSpec, "error", err)
-				continue
-			}
-		}
-	}
-	zap.S().Infow("Loaded tools", "count", len(s.Tools.All()))
-
-	// initialize sessions with pollytool's SyncMapSessionStore
-	zap.S().Info("Initialized session store: syncmap")
-
-	s.Store = sessions.NewSyncMapSessionStore(&sessions.Metadata{
-		MaxHistory:   c.Session.MaxHistory,
-		TTL:          c.Session.TTL,
-		SystemPrompt: c.Bot.Prompt,
-	})
-
-	// Initialize history store
-	history, err := NewFileHistory(".history") // Assuming NewFileHistory is the correct function, not NewHistory
-	if err != nil {
-		zap.S().Warnw("Failed to initialize history store", "error", err)
-	} else {
-		s.History = history
-	}
-
-	return &s
 }
 
 func (c *Configuration) PrintConfig() {

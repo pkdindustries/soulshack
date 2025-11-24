@@ -1,4 +1,4 @@
-package main
+package core
 
 import (
 	"context"
@@ -10,6 +10,8 @@ import (
 
 	"github.com/alexschlessinger/pollytool/sessions"
 	"github.com/lrstanley/girc"
+
+	"pkdindustries/soulshack/internal/config"
 )
 
 type Message interface {
@@ -39,7 +41,7 @@ type Server interface {
 type ChatContextInterface interface {
 	context.Context
 	GetSession() sessions.Session
-	GetConfig() *Configuration
+	GetConfig() *config.Configuration
 	GetSystem() System
 	GetLogger() *zap.SugaredLogger
 	Message
@@ -50,7 +52,7 @@ type ChatContext struct {
 	context.Context
 	Sys       System
 	Session   sessions.Session
-	Config    *Configuration
+	Config    *config.Configuration
 	client    *girc.Client
 	event     *girc.Event
 	args      []string
@@ -60,7 +62,7 @@ type ChatContext struct {
 
 var _ ChatContextInterface = (*ChatContext)(nil)
 
-func NewChatContext(parentctx context.Context, config *Configuration, system System, ircclient *girc.Client, e *girc.Event) (ChatContextInterface, context.CancelFunc) {
+func NewChatContext(parentctx context.Context, config *config.Configuration, system System, ircclient *girc.Client, e *girc.Event) (ChatContextInterface, context.CancelFunc) {
 	timedctx, cancel := context.WithTimeout(parentctx, config.API.Timeout)
 
 	// Generate a unique request ID for correlation
@@ -108,7 +110,7 @@ func (c ChatContext) GetSystem() System {
 	return c.Sys
 }
 
-func (c ChatContext) GetConfig() *Configuration {
+func (c ChatContext) GetConfig() *config.Configuration {
 	return c.Config
 }
 

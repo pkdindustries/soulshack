@@ -1,6 +1,6 @@
 .vscode
 *.env
-soulshack
+/soulshack
 __debug_bin*
 perp.json
 .history/*
