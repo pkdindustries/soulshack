@@ -40,7 +40,7 @@ model: anthropic/claude-sonnet-4-20250514
 # ollamakey: xxxxx                      # Bearer token for secured Ollama endpoints
 
 # Generation parameters
-# maxtokens: 4096                # Maximum response length
+maxtokens: 20000                # Maximum response length
 # temperature: 0.7               # 0.0-2.0, higher = more creative
 # top_p: 1.0                    # 0.0-1.0, nucleus sampling parameter
 # apitimeout: 5m                # API request timeout
@@ -70,8 +70,8 @@ greeting: wave hello
 # SESSION MANAGEMENT
 # ============================================================================
 
-# sessionduration: 10m           # Clear context after idle time (default: 10m)
-# sessionhistory: 250            # Max messages to keep in context
+sessionduration: 30m           # Clear context after idle time (default: 10m)
+sessionhistory: 1000            # Max messages to keep in context
 # chunkmax: 350                  # Max chars per IRC message
 
 # ============================================================================
