@@ -5,3 +5,4 @@ __debug_bin*
 perp.json
 .history/*
 examples/soulshack.yml
+RELEASE_NOTES.md

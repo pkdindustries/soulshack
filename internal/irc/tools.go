@@ -480,7 +480,7 @@ func (t *IrcActionTool) Execute(ctx context.Context, args map[string]any) (strin
 
 	// Send IRC action directly to the configured channel
 	channel := chatCtx.GetConfig().Server.Channel
-	chatCtx.Action(channel, message)
+	chatCtx.GetClient().Cmd.Action(channel, message)
 
 	chatCtx.GetLogger().Infow("IRC ACTION: Sent action", "message", message)
 	return fmt.Sprintf("* %s", message), nil

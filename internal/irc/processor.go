@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"pkdindustries/soulshack/internal/core"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/alexschlessinger/pollytool/llm"
@@ -27,9 +28,10 @@ type IRCEventProcessor struct {
 	response        messages.ChatMessage // Store the response message
 
 	// IRC-specific state
-	sentThinkingAction bool
+	sentThinkingAction atomic.Bool
 	thinkingStartTime  *time.Time
-	thinkingTimer      *time.Timer
+	thinkingTicker     *time.Ticker
+	thinkingDone       chan struct{}
 
 	// For handling tool continuation
 	req *llm.CompletionRequest
@@ -57,21 +59,36 @@ func NewIRCEventProcessor(
 
 // OnReasoning handles reasoning content - starts thinking timer for IRC action
 func (p *IRCEventProcessor) OnReasoning(content string, totalLength int) {
-	// Start timer on first reasoning event, send action after 5 seconds if still thinking
+	// Start ticker on first reasoning event, send action every 5 seconds while thinking
 	// Only show thinking action if both thinking mode is enabled AND showthinkingaction is true
-	if !p.sentThinkingAction && p.ctx.GetConfig().Model.Thinking && p.ctx.GetConfig().Bot.ShowThinkingAction {
+	if !p.sentThinkingAction.Load() && p.ctx.GetConfig().Model.Thinking && p.ctx.GetConfig().Bot.ShowThinkingAction {
 		if p.thinkingStartTime == nil {
-			// First reasoning event - start timer
+			// First reasoning event - start ticker
 			now := time.Now()
 			p.thinkingStartTime = &now
-			p.thinkingTimer = time.AfterFunc(5*time.Second, func() {
-				if !p.sentThinkingAction {
-					channel := p.ctx.GetConfig().Server.Channel
-					p.ctx.Action(channel, "still thinking.")
-					p.sentThinkingAction = true
+			p.thinkingTicker = time.NewTicker(5 * time.Second)
+			p.thinkingDone = make(chan struct{})
+
+			// Start goroutine to send periodic thinking messages
+			go func() {
+				for {
+					select {
+					case <-p.thinkingTicker.C:
+						if p.sentThinkingAction.CompareAndSwap(false, true) {
+							// First tick
+							p.ctx.Action("still thinking after 5 seconds...")
+						} else {
+							// Subsequent ticks - calculate elapsed time
+							elapsed := time.Since(*p.thinkingStartTime)
+							seconds := int(elapsed.Seconds())
+							p.ctx.Action(fmt.Sprintf("still thinking after %d seconds...", seconds))
+						}
+					case <-p.thinkingDone:
+						return
+					}
 				}
-			})
-			p.ctx.GetLogger().Debug("Started thinking timer")
+			}()
+			p.ctx.GetLogger().Debug("Started thinking ticker")
 		}
 	}
 
@@ -94,12 +111,14 @@ func (p *IRCEventProcessor) OnToolCall(toolCall messages.ChatMessageToolCall) {
 
 // OnComplete handles the complete message and executes tools if needed
 func (p *IRCEventProcessor) OnComplete(message *messages.ChatMessage) {
-	// Cancel thinking timer if it hasn't fired yet
-	if p.thinkingTimer != nil && !p.sentThinkingAction {
-		p.thinkingTimer.Stop()
-		p.thinkingTimer = nil
+	// Cancel thinking ticker if it's running
+	if p.thinkingTicker != nil {
+		p.thinkingTicker.Stop()
+		close(p.thinkingDone)
+		p.thinkingTicker = nil
+		p.thinkingDone = nil
 		p.thinkingStartTime = nil
-		p.ctx.GetLogger().Debug("Cancelled thinking timer")
+		p.ctx.GetLogger().Debug("Stopped thinking ticker")
 	}
 
 	if message != nil {
@@ -174,14 +193,7 @@ func (p *IRCEventProcessor) HandleToolContinuation(ctx context.Context, req *llm
 				displayName = displayName[idx+2:]
 			}
 			message := fmt.Sprintf("calling %s", displayName)
-			if p.ctx.IsPrivate() {
-				// For private messages, send a regular reply
-				p.ctx.Reply(message)
-			} else {
-				// For channels, use an action
-				channel := p.ctx.GetConfig().Server.Channel
-				p.ctx.Action(channel, message)
-			}
+			p.ctx.Action(message)
 		}
 
 		// Set context for contextual tools (IRC tools)
@@ -225,12 +237,14 @@ func (p *IRCEventProcessor) HandleToolContinuation(ctx context.Context, req *llm
 	// Restore the original model name (MultiPass strips the provider prefix)
 	req.Model = p.originalModel
 
-	// Reset thinking action flag and timer for continuation
-	p.sentThinkingAction = false
+	// Reset thinking action flag and ticker for continuation
+	p.sentThinkingAction.Store(false)
 	p.thinkingStartTime = nil
-	if p.thinkingTimer != nil {
-		p.thinkingTimer.Stop()
-		p.thinkingTimer = nil
+	if p.thinkingTicker != nil {
+		p.thinkingTicker.Stop()
+		close(p.thinkingDone)
+		p.thinkingTicker = nil
+		p.thinkingDone = nil
 	}
 
 	// Create a new processor for the continuation

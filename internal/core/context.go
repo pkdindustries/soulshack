@@ -26,7 +26,7 @@ type Event interface {
 
 type Responder interface {
 	Reply(string)
-	Action(string, string) bool
+	Action(string)
 }
 
 type Controller interface {
@@ -209,9 +209,14 @@ func (c ChatContext) Reply(message string) {
 	}
 }
 
-func (c ChatContext) Action(target string, message string) bool {
+func (c ChatContext) Action(message string) {
+	target := c.event.Params[0]
+	if !girc.IsValidChannel(target) {
+		// For PMs, send a regular message instead of an action
+		c.client.Cmd.Message(c.event.Source.Name, message)
+		return
+	}
 	c.client.Cmd.Action(target, message)
-	return true
 }
 
 func (c ChatContext) LookupUser(nick string) (string, string, bool) {

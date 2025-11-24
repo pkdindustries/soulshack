@@ -85,6 +85,8 @@ func main() {
 	}
 
 	if err := app.Run(os.Args); err != nil {
+		// Print to stderr first in case logger isn't initialized
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		zap.S().Fatal(err)
 	}
 }

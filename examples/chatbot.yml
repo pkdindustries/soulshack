@@ -24,10 +24,10 @@ channel: '#soulshack'
 # ============================================================================
 
 # Model selection (format: provider/model-name)
-model: anthropic/claude-sonnet-4-20250514
-# model: openai/gpt-4o
-# model: gemini/gemini-2.5-flash
-# model: ollama/llama3.2          # For local models
+model: anthropic/claude-sonnet-4-5-20250929
+# model: openai/gpt-5
+# model: gemini/gemini-3-pro-preview
+# model: ollama/gpt-oss          
 
 # API keys (prefer environment variables for security)
 # anthropickey: sk-ant-xxxxx     # Or use SOULSHACK_ANTHROPICKEY env var
@@ -41,7 +41,7 @@ model: anthropic/claude-sonnet-4-20250514
 
 # Generation parameters
 maxtokens: 20000                # Maximum response length
-# temperature: 0.7               # 0.0-2.0, higher = more creative
+temperature: 1.0                # 0.0-2.0, higher = more creative
 # top_p: 1.0                    # 0.0-1.0, nucleus sampling parameter
 # apitimeout: 5m                # API request timeout
 
