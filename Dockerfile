@@ -3,8 +3,8 @@ RUN apk add build-base
 RUN apk add git
 WORKDIR /src
 COPY . .
-RUN go get .
-RUN go build -o /soulshack
+RUN go mod download
+RUN go build -o /soulshack ./cmd/soulshack
 
 FROM alpine
 COPY --from=build /src/examples /examples

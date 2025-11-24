@@ -18,7 +18,7 @@ soulshack is an IRC chatbot that can talk in channels and call tools. It support
 ## building
 
 ```bash
-go build .
+go build ./cmd/soulshack
 ```
 
 ```
@@ -106,7 +106,7 @@ Connection:
 Config & logging:
   -b, --config string              use the named configuration file (YAML)
   -A, --admins strings             comma-separated list of allowed hostmasks to administrate the bot
-  -v, --verbose                    enable verbose logging of sessions and configuration
+  -V, --verbose                    enable verbose logging of sessions and configuration
 
 LLM/API configuration:
       --openaikey string           OpenAI API key
@@ -152,7 +152,8 @@ configuration files use the yaml format. they can be loaded using the `--config`
 - `/set <key> <value>`: set a configuration parameter (e.g., `/set model ollama/llama3.2`)
 - `/get <key>`: get the current value of a configuration parameter (e.g., `/get model`)
 - `/leave`: make the bot leave the channel and exit
-- `/help`: display help for available commands
+- `/help` (or `/?`): display help for available commands
+- `/version`: display the bot version
 
 ### Tool Management Commands
 
@@ -294,8 +295,15 @@ MCP servers automatically expose their available tools to the bot. For more info
 Built-in IRC channel management tools are loaded using the same `--tool` flag with `irc_` prefix:
 - `irc_op` - Grant/revoke operator status
 - `irc_kick` - Kick users from the channel
-- `irc_topic` - Change the channel topic
-- `irc_action` - Send /me actions
+- `irc_ban` - Ban or unban a user from the IRC channel
+- `irc_topic` - Set the IRC channel topic
+- `irc_action` - Send an action message to the IRC channel
+- `irc_mode_set` - Set or unset channel-wide modes
+- `irc_mode_query` - Query the current channel modes
+- `irc_invite` - Invite one or more users to the IRC channel
+- `irc_names` - List all users currently in the IRC channel
+- `irc_whois` - Get detailed information about a user
+- `irc_history` - Get recent chat history for a specific channel
 
 Example:
 ```bash
