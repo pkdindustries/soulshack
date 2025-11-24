@@ -14,10 +14,9 @@ import (
 	"pkdindustries/soulshack/internal/config"
 )
 
-type Message interface {
+type Event interface {
 	IsAddressed() bool
 	IsAdmin() bool
-	Reply(string)
 	Valid() bool
 	IsPrivate() bool
 	GetCommand() string
@@ -25,10 +24,14 @@ type Message interface {
 	GetArgs() []string
 }
 
-type Server interface {
+type Responder interface {
+	Reply(string)
+	Action(string, string) bool
+}
+
+type Controller interface {
 	Join(string) bool
 	Nick(string) bool
-	Action(string, string) bool
 	Mode(string, string, string) bool
 	Kick(string, string, string) bool
 	Topic(string, string) bool
@@ -38,14 +41,19 @@ type Server interface {
 	GetClient() *girc.Client
 }
 
-type ChatContextInterface interface {
-	context.Context
+type Runtime interface {
 	GetSession() sessions.Session
 	GetConfig() *config.Configuration
 	GetSystem() System
 	GetLogger() *zap.SugaredLogger
-	Message
-	Server
+}
+
+type ChatContextInterface interface {
+	context.Context
+	Event
+	Responder
+	Controller
+	Runtime
 }
 
 type ChatContext struct {
