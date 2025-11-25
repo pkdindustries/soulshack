@@ -12,6 +12,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -63,6 +64,7 @@ func main() {
 		altsrc.NewStringSliceFlag(&cli.StringSliceFlag{Name: "tool", Usage: "tools to load (shell scripts, MCP server JSON files, or native tools like irc_op)", EnvVars: []string{"SOULSHACK_TOOL"}}),
 		altsrc.NewBoolFlag(&cli.BoolFlag{Name: "showthinkingaction", Value: true, Usage: "show '[thinking]' IRC action when bot is reasoning", EnvVars: []string{"SOULSHACK_SHOWTHINKINGACTION"}}),
 		altsrc.NewBoolFlag(&cli.BoolFlag{Name: "showtoolactions", Value: true, Usage: "show '[calling toolname]' IRC actions when executing tools", EnvVars: []string{"SOULSHACK_SHOWTOOLACTIONS"}}),
+		altsrc.NewBoolFlag(&cli.BoolFlag{Name: "urlwatcher", Usage: "enable passive URL watching and analysis", EnvVars: []string{"SOULSHACK_URLWATCHER"}}),
 
 		// Timeouts and Behavior
 		altsrc.NewBoolFlag(&cli.BoolFlag{Name: "addressed", Aliases: []string{"a"}, Value: true, Usage: "require bot be addressed by nick for response", EnvVars: []string{"SOULSHACK_ADDRESSED"}}),
@@ -138,7 +140,17 @@ func runBot(c *cli.Context) error {
 	ircClient.Handlers.AddBg(girc.PRIVMSG, func(client *girc.Client, e girc.Event) {
 		ctx, cancel := core.NewChatContext(context.Background(), cfg, sys, client, &e)
 		defer cancel()
-		if ctx.Valid() {
+
+		// Check for URL trigger
+		urlTriggered := false
+		if cfg.Bot.URLWatcher && !ctx.IsAddressed() {
+			if regexp.MustCompile(`https?://[^\s]+`).MatchString(e.Last()) {
+				urlTriggered = true
+				ctx.GetLogger().Info("URL detected, triggering response")
+			}
+		}
+
+		if ctx.Valid() || urlTriggered {
 			// Get lock for this channel to serialize message processing
 			channelKey := e.Params[0]
 			if !girc.IsValidChannel(channelKey) {

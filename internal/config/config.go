@@ -37,6 +37,7 @@ type BotConfig struct {
 	Tools              []string
 	ShowThinkingAction bool
 	ShowToolActions    bool
+	URLWatcher         bool
 }
 
 type ModelConfig struct {
@@ -82,6 +83,7 @@ func (c *Configuration) PrintConfig() {
 	fmt.Printf("tool: %v\n", c.Bot.Tools)
 	fmt.Printf("showthinkingaction: %t\n", c.Bot.ShowThinkingAction)
 	fmt.Printf("showtoolactions: %t\n", c.Bot.ShowToolActions)
+	fmt.Printf("urlwatcher: %t\n", c.Bot.URLWatcher)
 
 	fmt.Printf("sessionduration: %s\n", c.Session.TTL)
 	if len(c.API.OpenAIKey) > 3 && c.API.OpenAIKey != "" {
@@ -134,6 +136,7 @@ func NewConfiguration(c *cli.Context) *Configuration {
 			Tools:              c.StringSlice("tool"),
 			ShowThinkingAction: c.Bool("showthinkingaction"),
 			ShowToolActions:    c.Bool("showtoolactions"),
+			URLWatcher:         c.Bool("urlwatcher"),
 		},
 		Model: &ModelConfig{
 			Model:       c.String("model"),
