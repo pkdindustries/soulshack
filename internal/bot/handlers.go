@@ -20,7 +20,7 @@ var ModifiableConfigKeys = []string{
 	"admins", "openaiurl", "ollamaurl", "ollamakey", "openaikey",
 	"anthropickey", "geminikey", "tools", "thinking", "showthinkingaction",
 	"showtoolactions", "sessionduration", "apitimeout", "sessionhistory",
-	"chunkmax",
+	"chunkmax", "urlwatcher",
 }
 
 func Greeting(ctx core.ChatContextInterface) {
@@ -252,6 +252,14 @@ func SlashSet(ctx core.ChatContextInterface) {
 		}
 		config.Session.ChunkMax = chunkMax
 		ctx.Reply(fmt.Sprintf("%s set to: %d", param, config.Session.ChunkMax))
+	case "urlwatcher":
+		urlwatcher, err := strconv.ParseBool(value)
+		if err != nil {
+			ctx.Reply("Invalid value for urlwatcher. Please provide 'true' or 'false'.")
+			return
+		}
+		config.Bot.URLWatcher = urlwatcher
+		ctx.Reply(fmt.Sprintf("%s set to: %t", param, config.Bot.URLWatcher))
 	}
 
 	ctx.GetSession().Clear()
@@ -345,6 +353,8 @@ func SlashGet(ctx core.ChatContextInterface) {
 		ctx.Reply(fmt.Sprintf("%s: %d", param, config.Session.MaxHistory))
 	case "chunkmax":
 		ctx.Reply(fmt.Sprintf("%s: %d", param, config.Session.ChunkMax))
+	case "urlwatcher":
+		ctx.Reply(fmt.Sprintf("%s: %t", param, config.Bot.URLWatcher))
 	}
 }
 

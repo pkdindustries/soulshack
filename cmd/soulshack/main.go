@@ -27,6 +27,8 @@ import (
 	"pkdindustries/soulshack/internal/core"
 )
 
+var urlPattern = regexp.MustCompile(`https?://[^\s]+`)
+
 func main() {
 	fmt.Printf("%s\n", getBanner())
 
@@ -144,7 +146,7 @@ func runBot(c *cli.Context) error {
 		// Check for URL trigger
 		urlTriggered := false
 		if cfg.Bot.URLWatcher && !ctx.IsAddressed() {
-			if regexp.MustCompile(`https?://[^\s]+`).MatchString(e.Last()) {
+			if urlPattern.MatchString(e.Last()) {
 				urlTriggered = true
 				ctx.GetLogger().Info("URL detected, triggering response")
 			}
