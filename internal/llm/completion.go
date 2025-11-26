@@ -1,7 +1,6 @@
 package llm
 
 import (
-	"context"
 	"pkdindustries/soulshack/internal/config"
 	"pkdindustries/soulshack/internal/core"
 	"time"
@@ -13,7 +12,7 @@ import (
 
 type LLM interface {
 	// New simplified interface - single byte channel output
-	ChatCompletionStream(context.Context, *CompletionRequest, core.ChatContextInterface) <-chan []byte
+	ChatCompletionStream(*CompletionRequest, core.ChatContextInterface) <-chan []byte
 }
 
 type CompletionRequest struct {
@@ -74,7 +73,7 @@ func complete(ctx core.ChatContextInterface) (<-chan string, error) {
 	llm := NewPollyLLM(*config.API)
 
 	// Get the byte stream from the new interface
-	byteChan := llm.ChatCompletionStream(context.Background(), req, ctx)
+	byteChan := llm.ChatCompletionStream(req, ctx)
 
 	// Convert bytes to strings for IRC output
 	outputChan := make(chan string, 10)

@@ -1,8 +1,6 @@
 package llm
 
 import (
-	"context"
-
 	"github.com/alexschlessinger/pollytool/llm"
 	"github.com/alexschlessinger/pollytool/messages"
 
@@ -34,7 +32,7 @@ func NewPollyLLM(config config.APIConfig) *PollyLLM {
 }
 
 // ChatCompletionStream returns a single byte channel with chunked output for IRC
-func (p *PollyLLM) ChatCompletionStream(ctx context.Context, req *CompletionRequest, chatCtx core.ChatContextInterface) <-chan []byte {
+func (p *PollyLLM) ChatCompletionStream(req *CompletionRequest, chatCtx core.ChatContextInterface) <-chan []byte {
 	// Convert soulshack request to pollytool request
 	pollyReq := &llm.CompletionRequest{
 		Model:       req.Model,
@@ -77,17 +75,17 @@ func (p *PollyLLM) ChatCompletionStream(ctx context.Context, req *CompletionRequ
 		processor.SetRequest(pollyReq)
 
 		// Get event stream from LLM
-		eventChan := p.client.ChatCompletionStream(ctx, pollyReq, p.streamProcessor)
+		eventChan := p.client.ChatCompletionStream(chatCtx, pollyReq, p.streamProcessor)
 
 		// Process events using the standardized processor
-		response := messages.ProcessEventStream(ctx, eventChan, processor)
+		response := messages.ProcessEventStream(chatCtx, eventChan, processor)
 
 		// Flush any remaining buffer content
 		processor.FlushBuffer()
 
 		// Handle tool continuation if needed
 		if len(response.ToolCalls) > 0 {
-			processor.HandleToolContinuation(ctx, pollyReq)
+			processor.HandleToolContinuation(chatCtx, pollyReq)
 		}
 	}()
 
