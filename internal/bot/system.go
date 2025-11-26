@@ -38,13 +38,5 @@ func NewSystem(c *config.Configuration) core.System {
 		SystemPrompt: c.Bot.Prompt,
 	})
 
-	// Initialize history store
-	history, err := core.NewFileHistory(".history")
-	if err != nil {
-		zap.S().Warnw("Failed to initialize history store", "error", err)
-	} else {
-		s.History = history
-	}
-
 	return &s
 }

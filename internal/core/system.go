@@ -8,13 +8,11 @@ import (
 type System interface {
 	GetToolRegistry() *tools.ToolRegistry
 	GetSessionStore() sessions.SessionStore
-	GetHistory() HistoryStore
 }
 
 type SystemImpl struct {
-	Store   sessions.SessionStore
-	Tools   *tools.ToolRegistry
-	History HistoryStore
+	Store sessions.SessionStore
+	Tools *tools.ToolRegistry
 }
 
 func (s *SystemImpl) GetToolRegistry() *tools.ToolRegistry {
@@ -27,8 +25,4 @@ func (s *SystemImpl) SetToolRegistry(reg *tools.ToolRegistry) {
 
 func (s *SystemImpl) GetSessionStore() sessions.SessionStore {
 	return s.Store
-}
-
-func (s *SystemImpl) GetHistory() HistoryStore {
-	return s.History
 }
