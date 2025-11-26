@@ -27,7 +27,7 @@ import (
 	"pkdindustries/soulshack/internal/core"
 )
 
-var urlPattern = regexp.MustCompile(`https?://[^\s]+`)
+var urlPattern = regexp.MustCompile(`^https?://[^\s]+`)
 
 const version = "0.91"
 

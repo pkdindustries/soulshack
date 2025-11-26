@@ -8,3 +8,4 @@ examples/soulshack.yml
 RELEASE_NOTES.md
 examples/tools/url.go
 play.json
+examples/tools/url
