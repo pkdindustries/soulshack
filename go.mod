@@ -5,6 +5,7 @@ go 1.24.0
 require (
 	github.com/alexschlessinger/pollytool v0.0.0-20250930062348-afefe860c99f
 	github.com/lrstanley/girc v1.1.1
+	github.com/mazznoer/colorgrad v0.10.0
 	github.com/urfave/cli/v2 v2.27.7
 	go.uber.org/zap v1.27.1
 )
@@ -31,6 +32,7 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.6 // indirect
 	github.com/googleapis/gax-go/v2 v2.14.1 // indirect
+	github.com/mazznoer/csscolorparser v0.1.5 // indirect
 	github.com/modelcontextprotocol/go-sdk v0.8.0 // indirect
 	github.com/ollama/ollama v0.12.3 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
@@ -63,7 +65,6 @@ require (
 )
 
 require (
-	github.com/common-nighthawk/go-figure v0.0.0-20210622060536-734e95fb86be
 	github.com/google/jsonschema-go v0.3.0
 	golang.org/x/sys v0.36.0 // indirect
 	golang.org/x/text v0.29.0 // indirect

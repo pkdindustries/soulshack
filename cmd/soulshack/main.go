@@ -16,8 +16,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/common-nighthawk/go-figure"
 	"github.com/lrstanley/girc"
+	"github.com/mazznoer/colorgrad"
 	"github.com/urfave/cli/v2"
 	"github.com/urfave/cli/v2/altsrc"
 	"go.uber.org/zap"
@@ -28,6 +28,8 @@ import (
 )
 
 var urlPattern = regexp.MustCompile(`https?://[^\s]+`)
+
+const version = "0.91"
 
 func main() {
 	fmt.Printf("%s\n", getBanner())
@@ -82,7 +84,7 @@ func main() {
 	app := &cli.App{
 		Name:    "soulshack",
 		Usage:   "because real people are overrated",
-		Version: "0.7 - http://github.com/pkdindustries/soulshack",
+		Version: version + " - http://github.com/pkdindustries/soulshack",
 		Flags:   flags,
 		Before:  altsrc.InitInputSourceWithContext(flags, altsrc.NewYamlSourceFromFlagFunc("config")),
 		Action:  runBot,
@@ -96,9 +98,40 @@ func main() {
 }
 
 func getBanner() string {
-	return fmt.Sprintf("%s\n%s",
-		figure.NewColorFigure("SoulShack", "", "green", true).ColorString(),
-		figure.NewColorFigure(" . . . because real people are overrated", "term", "green", true).ColorString())
+	banner := `
+ ____                    _   ____    _                      _
+/ ___|    ___    _   _  | | / ___|  | |__     __ _    ___  | | __
+\___ \   / _ \  | | | | | | \___ \  | '_ \   / _' |  / __| | |/ /
+ ___) | | (_) | | |_| | | |  ___) | | | | | | (_| | | (__  |   <
+|____/   \___/   \__,_| |_| |____/  |_| |_|  \__,_|  \___| |_|\_\
+ .  .  .  because  real  people  are  overrated  [v` + version + `]
+`
+	grad, _ := colorgrad.NewGradient().
+		HtmlColors("#1115f0ff", "#fdfdfdff").
+		Build()
+
+	lines := strings.Split(banner, "\n")
+
+	// Find max line length for gradient spread
+	maxLen := 0
+	for _, line := range lines {
+		if len(line) > maxLen {
+			maxLen = len(line)
+		}
+	}
+
+	colors := grad.Colors(uint(maxLen))
+	var coloredBanner strings.Builder
+
+	for _, line := range lines {
+		for i, ch := range line {
+			r, g, b, _ := colors[i].RGBA255()
+			coloredBanner.WriteString(fmt.Sprintf("\x1b[38;2;%d;%d;%dm%c", r, g, b, ch))
+		}
+		coloredBanner.WriteString("\x1b[0m\n")
+	}
+
+	return coloredBanner.String()
 }
 
 func runBot(c *cli.Context) error {
