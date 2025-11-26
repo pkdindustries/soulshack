@@ -196,17 +196,6 @@ func (c ChatContext) IsAdmin() bool {
 func (c ChatContext) Reply(message string) {
 	c.client.Cmd.Reply(*c.event, message)
 
-	// Log bot's reply to history if the tool is enabled
-	_, historyToolEnabled := c.GetSystem().GetToolRegistry().Get("irc_history")
-	if c.GetSystem().GetHistory() != nil && historyToolEnabled {
-		target := c.event.Params[0]
-		historyKey := target
-		if !girc.IsValidChannel(target) {
-			// It's a PM, log under sender's nick (since that's where the conversation is)
-			historyKey = c.event.Source.Name
-		}
-		c.GetSystem().GetHistory().Add(historyKey, c.client.GetNick(), message)
-	}
 }
 
 func (c ChatContext) Action(message string) {

@@ -6,3 +6,4 @@ perp.json
 .history/*
 examples/soulshack.yml
 RELEASE_NOTES.md
+examples/tools/url.go

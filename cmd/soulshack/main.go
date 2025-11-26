@@ -207,18 +207,6 @@ func runBot(c *cli.Context) error {
 				lock.Unlock()
 			}()
 
-			// Log all messages to history if the tool is enabled
-			_, historyToolEnabled := ctx.GetSystem().GetToolRegistry().Get("irc_history")
-			if ctx.GetSystem().GetHistory() != nil && historyToolEnabled {
-				target := e.Params[0]
-				historyKey := target
-				if !girc.IsValidChannel(target) {
-					// It's a PM to the bot, log under sender's nick
-					historyKey = e.Source.Name
-				}
-				ctx.GetSystem().GetHistory().Add(historyKey, e.Source.Name, e.Last())
-			}
-
 			ctx.GetLogger().Infof(">> %s", strings.Join(e.Params[1:], " "))
 			switch ctx.GetCommand() {
 			case "/set":

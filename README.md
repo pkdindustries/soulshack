@@ -303,7 +303,6 @@ Built-in IRC channel management tools are loaded using the same `--tool` flag wi
 - `irc_invite` - Invite one or more users to the IRC channel
 - `irc_names` - List all users currently in the IRC channel
 - `irc_whois` - Get detailed information about a user
-- `irc_history` - Get recent chat history for a specific channel
 
 Example:
 ```bash

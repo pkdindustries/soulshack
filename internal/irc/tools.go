@@ -78,9 +78,6 @@ func RegisterIRCTools(registry *tools.ToolRegistry) {
 	registry.RegisterNative("irc_whois", func() tools.Tool {
 		return &IrcWhoisTool{}
 	})
-	registry.RegisterNative("irc_history", func() tools.Tool {
-		return &IrcHistoryTool{}
-	})
 }
 
 // IrcOpTool grants or revokes operator status
@@ -868,96 +865,4 @@ func (t *IrcWhoisTool) Execute(ctx context.Context, args map[string]any) (string
 	}
 
 	return result, nil
-}
-
-// IrcHistoryTool retrieves chat history for a channel
-type IrcHistoryTool struct {
-}
-
-func (t *IrcHistoryTool) SetContext(ctx any) {
-}
-
-func (t *IrcHistoryTool) GetSchema() *jsonschema.Schema {
-	return &jsonschema.Schema{
-		Title:       "irc_history",
-		Description: "Get recent chat history for a specific channel. This accesses the full channel history logs, which is distinct from the current chat session context.",
-		Type:        "object",
-		Properties: map[string]*jsonschema.Schema{
-			"channel": {
-				Type:        "string",
-				Description: "The channel or user to get history for. Defaults to the current channel/user if omitted.",
-			},
-			"limit": {
-				Type:        "integer",
-				Description: "Number of messages to retrieve (default 50)",
-			},
-			"search": {
-				Type:        "string",
-				Description: "Filter history by this search term (optional, case-insensitive. if user use just the nick, no brackets or braces)",
-			},
-		},
-		// channel is now optional, defaults to current context
-		Required: []string{},
-	}
-}
-
-func (t *IrcHistoryTool) GetName() string {
-	return "irc_history"
-}
-
-func (t *IrcHistoryTool) GetType() string {
-	return "native"
-}
-
-func (t *IrcHistoryTool) GetSource() string {
-	return "builtin"
-}
-
-func (t *IrcHistoryTool) Execute(ctx context.Context, args map[string]any) (string, error) {
-	chatCtx, err := GetIRCContext(ctx)
-	if err != nil {
-		return "", err
-	}
-
-	channel := ""
-	if c, ok := args["channel"].(string); ok && c != "" {
-		channel = c
-	} else {
-		// Default to current context
-		if chatCtx.IsPrivate() {
-			// For PMs, history is stored under the sender's nick
-			channel = chatCtx.GetSource()
-		} else {
-			// For channels, use the configured channel
-			channel = chatCtx.GetConfig().Server.Channel
-		}
-	}
-
-	filter := core.HistoryFilter{
-		Limit: 50, // Default limit
-	}
-
-	if l, ok := args["limit"].(float64); ok {
-		filter.Limit = int(l)
-	}
-
-	if s, ok := args["search"].(string); ok {
-		filter.Search = s
-	}
-
-	historyStore := chatCtx.GetSystem().GetHistory()
-	if historyStore == nil {
-		return "History storage is not available", nil
-	}
-
-	messages, _, err := historyStore.Get(channel, filter)
-	if err != nil {
-		return "", fmt.Errorf("failed to retrieve history: %v", err)
-	}
-
-	if len(messages) == 0 {
-		return fmt.Sprintf("No history found for %s", channel), nil
-	}
-
-	return strings.Join(messages, "\n"), nil
 }
