@@ -59,37 +59,27 @@ func NewIRCEventProcessor(
 
 // OnReasoning handles reasoning content - starts thinking timer for IRC action
 func (p *IRCEventProcessor) OnReasoning(content string, totalLength int) {
-	// Start ticker on first reasoning event, send action every 5 seconds while thinking
-	// Only show thinking action if both thinking mode is enabled AND showthinkingaction is true
-	if !p.sentThinkingAction.Load() && p.ctx.GetConfig().Model.Thinking && p.ctx.GetConfig().Bot.ShowThinkingAction {
-		if p.thinkingStartTime == nil {
-			// First reasoning event - start ticker
-			now := time.Now()
-			p.thinkingStartTime = &now
-			p.thinkingTicker = time.NewTicker(5 * time.Second)
-			p.thinkingDone = make(chan struct{})
+	// Start ticker on first reasoning event if thinking action is enabled
+	if p.thinkingStartTime == nil && p.ctx.GetConfig().Bot.ShowThinkingAction {
+		now := time.Now()
+		p.thinkingStartTime = &now
+		p.thinkingTicker = time.NewTicker(15 * time.Second)
+		p.thinkingDone = make(chan struct{})
 
-			// Start goroutine to send periodic thinking messages
-			go func() {
-				for {
-					select {
-					case <-p.thinkingTicker.C:
-						if p.sentThinkingAction.CompareAndSwap(false, true) {
-							// First tick
-							p.ctx.Action("still thinking after 5 seconds...")
-						} else {
-							// Subsequent ticks - calculate elapsed time
-							elapsed := time.Since(*p.thinkingStartTime)
-							seconds := int(elapsed.Seconds())
-							p.ctx.Action(fmt.Sprintf("still thinking after %d seconds...", seconds))
-						}
-					case <-p.thinkingDone:
-						return
-					}
+		// Start goroutine to send periodic thinking messages
+		go func() {
+			for {
+				select {
+				case <-p.thinkingTicker.C:
+					elapsed := time.Since(*p.thinkingStartTime)
+					seconds := int(elapsed.Seconds())
+					p.ctx.Action(fmt.Sprintf("thinking... (%ds elapsed)", seconds))
+				case <-p.thinkingDone:
+					return
 				}
-			}()
-			p.ctx.GetLogger().Debug("Started thinking ticker")
-		}
+			}
+		}()
+		p.ctx.GetLogger().Debug("Started thinking ticker")
 	}
 
 	p.ctx.GetLogger().Debugf("Reasoning update: %q", content)

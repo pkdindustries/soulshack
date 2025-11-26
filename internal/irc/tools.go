@@ -127,6 +127,10 @@ func (t *IrcOpTool) Execute(ctx context.Context, args map[string]any) (string, e
 		return "", err
 	}
 
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+
 	// Check admin permission
 	if !chatCtx.IsAdmin() {
 		return "You are not authorized to use this tool", nil
@@ -169,6 +173,9 @@ func (t *IrcOpTool) Execute(ctx context.Context, args map[string]any) (string, e
 	// Execute the IRC command for each user
 	channel := chatCtx.GetConfig().Server.Channel
 	for _, nick := range users {
+		if err := ctx.Err(); err != nil {
+			return "", err
+		}
 		chatCtx.Mode(channel, mode, nick)
 	}
 
@@ -224,6 +231,10 @@ func (t *IrcKickTool) Execute(ctx context.Context, args map[string]any) (string,
 		return "", err
 	}
 
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+
 	// Check admin permission
 	if !chatCtx.IsAdmin() {
 		return "You are not authorized to use this tool", nil
@@ -261,6 +272,9 @@ func (t *IrcKickTool) Execute(ctx context.Context, args map[string]any) (string,
 	// Execute the IRC command for each user
 	channel := chatCtx.GetConfig().Server.Channel
 	for _, nick := range users {
+		if err := ctx.Err(); err != nil {
+			return "", err
+		}
 		chatCtx.Kick(channel, nick, reason)
 	}
 
@@ -310,6 +324,10 @@ func (t *IrcBanTool) GetSource() string {
 func (t *IrcBanTool) Execute(ctx context.Context, args map[string]any) (string, error) {
 	chatCtx, err := GetIRCContext(ctx)
 	if err != nil {
+		return "", err
+	}
+
+	if err := ctx.Err(); err != nil {
 		return "", err
 	}
 
@@ -407,6 +425,10 @@ func (t *IrcTopicTool) Execute(ctx context.Context, args map[string]any) (string
 		return "", err
 	}
 
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+
 	// Check admin permission
 	if !chatCtx.IsAdmin() {
 		return "You are not authorized to use this tool", nil
@@ -470,6 +492,10 @@ func (t *IrcActionTool) Execute(ctx context.Context, args map[string]any) (strin
 		return "", err
 	}
 
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+
 	message, ok := args["message"].(string)
 	if !ok {
 		return "", fmt.Errorf("message must be a string")
@@ -520,6 +546,10 @@ func (t *IrcModeSetTool) GetSource() string {
 func (t *IrcModeSetTool) Execute(ctx context.Context, args map[string]any) (string, error) {
 	chatCtx, err := GetIRCContext(ctx)
 	if err != nil {
+		return "", err
+	}
+
+	if err := ctx.Err(); err != nil {
 		return "", err
 	}
 
@@ -595,6 +625,10 @@ func (t *IrcModeQueryTool) Execute(ctx context.Context, args map[string]any) (st
 		return "", err
 	}
 
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+
 	channel := chatCtx.GetConfig().Server.Channel
 	ch := chatCtx.LookupChannel(channel)
 
@@ -656,6 +690,10 @@ func (t *IrcInviteTool) Execute(ctx context.Context, args map[string]any) (strin
 		return "", err
 	}
 
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+
 	// Check admin permission
 	if !chatCtx.IsAdmin() {
 		return "You are not authorized to use this tool", nil
@@ -688,7 +726,12 @@ func (t *IrcInviteTool) Execute(ctx context.Context, args map[string]any) (strin
 	// Execute the IRC INVITE command
 	channel := chatCtx.GetConfig().Server.Channel
 	client := chatCtx.GetClient()
-	client.Cmd.Invite(channel, users...)
+	for _, user := range users {
+		if err := ctx.Err(); err != nil {
+			return "", err
+		}
+		client.Cmd.Invite(channel, user)
+	}
 
 	usersStr := strings.Join(users, ", ")
 	chatCtx.GetLogger().Infow("IRC INVITE: Invited users", "users", usersStr, "channel", channel)
@@ -727,6 +770,10 @@ func (t *IrcNamesTool) GetSource() string {
 func (t *IrcNamesTool) Execute(ctx context.Context, args map[string]any) (string, error) {
 	chatCtx, err := GetIRCContext(ctx)
 	if err != nil {
+		return "", err
+	}
+
+	if err := ctx.Err(); err != nil {
 		return "", err
 	}
 
@@ -820,6 +867,10 @@ func (t *IrcWhoisTool) GetSource() string {
 func (t *IrcWhoisTool) Execute(ctx context.Context, args map[string]any) (string, error) {
 	if t.ctx == nil {
 		return "", fmt.Errorf("no IRC context available")
+	}
+
+	if err := ctx.Err(); err != nil {
+		return "", err
 	}
 
 	nick, ok := args["nick"].(string)
