@@ -5,6 +5,7 @@ import (
 	"pkdindustries/soulshack/internal/core"
 	"time"
 
+	"github.com/alexschlessinger/pollytool/llm"
 	"github.com/alexschlessinger/pollytool/messages"
 	"github.com/alexschlessinger/pollytool/sessions"
 	"github.com/alexschlessinger/pollytool/tools"
@@ -15,32 +16,24 @@ type LLM interface {
 	ChatCompletionStream(*CompletionRequest, core.ChatContextInterface) <-chan []byte
 }
 
-type CompletionRequest struct {
-	APIKey      string
-	BaseURL     string
-	Timeout     time.Duration
-	Temperature float32
-	TopP        float32
-	Model       string
-	MaxTokens   int
-	Session     sessions.Session
-	Tools       []tools.Tool
-	Thinking    bool
-}
+type CompletionRequest = llm.CompletionRequest
 
 func NewCompletionRequest(config *config.Configuration, session sessions.Session, tools []tools.Tool) *CompletionRequest {
-	return &CompletionRequest{
-		APIKey:      config.API.OpenAIKey,
+	req := &CompletionRequest{
 		BaseURL:     config.API.OpenAIURL,
 		Timeout:     config.API.Timeout,
 		Model:       config.Model.Model,
 		MaxTokens:   config.Model.MaxTokens,
-		Session:     session,
+		Messages:    session.GetHistory(),
 		Temperature: config.Model.Temperature,
-		TopP:        config.Model.TopP,
 		Tools:       tools,
-		Thinking:    config.Model.Thinking,
 	}
+
+	if config.Model.Thinking {
+		req.ThinkingEffort = "medium"
+	}
+
+	return req
 }
 
 func CompleteWithText(ctx core.ChatContextInterface, msg string) (<-chan string, error) {

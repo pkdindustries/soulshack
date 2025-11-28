@@ -3,7 +3,6 @@ package irc
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"pkdindustries/soulshack/internal/core"
 	"strings"
@@ -147,82 +146,60 @@ func (p *IRCEventProcessor) HandleToolContinuation(ctx context.Context, req *llm
 		return
 	}
 
-	// Execute each tool call
-	for _, toolCall := range p.response.ToolCalls {
-		// Parse arguments
-		var args map[string]any
-		if err := json.Unmarshal([]byte(toolCall.Arguments), &args); err != nil {
-			p.ctx.GetLogger().Errorf("Failed to parse tool arguments: %v", err)
-			p.ctx.GetSession().AddMessage(messages.ChatMessage{
-				Role:       messages.MessageRoleTool,
-				Content:    fmt.Sprintf("Error parsing arguments: %v", err),
-				ToolCallID: toolCall.ID,
-			})
-			continue
-		}
+	// Execute all tool calls using the executor with IRC-specific hooks
+	executor := p.createToolExecutor()
+	executor.ExecuteAll(ctx, p.response.ToolCalls, p.ctx.GetSession())
 
-		// Create a logger with tool context
-		toolLogger := core.WithTool(p.ctx.GetLogger(), toolCall.Name, args)
+	// Continue the conversation with the tool results
+	p.continueConversation(ctx, req)
+}
 
-		// Get and execute tool
-		tool, exists := p.registry.Get(toolCall.Name)
-		if !exists {
-			p.ctx.GetLogger().Warnf("Tool not found: %s", toolCall.Name)
-			p.ctx.GetSession().AddMessage(messages.ChatMessage{
-				Role:       messages.MessageRoleTool,
-				Content:    fmt.Sprintf("Tool not found: %s", toolCall.Name),
-				ToolCallID: toolCall.ID,
-			})
-			continue
-		}
-		// Show action for tool call if enabled and not the irc_action tool
-		if p.ctx.GetConfig().Bot.ShowToolActions && toolCall.Name != "irc_action" {
-			// Strip namespace prefix for display (e.g., "script__weather" -> "weather")
-			displayName := toolCall.Name
-			if idx := strings.Index(displayName, "__"); idx != -1 {
-				displayName = displayName[idx+2:]
+// createToolExecutor creates a ToolExecutor with IRC-specific hooks for context injection and logging
+func (p *IRCEventProcessor) createToolExecutor() *llm.ToolExecutor {
+	return llm.NewToolExecutor(p.registry).WithHooks(&llm.ExecutionHooks{
+		BeforeExecute: func(ctx context.Context, tc messages.ChatMessageToolCall, args map[string]any) context.Context {
+			// Show IRC action for tool call if enabled and not the irc_action tool
+			if p.ctx.GetConfig().Bot.ShowToolActions && tc.Name != "irc_action" {
+				// Strip namespace prefix for display (e.g., "script__weather" -> "weather")
+				displayName := tc.Name
+				if idx := strings.Index(displayName, "__"); idx != -1 {
+					displayName = displayName[idx+2:]
+				}
+				p.ctx.Action(fmt.Sprintf("calling %s", displayName))
 			}
-			message := fmt.Sprintf("calling %s", displayName)
-			p.ctx.Action(message)
-		}
 
-		// Set context for contextual tools (IRC tools)
-		// We now pass this via the context.Context below
-		ctx = context.WithValue(ctx, kContextKey, p.ctx)
+			// Log tool execution start
+			toolLogger := core.WithTool(p.ctx.GetLogger(), tc.Name, args)
+			toolLogger.Info("Executing tool")
 
-		// Execute tool with timing
-		startTime := time.Now()
-		toolLogger.Info("Executing tool")
-		result, err := tool.Execute(ctx, args)
-		duration := time.Since(startTime)
-
-		if err != nil {
-			result = fmt.Sprintf("Error: %v", err)
-			toolLogger.With(
-				"duration_ms", duration.Milliseconds(),
-				"error", err.Error(),
-			).Error("Tool execution failed")
-		} else {
-			// Log tool output (truncate if too long)
-			outputPreview := result
-			if len(outputPreview) > 200 && !p.ctx.GetConfig().Bot.Verbose {
-				outputPreview = outputPreview[:200] + "..."
+			// Inject IRC context for IRC tools
+			return context.WithValue(ctx, kContextKey, p.ctx)
+		},
+		AfterExecute: func(tc messages.ChatMessageToolCall, result string, duration time.Duration, err error) {
+			toolLogger := core.WithTool(p.ctx.GetLogger(), tc.Name, nil)
+			if err != nil {
+				toolLogger.With(
+					"duration_ms", duration.Milliseconds(),
+					"error", err.Error(),
+				).Error("Tool execution failed")
+			} else {
+				// Log tool output (truncate if too long)
+				outputPreview := result
+				if len(outputPreview) > 200 && !p.ctx.GetConfig().Bot.Verbose {
+					outputPreview = outputPreview[:200] + "..."
+				}
+				toolLogger.With(
+					"duration_ms", duration.Milliseconds(),
+					"result_size", len(result),
+				).Infof("Tool execution completed: %s", outputPreview)
 			}
-			toolLogger.With(
-				"duration_ms", duration.Milliseconds(),
-				"result_size", len(result),
-			).Infof("Tool execution completed: %s", outputPreview)
-		}
+		},
+	})
+}
 
-		// Add tool result to session
-		p.ctx.GetSession().AddMessage(messages.ChatMessage{
-			Role:       messages.MessageRoleTool,
-			Content:    result,
-			ToolCallID: toolCall.ID,
-		})
-	}
-
-	// Continue conversation with tool results
+// continueConversation resumes the chat stream after tool execution
+func (p *IRCEventProcessor) continueConversation(ctx context.Context, req *llm.CompletionRequest) {
+	// Update request with new history including tool results
 	req.Messages = p.ctx.GetSession().GetHistory()
 	// Restore the original model name (MultiPass strips the provider prefix)
 	req.Model = p.originalModel
@@ -281,31 +258,34 @@ func (p *IRCEventProcessor) processContent(content string) {
 
 	// If buffer is getting too large, force a chunk
 	if p.chunkBuffer.Len() >= p.maxChunkSize {
-		chunk := p.extractChunk()
+		chunk := p.extractBestSplitChunk()
 		if chunk != nil {
 			p.byteChan <- chunk
 		}
 	}
 }
 
-// extractChunk extracts a properly sized chunk, breaking on spaces when possible
-func (p *IRCEventProcessor) extractChunk() []byte {
+// extractBestSplitChunk extracts a properly sized chunk, preferring to break on spaces.
+// It returns a byte slice of at most maxChunkSize length.
+func (p *IRCEventProcessor) extractBestSplitChunk() []byte {
 	if p.chunkBuffer.Len() == 0 {
 		return nil
 	}
 
 	data := p.chunkBuffer.Bytes()
+	// Determine the maximum possible length for this chunk
 	end := min(p.maxChunkSize, len(data))
 
-	// Try to break on space
+	// Try to find a space within the allowed range to break cleanly
+	// We look for the *last* space to maximize the chunk size
 	if idx := bytes.LastIndexByte(data[:end], ' '); idx > 0 {
 		chunk := make([]byte, idx)
 		copy(chunk, data[:idx])
-		p.chunkBuffer.Next(idx + 1) // Skip the space
+		p.chunkBuffer.Next(idx + 1) // Skip the space itself so it's not at the start of next chunk
 		return chunk
 	}
 
-	// Just break at max size
+	// If no space is found, we have to hard break at maxChunkSize
 	chunk := make([]byte, end)
 	copy(chunk, data[:end])
 	p.chunkBuffer.Next(end)

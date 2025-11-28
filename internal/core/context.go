@@ -181,7 +181,7 @@ func (c ChatContext) IsAdmin() bool {
 	c.logger.Debugw("Checking hostmask", "hostmask", hostmask)
 	// XXX: if no admins are configured, all hostmasks are admins
 	if len(c.Config.Bot.Admins) == 0 {
-		c.logger.Warn("All hostmasks are admin; please configure admins")
+		c.logger.Debug("All hostmasks are admin; please configure admins")
 		return true
 	}
 	for _, user := range c.Config.Bot.Admins {
