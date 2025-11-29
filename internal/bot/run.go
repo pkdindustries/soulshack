@@ -53,14 +53,14 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 
 	ircClient.Handlers.AddBg(girc.JOIN, func(client *girc.Client, e girc.Event) {
 		if e.Source.Name == cfg.Server.Nick {
-			ctx, cancel := irc.NewChatContext(context.Background(), cfg, sys, client, &e)
+			ctx, cancel := irc.NewChatContext(ctx, cfg, sys, client, &e)
 			defer cancel()
 			commands.Greeting(ctx)
 		}
 	})
 
 	ircClient.Handlers.AddBg(girc.PRIVMSG, func(client *girc.Client, e girc.Event) {
-		ctx, cancel := irc.NewChatContext(context.Background(), cfg, sys, client, &e)
+		ctx, cancel := irc.NewChatContext(ctx, cfg, sys, client, &e)
 		defer cancel()
 
 		urlTriggered := commands.CheckURLTrigger(ctx, e.Last())
