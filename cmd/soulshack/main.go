@@ -96,7 +96,7 @@ func runBot(ctx context.Context, c *cli.Command) error {
 				// For private messages, use the sender's name as the key
 				channelKey = e.Source.Name
 			}
-			lock := core.GetChannelLock(channelKey)
+			lock := core.GetRequestLock(channelKey)
 
 			// Try to acquire lock with context timeout
 			ctx.GetLogger().Debugf("Acquiring lock for channel '%s'", channelKey)
