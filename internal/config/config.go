@@ -184,50 +184,50 @@ func getConfigPath() string {
 }
 
 func (c *Configuration) PrintConfig() {
-	fmt.Printf("nick: %s\n", c.Server.Nick)
-	fmt.Printf("server: %s\n", c.Server.Server)
-	fmt.Printf("port: %d\n", c.Server.Port)
-	fmt.Printf("channel: %s\n", c.Server.Channel)
-	fmt.Printf("tls: %t\n", c.Server.SSL)
-	fmt.Printf("tlsinsecure: %t\n", c.Server.TLSInsecure)
-	fmt.Printf("saslnick: %s\n", c.Server.SASLNick)
-	fmt.Printf("saslpass: %s\n", c.Server.SASLPass)
-	fmt.Printf("admins: %v\n", c.Bot.Admins)
-	fmt.Printf("verbose: %t\n", c.Bot.Verbose)
-	fmt.Printf("addressed: %t\n", c.Bot.Addressed)
-	fmt.Printf("chunkmax: %d\n", c.Session.ChunkMax)
-	fmt.Printf("clienttimeout: %s\n", c.API.Timeout)
-	fmt.Printf("maxhistory: %d\n", c.Session.MaxHistory)
-	fmt.Printf("maxtokens: %d\n", c.Model.MaxTokens)
-	fmt.Printf("tool: %v\n", c.Bot.Tools)
-	fmt.Printf("showthinkingaction: %t\n", c.Bot.ShowThinkingAction)
-	fmt.Printf("showtoolactions: %t\n", c.Bot.ShowToolActions)
-	fmt.Printf("urlwatcher: %t\n", c.Bot.URLWatcher)
+	mask := func(key string) string {
+		if key == "" || len(key) <= 3 {
+			return key
+		}
+		return strings.Repeat("*", len(key)-3) + key[len(key)-3:]
+	}
 
-	fmt.Printf("sessionduration: %s\n", c.Session.TTL)
-	if len(c.API.OpenAIKey) > 3 && c.API.OpenAIKey != "" {
-		fmt.Printf("openaikey: %s\n", strings.Repeat("*", len(c.API.OpenAIKey)-3)+c.API.OpenAIKey[len(c.API.OpenAIKey)-3:])
-	} else {
-		fmt.Printf("openaikey: %s\n", c.API.OpenAIKey)
+	fields := []struct{ name, value string }{
+		{"nick", c.Server.Nick},
+		{"server", c.Server.Server},
+		{"port", fmt.Sprintf("%d", c.Server.Port)},
+		{"channel", c.Server.Channel},
+		{"tls", fmt.Sprintf("%t", c.Server.SSL)},
+		{"tlsinsecure", fmt.Sprintf("%t", c.Server.TLSInsecure)},
+		{"saslnick", c.Server.SASLNick},
+		{"saslpass", c.Server.SASLPass},
+		{"admins", fmt.Sprintf("%v", c.Bot.Admins)},
+		{"verbose", fmt.Sprintf("%t", c.Bot.Verbose)},
+		{"addressed", fmt.Sprintf("%t", c.Bot.Addressed)},
+		{"chunkmax", fmt.Sprintf("%d", c.Session.ChunkMax)},
+		{"clienttimeout", c.API.Timeout.String()},
+		{"maxhistory", fmt.Sprintf("%d", c.Session.MaxHistory)},
+		{"maxtokens", fmt.Sprintf("%d", c.Model.MaxTokens)},
+		{"tool", fmt.Sprintf("%v", c.Bot.Tools)},
+		{"showthinkingaction", fmt.Sprintf("%t", c.Bot.ShowThinkingAction)},
+		{"showtoolactions", fmt.Sprintf("%t", c.Bot.ShowToolActions)},
+		{"urlwatcher", fmt.Sprintf("%t", c.Bot.URLWatcher)},
+		{"sessionduration", c.Session.TTL.String()},
+		{"openaikey", mask(c.API.OpenAIKey)},
+		{"anthropickey", mask(c.API.AnthropicKey)},
+		{"geminikey", mask(c.API.GeminiKey)},
+		{"openaiurl", c.API.OpenAIURL},
+		{"ollamaurl", c.API.OllamaURL},
+		{"model", c.Model.Model},
+		{"temperature", fmt.Sprintf("%f", c.Model.Temperature)},
+		{"topp", fmt.Sprintf("%f", c.Model.TopP)},
+		{"thinking", fmt.Sprintf("%t", c.Model.Thinking)},
+		{"prompt", c.Bot.Prompt},
+		{"greeting", c.Bot.Greeting},
 	}
-	if len(c.API.AnthropicKey) > 3 && c.API.AnthropicKey != "" {
-		fmt.Printf("anthropickey: %s\n", strings.Repeat("*", len(c.API.AnthropicKey)-3)+c.API.AnthropicKey[len(c.API.AnthropicKey)-3:])
-	} else {
-		fmt.Printf("anthropickey: %s\n", c.API.AnthropicKey)
+
+	for _, f := range fields {
+		fmt.Printf("%s: %s\n", f.name, f.value)
 	}
-	if len(c.API.GeminiKey) > 3 && c.API.GeminiKey != "" {
-		fmt.Printf("geminikey: %s\n", strings.Repeat("*", len(c.API.GeminiKey)-3)+c.API.GeminiKey[len(c.API.GeminiKey)-3:])
-	} else {
-		fmt.Printf("geminikey: %s\n", c.API.GeminiKey)
-	}
-	fmt.Printf("openaiurl: %s\n", c.API.OpenAIURL)
-	fmt.Printf("ollamaurl: %s\n", c.API.OllamaURL)
-	fmt.Printf("model: %s\n", c.Model.Model)
-	fmt.Printf("temperature: %f\n", c.Model.Temperature)
-	fmt.Printf("topp: %f\n", c.Model.TopP)
-	fmt.Printf("thinking: %t\n", c.Model.Thinking)
-	fmt.Printf("prompt: %s\n", c.Bot.Prompt)
-	fmt.Printf("greeting: %s\n", c.Bot.Greeting)
 }
 
 func NewConfiguration(c *cli.Command) *Configuration {

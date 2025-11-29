@@ -83,6 +83,21 @@ func validateContext(ctx context.Context) (core.ChatContextInterface, error) {
 	return chatCtx, nil
 }
 
+// parseUsersArg extracts and validates a "users" string array from tool arguments
+func parseUsersArg(args map[string]any) ([]string, error) {
+	usersRaw, ok := args["users"].([]any)
+	if !ok || len(usersRaw) == 0 {
+		return nil, fmt.Errorf("users must be a non-empty array")
+	}
+	users := make([]string, len(usersRaw))
+	for i, u := range usersRaw {
+		if users[i], ok = u.(string); !ok {
+			return nil, fmt.Errorf("all users must be strings")
+		}
+	}
+	return users, nil
+}
+
 // RegisterIRCTools registers IRC tools as native tools with polly's registry
 func RegisterIRCTools(registry *tools.ToolRegistry) {
 	registry.RegisterNative("irc_op", func() tools.Tool {
@@ -157,23 +172,9 @@ func (t *IrcOpTool) Execute(ctx context.Context, args map[string]any) (string, e
 		return msg, nil
 	}
 
-	usersRaw, ok := args["users"].([]any)
-	if !ok {
-		return "", fmt.Errorf("users must be an array")
-	}
-
-	if len(usersRaw) == 0 {
-		return "", fmt.Errorf("users array cannot be empty")
-	}
-
-	// Convert []any to []string
-	users := make([]string, len(usersRaw))
-	for i, u := range usersRaw {
-		user, ok := u.(string)
-		if !ok {
-			return "", fmt.Errorf("all users must be strings")
-		}
-		users[i] = user
+	users, err := parseUsersArg(args)
+	if err != nil {
+		return "", err
 	}
 
 	grant, ok := args["grant"].(bool)
@@ -240,23 +241,9 @@ func (t *IrcKickTool) Execute(ctx context.Context, args map[string]any) (string,
 		return msg, nil
 	}
 
-	usersRaw, ok := args["users"].([]any)
-	if !ok {
-		return "", fmt.Errorf("users must be an array")
-	}
-
-	if len(usersRaw) == 0 {
-		return "", fmt.Errorf("users array cannot be empty")
-	}
-
-	// Convert []any to []string
-	users := make([]string, len(usersRaw))
-	for i, u := range usersRaw {
-		user, ok := u.(string)
-		if !ok {
-			return "", fmt.Errorf("all users must be strings")
-		}
-		users[i] = user
+	users, err := parseUsersArg(args)
+	if err != nil {
+		return "", err
 	}
 
 	reason, ok := args["reason"].(string)
@@ -587,23 +574,9 @@ func (t *IrcInviteTool) Execute(ctx context.Context, args map[string]any) (strin
 		return msg, nil
 	}
 
-	usersRaw, ok := args["users"].([]any)
-	if !ok {
-		return "", fmt.Errorf("users must be an array")
-	}
-
-	if len(usersRaw) == 0 {
-		return "", fmt.Errorf("users array cannot be empty")
-	}
-
-	// Convert []any to []string
-	users := make([]string, len(usersRaw))
-	for i, u := range usersRaw {
-		user, ok := u.(string)
-		if !ok {
-			return "", fmt.Errorf("all users must be strings")
-		}
-		users[i] = user
+	users, err := parseUsersArg(args)
+	if err != nil {
+		return "", err
 	}
 
 	// Execute the IRC INVITE command
@@ -694,14 +667,6 @@ func (t *IrcNamesTool) Execute(ctx context.Context, args map[string]any) (string
 // IrcWhoisTool gets detailed information about a user
 type IrcWhoisTool struct {
 	BaseIRCTool
-	ctx core.ChatContextInterface
-}
-
-// SetContext overrides BaseIRCTool to store context for later use
-func (t *IrcWhoisTool) SetContext(ctx any) {
-	if chatCtx, ok := ctx.(core.ChatContextInterface); ok {
-		t.ctx = chatCtx
-	}
 }
 
 func (t *IrcWhoisTool) GetSchema() *jsonschema.Schema {
@@ -724,11 +689,8 @@ func (t *IrcWhoisTool) GetName() string {
 }
 
 func (t *IrcWhoisTool) Execute(ctx context.Context, args map[string]any) (string, error) {
-	if t.ctx == nil {
-		return "", fmt.Errorf("no IRC context available")
-	}
-
-	if err := ctx.Err(); err != nil {
+	chatCtx, err := validateContext(ctx)
+	if err != nil {
 		return "", err
 	}
 
@@ -737,7 +699,7 @@ func (t *IrcWhoisTool) Execute(ctx context.Context, args map[string]any) (string
 		return "", fmt.Errorf("nick must be a string")
 	}
 
-	client := t.ctx.GetClient()
+	client := chatCtx.GetClient()
 	user := client.LookupUser(nick)
 
 	if user == nil {
@@ -766,13 +728,6 @@ func (t *IrcWhoisTool) Execute(ctx context.Context, args map[string]any) (string
 		info.WriteString(fmt.Sprintf("Channels (%d): %s\n", len(channels), strings.Join(channels, ", ")))
 	}
 
-	result := strings.TrimSpace(info.String())
-
-	// Get the chat context for logging
-	chatCtx, err := GetIRCContext(ctx)
-	if err == nil {
-		chatCtx.GetLogger().Infow("IRC WHOIS result", "nick", nick)
-	}
-
-	return result, nil
+	chatCtx.GetLogger().Infow("IRC WHOIS result", "nick", nick)
+	return strings.TrimSpace(info.String()), nil
 }

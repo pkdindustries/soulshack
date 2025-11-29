@@ -57,31 +57,45 @@ func NewIRCEventProcessor(
 	}
 }
 
+// startThinkingTicker starts the periodic thinking notification ticker
+func (p *IRCEventProcessor) startThinkingTicker() {
+	if p.thinkingStartTime != nil || !p.ctx.GetConfig().Bot.ShowThinkingAction {
+		return
+	}
+	now := time.Now()
+	p.thinkingStartTime = &now
+	p.thinkingTicker = time.NewTicker(15 * time.Second)
+	p.thinkingDone = make(chan struct{})
+
+	go func() {
+		for {
+			select {
+			case <-p.thinkingTicker.C:
+				elapsed := time.Since(*p.thinkingStartTime)
+				p.ctx.Action(fmt.Sprintf("thinking... (%ds elapsed)", int(elapsed.Seconds())))
+			case <-p.thinkingDone:
+				return
+			}
+		}
+	}()
+	p.ctx.GetLogger().Debug("Started thinking ticker")
+}
+
+// stopThinkingTicker stops and cleans up the thinking notification ticker
+func (p *IRCEventProcessor) stopThinkingTicker() {
+	if p.thinkingTicker != nil {
+		p.thinkingTicker.Stop()
+		close(p.thinkingDone)
+		p.thinkingTicker = nil
+		p.thinkingDone = nil
+		p.thinkingStartTime = nil
+		p.ctx.GetLogger().Debug("Stopped thinking ticker")
+	}
+}
+
 // OnReasoning handles reasoning content - starts thinking timer for IRC action
 func (p *IRCEventProcessor) OnReasoning(content string, totalLength int) {
-	// Start ticker on first reasoning event if thinking action is enabled
-	if p.thinkingStartTime == nil && p.ctx.GetConfig().Bot.ShowThinkingAction {
-		now := time.Now()
-		p.thinkingStartTime = &now
-		p.thinkingTicker = time.NewTicker(15 * time.Second)
-		p.thinkingDone = make(chan struct{})
-
-		// Start goroutine to send periodic thinking messages
-		go func() {
-			for {
-				select {
-				case <-p.thinkingTicker.C:
-					elapsed := time.Since(*p.thinkingStartTime)
-					seconds := int(elapsed.Seconds())
-					p.ctx.Action(fmt.Sprintf("thinking... (%ds elapsed)", seconds))
-				case <-p.thinkingDone:
-					return
-				}
-			}
-		}()
-		p.ctx.GetLogger().Debug("Started thinking ticker")
-	}
-
+	p.startThinkingTicker()
 	p.ctx.GetLogger().Debugf("Reasoning update: %q", content)
 }
 
@@ -101,15 +115,7 @@ func (p *IRCEventProcessor) OnToolCall(toolCall messages.ChatMessageToolCall) {
 
 // OnComplete handles the complete message and executes tools if needed
 func (p *IRCEventProcessor) OnComplete(message *messages.ChatMessage) {
-	// Cancel thinking ticker if it's running
-	if p.thinkingTicker != nil {
-		p.thinkingTicker.Stop()
-		close(p.thinkingDone)
-		p.thinkingTicker = nil
-		p.thinkingDone = nil
-		p.thinkingStartTime = nil
-		p.ctx.GetLogger().Debug("Stopped thinking ticker")
-	}
+	p.stopThinkingTicker()
 
 	if message != nil {
 		// Add the assistant message to session
@@ -229,13 +235,7 @@ func (p *IRCEventProcessor) HandleToolContinuation(ctx context.Context, req *llm
 
 	// Reset thinking action flag and ticker for continuation
 	p.sentThinkingAction.Store(false)
-	p.thinkingStartTime = nil
-	if p.thinkingTicker != nil {
-		p.thinkingTicker.Stop()
-		close(p.thinkingDone)
-		p.thinkingTicker = nil
-		p.thinkingDone = nil
-	}
+	p.stopThinkingTicker()
 
 	// Create a new processor for the continuation
 	continuationProcessor := NewIRCEventProcessor(p.ctx, p.byteChan, p.maxChunkSize, p.registry, p.client, p.streamProcessor)
