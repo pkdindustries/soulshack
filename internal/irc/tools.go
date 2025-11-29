@@ -3,7 +3,6 @@ package irc
 import (
 	"context"
 	"fmt"
-	"pkdindustries/soulshack/internal/core"
 	"strings"
 
 	"github.com/alexschlessinger/pollytool/tools"
@@ -19,15 +18,15 @@ type contextKey string
 
 const kContextKey contextKey = "irc_context"
 
-func GetIRCContext(ctx context.Context) (core.ChatContextInterface, error) {
-	if chatCtx, ok := ctx.Value(kContextKey).(core.ChatContextInterface); ok {
+func GetIRCContext(ctx context.Context) (ChatContextInterface, error) {
+	if chatCtx, ok := ctx.Value(kContextKey).(ChatContextInterface); ok {
 		return chatCtx, nil
 	}
 	return nil, fmt.Errorf("no IRC context available")
 }
 
 // isBotOpped checks if the bot has operator status in the channel
-func isBotOpped(ctx core.ChatContextInterface) bool {
+func isBotOpped(ctx ChatContextInterface) bool {
 	channel := ctx.GetConfig().Server.Channel
 	client := ctx.GetClient()
 	botNick := client.GetNick()
@@ -54,7 +53,7 @@ func (t *BaseIRCTool) GetType() string    { return "native" }
 func (t *BaseIRCTool) GetSource() string  { return "builtin" }
 
 // validateAdminOp validates admin permissions and bot op status
-func validateAdminOp(ctx context.Context) (core.ChatContextInterface, string, error) {
+func validateAdminOp(ctx context.Context) (ChatContextInterface, string, error) {
 	chatCtx, err := GetIRCContext(ctx)
 	if err != nil {
 		return nil, "", err
@@ -72,7 +71,7 @@ func validateAdminOp(ctx context.Context) (core.ChatContextInterface, string, er
 }
 
 // validateContext validates context without requiring admin/op status
-func validateContext(ctx context.Context) (core.ChatContextInterface, error) {
+func validateContext(ctx context.Context) (ChatContextInterface, error) {
 	chatCtx, err := GetIRCContext(ctx)
 	if err != nil {
 		return nil, err

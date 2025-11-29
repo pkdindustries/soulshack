@@ -1,20 +1,104 @@
-package bot
+package commands
 
 import (
 	"fmt"
-	"os"
 	"path"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
-	"go.uber.org/zap"
-
 	"pkdindustries/soulshack/internal/config"
-	"pkdindustries/soulshack/internal/core"
-	"pkdindustries/soulshack/internal/llm"
+	"pkdindustries/soulshack/internal/irc"
 )
+
+// handleToolsGet handles the /get tools command
+func handleToolsGet(ctx irc.ChatContextInterface) {
+	registry := ctx.GetSystem().GetToolRegistry()
+	allTools := registry.All()
+
+	if len(allTools) == 0 {
+		ctx.Reply("No tools loaded")
+		return
+	}
+
+	var toolNames []string
+	for _, tool := range allTools {
+		toolNames = append(toolNames, tool.GetName())
+	}
+
+	message := "Tools: " + strings.Join(toolNames, ", ")
+	maxLen := ctx.GetConfig().Session.ChunkMax
+	if maxLen <= 0 {
+		maxLen = 350
+	}
+	if len(message) > maxLen {
+		message = message[:maxLen-3] + "..."
+	}
+	ctx.Reply(message)
+}
+
+// handleToolsSet handles the /set tools subcommand
+func handleToolsSet(ctx irc.ChatContextInterface, value string) {
+	registry := ctx.GetSystem().GetToolRegistry()
+	parts := strings.Fields(value)
+
+	if len(parts) == 0 {
+		ctx.Reply("Usage: /set tools [add|remove]")
+		return
+	}
+
+	subcommand := parts[0]
+	switch subcommand {
+	case "add":
+		if len(parts) < 2 {
+			ctx.Reply("Usage: /set tools add <path>")
+			return
+		}
+		toolPath := strings.Join(parts[1:], " ")
+
+		_, err := registry.LoadToolAuto(toolPath)
+		if err != nil {
+			ctx.Reply(fmt.Sprintf("Failed: %v", err))
+		} else {
+			ctx.Reply(fmt.Sprintf("Added tool: %s", toolPath))
+		}
+
+	case "remove":
+		if len(parts) < 2 {
+			ctx.Reply("Usage: /set tools remove <name or pattern>")
+			return
+		}
+		pattern := strings.Join(parts[1:], " ")
+
+		if strings.Contains(pattern, "*") {
+			var removed []string
+			for _, tool := range registry.All() {
+				name := tool.GetName()
+				matched, _ := path.Match(pattern, name)
+				if matched {
+					registry.Remove(name)
+					removed = append(removed, name)
+				}
+			}
+
+			if len(removed) > 0 {
+				ctx.Reply(fmt.Sprintf("Removed %d tools: %s", len(removed), strings.Join(removed, ", ")))
+			} else {
+				ctx.Reply(fmt.Sprintf("No tools matched pattern: %s", pattern))
+			}
+		} else {
+			if _, exists := registry.Get(pattern); !exists {
+				ctx.Reply(fmt.Sprintf("Not found: %s", pattern))
+			} else {
+				registry.Remove(pattern)
+				ctx.Reply(fmt.Sprintf("Removed: %s", pattern))
+			}
+		}
+
+	default:
+		ctx.Reply("Usage: /set tools [add|remove]")
+	}
+}
 
 // configField defines how to get and set a configuration value
 type configField struct {
@@ -203,199 +287,6 @@ func getConfigKeys() []string {
 	return keys
 }
 
-func Greeting(ctx core.ChatContextInterface) {
-	config := ctx.GetConfig()
-	outch, err := llm.CompleteWithText(ctx, config.Bot.Greeting)
-
-	if err != nil {
-		ctx.Reply(err.Error())
-		return
-	}
-
-	for res := range outch {
-		ctx.Reply(res)
-	}
-
-}
-
-func SlashSet(ctx core.ChatContextInterface) {
-	if !ctx.IsAdmin() {
-		ctx.Reply("You don't have permission to perform this action.")
-		return
-	}
-
-	keys := getConfigKeys()
-	if len(ctx.GetArgs()) < 3 {
-		ctx.Reply(fmt.Sprintf("Usage: /set <key> <value>. Available keys: %s", strings.Join(keys, ", ")))
-		return
-	}
-
-	param, v := ctx.GetArgs()[1], ctx.GetArgs()[2:]
-	value := strings.Join(v, " ")
-	cfg := ctx.GetConfig()
-
-	ctx.GetLogger().With("param", param, "value", value).Debug("Configuration change request")
-
-	// Handle special cases first
-	switch param {
-	case "admins":
-		admins := strings.Split(value, ",")
-		for _, admin := range admins {
-			if admin == "" {
-				ctx.Reply("Invalid value for admins. Please provide a comma-separated list of hostmasks.")
-				return
-			}
-		}
-		cfg.Bot.Admins = admins
-		ctx.Reply(fmt.Sprintf("%s set to: %s", param, strings.Join(cfg.Bot.Admins, ", ")))
-		ctx.GetSession().Clear()
-		return
-
-	case "tools":
-		handleToolsSet(ctx, value)
-		return
-	}
-
-	// Handle standard config fields
-	field, ok := configFields[param]
-	if !ok {
-		ctx.Reply(fmt.Sprintf("Unknown key. Available keys: %s", strings.Join(keys, ", ")))
-		return
-	}
-
-	if err := field.setter(cfg, value); err != nil {
-		ctx.Reply(err.Error())
-		return
-	}
-
-	ctx.Reply(fmt.Sprintf("%s set to: %s", param, field.getter(cfg)))
-	ctx.GetSession().Clear()
-}
-
-// handleToolsSet handles the /set tools subcommand
-func handleToolsSet(ctx core.ChatContextInterface, value string) {
-	registry := ctx.GetSystem().GetToolRegistry()
-	parts := strings.Fields(value)
-
-	if len(parts) == 0 {
-		ctx.Reply("Usage: /set tools [add|remove]")
-		return
-	}
-
-	subcommand := parts[0]
-	switch subcommand {
-	case "add":
-		if len(parts) < 2 {
-			ctx.Reply("Usage: /set tools add <path>")
-			return
-		}
-		toolPath := strings.Join(parts[1:], " ")
-
-		_, err := registry.LoadToolAuto(toolPath)
-		if err != nil {
-			ctx.Reply(fmt.Sprintf("Failed: %v", err))
-		} else {
-			ctx.Reply(fmt.Sprintf("Added tool: %s", toolPath))
-		}
-
-	case "remove":
-		if len(parts) < 2 {
-			ctx.Reply("Usage: /set tools remove <name or pattern>")
-			return
-		}
-		pattern := strings.Join(parts[1:], " ")
-
-		if strings.Contains(pattern, "*") {
-			var removed []string
-			for _, tool := range registry.All() {
-				name := tool.GetName()
-				matched, _ := path.Match(pattern, name)
-				if matched {
-					registry.Remove(name)
-					removed = append(removed, name)
-				}
-			}
-
-			if len(removed) > 0 {
-				ctx.Reply(fmt.Sprintf("Removed %d tools: %s", len(removed), strings.Join(removed, ", ")))
-			} else {
-				ctx.Reply(fmt.Sprintf("No tools matched pattern: %s", pattern))
-			}
-		} else {
-			if _, exists := registry.Get(pattern); !exists {
-				ctx.Reply(fmt.Sprintf("Not found: %s", pattern))
-			} else {
-				registry.Remove(pattern)
-				ctx.Reply(fmt.Sprintf("Removed: %s", pattern))
-			}
-		}
-
-	default:
-		ctx.Reply("Usage: /set tools [add|remove]")
-	}
-}
-
-func SlashGet(ctx core.ChatContextInterface) {
-	keys := getConfigKeys()
-	if len(ctx.GetArgs()) < 2 {
-		ctx.Reply(fmt.Sprintf("Usage: /get <key>. Available keys: %s", strings.Join(keys, ", ")))
-		return
-	}
-
-	param := ctx.GetArgs()[1]
-	cfg := ctx.GetConfig()
-
-	// Handle special cases first
-	switch param {
-	case "admins":
-		if len(cfg.Bot.Admins) == 0 {
-			ctx.Reply("empty admin list, all nicks are permitted to use admin commands")
-			return
-		}
-		ctx.Reply(fmt.Sprintf("%s: %s", param, strings.Join(cfg.Bot.Admins, ", ")))
-		return
-
-	case "tools":
-		handleToolsGet(ctx)
-		return
-	}
-
-	// Handle standard config fields
-	field, ok := configFields[param]
-	if !ok {
-		ctx.Reply(fmt.Sprintf("Unknown key %s. Available keys: %s", param, strings.Join(keys, ", ")))
-		return
-	}
-
-	ctx.Reply(fmt.Sprintf("%s: %s", param, field.getter(cfg)))
-}
-
-// handleToolsGet handles the /get tools command
-func handleToolsGet(ctx core.ChatContextInterface) {
-	registry := ctx.GetSystem().GetToolRegistry()
-	allTools := registry.All()
-
-	if len(allTools) == 0 {
-		ctx.Reply("No tools loaded")
-		return
-	}
-
-	var toolNames []string
-	for _, tool := range allTools {
-		toolNames = append(toolNames, tool.GetName())
-	}
-
-	message := "Tools: " + strings.Join(toolNames, ", ")
-	maxLen := ctx.GetConfig().Session.ChunkMax
-	if maxLen <= 0 {
-		maxLen = 350
-	}
-	if len(message) > maxLen {
-		message = message[:maxLen-3] + "..."
-	}
-	ctx.Reply(message)
-}
-
 // maskAPIKey returns a masked version of an API key showing only first 4 chars
 func maskAPIKey(key string) string {
 	if key == "" {
@@ -405,52 +296,4 @@ func maskAPIKey(key string) string {
 		return strings.Repeat("*", len(key))
 	}
 	return key[:4] + strings.Repeat("*", len(key)-4)
-}
-
-func SlashLeave(ctx core.ChatContextInterface) {
-
-	if !ctx.IsAdmin() {
-		ctx.Reply("You don't have permission to perform this action.")
-		return
-	}
-
-	zap.S().Info("Exiting application")
-	go func() {
-		time.Sleep(1 * time.Second)
-		os.Exit(0)
-	}()
-}
-
-func CompletionResponse(ctx core.ChatContextInterface) {
-	msg := strings.Join(ctx.GetArgs(), " ")
-
-	outch, err := llm.CompleteWithText(ctx, fmt.Sprintf("(nick:%s) %s", ctx.GetSource(), msg))
-
-	if err != nil {
-		ctx.GetLogger().Errorw("Completion response error", "error", err)
-		ctx.Reply(err.Error())
-		return
-	}
-
-	for res := range outch {
-		ctx.Reply(res)
-	}
-
-}
-
-var urlPattern = regexp.MustCompile(`^https?://[^\s]+`)
-
-// CheckURLTrigger checks if the message contains a URL and should trigger a response
-func CheckURLTrigger(ctx core.ChatContextInterface, message string) bool {
-	if !ctx.GetConfig().Bot.URLWatcher {
-		return false
-	}
-	if ctx.IsAddressed() {
-		return false
-	}
-	if urlPattern.MatchString(message) {
-		ctx.GetLogger().Info("URL detected, triggering response")
-		return true
-	}
-	return false
 }

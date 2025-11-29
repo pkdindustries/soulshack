@@ -2,7 +2,7 @@ package llm
 
 import (
 	"pkdindustries/soulshack/internal/config"
-	"pkdindustries/soulshack/internal/core"
+	"pkdindustries/soulshack/internal/irc"
 	"time"
 
 	"github.com/alexschlessinger/pollytool/messages"
@@ -12,7 +12,7 @@ import (
 
 type LLM interface {
 	// New simplified interface - single byte channel output
-	ChatCompletionStream(*CompletionRequest, core.ChatContextInterface) <-chan []byte
+	ChatCompletionStream(*CompletionRequest, irc.ChatContextInterface) <-chan []byte
 }
 
 type CompletionRequest struct {
@@ -43,7 +43,7 @@ func NewCompletionRequest(config *config.Configuration, session sessions.Session
 	}
 }
 
-func CompleteWithText(ctx core.ChatContextInterface, msg string) (<-chan string, error) {
+func CompleteWithText(ctx irc.ChatContextInterface, msg string) (<-chan string, error) {
 	cmsg := messages.ChatMessage{
 		Role:    messages.MessageRoleUser,
 		Content: msg,
@@ -58,7 +58,7 @@ func CompleteWithText(ctx core.ChatContextInterface, msg string) (<-chan string,
 	return complete(ctx)
 }
 
-func complete(ctx core.ChatContextInterface) (<-chan string, error) {
+func complete(ctx irc.ChatContextInterface) (<-chan string, error) {
 	session := ctx.GetSession()
 	config := ctx.GetConfig()
 	sys := ctx.GetSystem()

@@ -5,7 +5,6 @@ import (
 	"github.com/alexschlessinger/pollytool/messages"
 
 	"pkdindustries/soulshack/internal/config"
-	"pkdindustries/soulshack/internal/core"
 	"pkdindustries/soulshack/internal/irc"
 )
 
@@ -32,7 +31,7 @@ func NewPollyLLM(config config.APIConfig) *PollyLLM {
 }
 
 // ChatCompletionStream returns a single byte channel with chunked output for IRC
-func (p *PollyLLM) ChatCompletionStream(req *CompletionRequest, chatCtx core.ChatContextInterface) <-chan []byte {
+func (p *PollyLLM) ChatCompletionStream(req *CompletionRequest, chatCtx irc.ChatContextInterface) <-chan []byte {
 	// Convert soulshack request to pollytool request
 	pollyReq := &llm.CompletionRequest{
 		Model:       req.Model,

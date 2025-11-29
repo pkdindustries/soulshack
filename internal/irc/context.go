@@ -1,4 +1,4 @@
-package core
+package irc
 
 import (
 	"context"
@@ -12,6 +12,7 @@ import (
 	"github.com/lrstanley/girc"
 
 	"pkdindustries/soulshack/internal/config"
+	"pkdindustries/soulshack/internal/core"
 )
 
 // ChatContextInterface provides all context needed for handling IRC messages
@@ -45,13 +46,13 @@ type ChatContextInterface interface {
 	// Runtime methods
 	GetSession() sessions.Session
 	GetConfig() *config.Configuration
-	GetSystem() System
+	GetSystem() core.System
 	GetLogger() *zap.SugaredLogger
 }
 
 type ChatContext struct {
 	context.Context
-	Sys       System
+	Sys       core.System
 	Session   sessions.Session
 	Config    *config.Configuration
 	client    *girc.Client
@@ -63,7 +64,7 @@ type ChatContext struct {
 
 var _ ChatContextInterface = (*ChatContext)(nil)
 
-func NewChatContext(parentctx context.Context, config *config.Configuration, system System, ircclient *girc.Client, e *girc.Event) (ChatContextInterface, context.CancelFunc) {
+func NewChatContext(parentctx context.Context, config *config.Configuration, system core.System, ircclient *girc.Client, e *girc.Event) (ChatContextInterface, context.CancelFunc) {
 	timedctx, cancel := context.WithTimeout(parentctx, config.API.Timeout)
 
 	// Generate a unique request ID for correlation
@@ -107,7 +108,7 @@ func NewChatContext(parentctx context.Context, config *config.Configuration, sys
 	return ctx, cancel
 }
 
-func (c ChatContext) GetSystem() System {
+func (c ChatContext) GetSystem() core.System {
 	return c.Sys
 }
 
