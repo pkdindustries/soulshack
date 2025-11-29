@@ -70,11 +70,3 @@ func WithTool(logger *zap.SugaredLogger, toolName string, args map[string]any) *
 		"tool_args", args,
 	)
 }
-
-// WithIRCContext creates a logger with IRC-specific context
-func WithIRCContext(logger *zap.SugaredLogger, channel, user string) *zap.SugaredLogger {
-	return logger.With(
-		"channel", channel,
-		"user", user,
-	)
-}

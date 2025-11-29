@@ -46,6 +46,43 @@ func isBotOpped(ctx core.ChatContextInterface) bool {
 	return false
 }
 
+// BaseIRCTool provides common functionality for all IRC tools
+type BaseIRCTool struct{}
+
+func (t *BaseIRCTool) SetContext(ctx any) {}
+func (t *BaseIRCTool) GetType() string    { return "native" }
+func (t *BaseIRCTool) GetSource() string  { return "builtin" }
+
+// validateAdminOp validates admin permissions and bot op status
+func validateAdminOp(ctx context.Context) (core.ChatContextInterface, string, error) {
+	chatCtx, err := GetIRCContext(ctx)
+	if err != nil {
+		return nil, "", err
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, "", err
+	}
+	if !chatCtx.IsAdmin() {
+		return nil, "You are not authorized to use this tool", nil
+	}
+	if !isBotOpped(chatCtx) {
+		return nil, "Bot does not have operator status in the channel", nil
+	}
+	return chatCtx, "", nil
+}
+
+// validateContext validates context without requiring admin/op status
+func validateContext(ctx context.Context) (core.ChatContextInterface, error) {
+	chatCtx, err := GetIRCContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return chatCtx, nil
+}
+
 // RegisterIRCTools registers IRC tools as native tools with polly's registry
 func RegisterIRCTools(registry *tools.ToolRegistry) {
 	registry.RegisterNative("irc_op", func() tools.Tool {
@@ -82,9 +119,7 @@ func RegisterIRCTools(registry *tools.ToolRegistry) {
 
 // IrcOpTool grants or revokes operator status
 type IrcOpTool struct {
-}
-
-func (t *IrcOpTool) SetContext(ctx any) {
+	BaseIRCTool
 }
 
 func (t *IrcOpTool) GetSchema() *jsonschema.Schema {
@@ -113,32 +148,13 @@ func (t *IrcOpTool) GetName() string {
 	return "irc_op"
 }
 
-func (t *IrcOpTool) GetType() string {
-	return "native"
-}
-
-func (t *IrcOpTool) GetSource() string {
-	return "builtin"
-}
-
 func (t *IrcOpTool) Execute(ctx context.Context, args map[string]any) (string, error) {
-	chatCtx, err := GetIRCContext(ctx)
+	chatCtx, msg, err := validateAdminOp(ctx)
 	if err != nil {
 		return "", err
 	}
-
-	if err := ctx.Err(); err != nil {
-		return "", err
-	}
-
-	// Check admin permission
-	if !chatCtx.IsAdmin() {
-		return "You are not authorized to use this tool", nil
-	}
-
-	// Check if bot has operator status
-	if !isBotOpped(chatCtx) {
-		return "Bot does not have operator status in the channel", nil
+	if msg != "" {
+		return msg, nil
 	}
 
 	usersRaw, ok := args["users"].([]any)
@@ -186,9 +202,7 @@ func (t *IrcOpTool) Execute(ctx context.Context, args map[string]any) (string, e
 
 // IrcKickTool kicks a user from the channel
 type IrcKickTool struct {
-}
-
-func (t *IrcKickTool) SetContext(ctx any) {
+	BaseIRCTool
 }
 
 func (t *IrcKickTool) GetSchema() *jsonschema.Schema {
@@ -217,32 +231,13 @@ func (t *IrcKickTool) GetName() string {
 	return "irc_kick"
 }
 
-func (t *IrcKickTool) GetType() string {
-	return "native"
-}
-
-func (t *IrcKickTool) GetSource() string {
-	return "builtin"
-}
-
 func (t *IrcKickTool) Execute(ctx context.Context, args map[string]any) (string, error) {
-	chatCtx, err := GetIRCContext(ctx)
+	chatCtx, msg, err := validateAdminOp(ctx)
 	if err != nil {
 		return "", err
 	}
-
-	if err := ctx.Err(); err != nil {
-		return "", err
-	}
-
-	// Check admin permission
-	if !chatCtx.IsAdmin() {
-		return "You are not authorized to use this tool", nil
-	}
-
-	// Check if bot has operator status
-	if !isBotOpped(chatCtx) {
-		return "Bot does not have operator status in the channel", nil
+	if msg != "" {
+		return msg, nil
 	}
 
 	usersRaw, ok := args["users"].([]any)
@@ -285,9 +280,7 @@ func (t *IrcKickTool) Execute(ctx context.Context, args map[string]any) (string,
 
 // IrcBanTool bans or unbans a user from the channel
 type IrcBanTool struct {
-}
-
-func (t *IrcBanTool) SetContext(ctx any) {
+	BaseIRCTool
 }
 
 func (t *IrcBanTool) GetSchema() *jsonschema.Schema {
@@ -313,32 +306,13 @@ func (t *IrcBanTool) GetName() string {
 	return "irc_ban"
 }
 
-func (t *IrcBanTool) GetType() string {
-	return "native"
-}
-
-func (t *IrcBanTool) GetSource() string {
-	return "builtin"
-}
-
 func (t *IrcBanTool) Execute(ctx context.Context, args map[string]any) (string, error) {
-	chatCtx, err := GetIRCContext(ctx)
+	chatCtx, msg, err := validateAdminOp(ctx)
 	if err != nil {
 		return "", err
 	}
-
-	if err := ctx.Err(); err != nil {
-		return "", err
-	}
-
-	// Check admin permission
-	if !chatCtx.IsAdmin() {
-		return "You are not authorized to use this tool", nil
-	}
-
-	// Check if bot has operator status
-	if !isBotOpped(chatCtx) {
-		return "Bot does not have operator status in the channel", nil
+	if msg != "" {
+		return msg, nil
 	}
 
 	target, ok := args["target"].(string)
@@ -387,9 +361,7 @@ func (t *IrcBanTool) Execute(ctx context.Context, args map[string]any) (string, 
 
 // IrcTopicTool sets the channel topic
 type IrcTopicTool struct {
-}
-
-func (t *IrcTopicTool) SetContext(ctx any) {
+	BaseIRCTool
 }
 
 func (t *IrcTopicTool) GetSchema() *jsonschema.Schema {
@@ -411,32 +383,13 @@ func (t *IrcTopicTool) GetName() string {
 	return "irc_topic"
 }
 
-func (t *IrcTopicTool) GetType() string {
-	return "native"
-}
-
-func (t *IrcTopicTool) GetSource() string {
-	return "builtin"
-}
-
 func (t *IrcTopicTool) Execute(ctx context.Context, args map[string]any) (string, error) {
-	chatCtx, err := GetIRCContext(ctx)
+	chatCtx, msg, err := validateAdminOp(ctx)
 	if err != nil {
 		return "", err
 	}
-
-	if err := ctx.Err(); err != nil {
-		return "", err
-	}
-
-	// Check admin permission
-	if !chatCtx.IsAdmin() {
-		return "You are not authorized to use this tool", nil
-	}
-
-	// Check if bot has operator status
-	if !isBotOpped(chatCtx) {
-		return "Bot does not have operator status in the channel", nil
+	if msg != "" {
+		return msg, nil
 	}
 
 	topic, ok := args["topic"].(string)
@@ -454,9 +407,7 @@ func (t *IrcTopicTool) Execute(ctx context.Context, args map[string]any) (string
 
 // IrcActionTool sends an action message to the channel
 type IrcActionTool struct {
-}
-
-func (t *IrcActionTool) SetContext(ctx any) {
+	BaseIRCTool
 }
 
 func (t *IrcActionTool) GetSchema() *jsonschema.Schema {
@@ -478,21 +429,9 @@ func (t *IrcActionTool) GetName() string {
 	return "irc_action"
 }
 
-func (t *IrcActionTool) GetType() string {
-	return "native"
-}
-
-func (t *IrcActionTool) GetSource() string {
-	return "builtin"
-}
-
 func (t *IrcActionTool) Execute(ctx context.Context, args map[string]any) (string, error) {
-	chatCtx, err := GetIRCContext(ctx)
+	chatCtx, err := validateContext(ctx)
 	if err != nil {
-		return "", err
-	}
-
-	if err := ctx.Err(); err != nil {
 		return "", err
 	}
 
@@ -511,9 +450,7 @@ func (t *IrcActionTool) Execute(ctx context.Context, args map[string]any) (strin
 
 // IrcModeSetTool sets channel-wide modes
 type IrcModeSetTool struct {
-}
-
-func (t *IrcModeSetTool) SetContext(ctx any) {
+	BaseIRCTool
 }
 
 func (t *IrcModeSetTool) GetSchema() *jsonschema.Schema {
@@ -535,32 +472,13 @@ func (t *IrcModeSetTool) GetName() string {
 	return "irc_mode_set"
 }
 
-func (t *IrcModeSetTool) GetType() string {
-	return "native"
-}
-
-func (t *IrcModeSetTool) GetSource() string {
-	return "builtin"
-}
-
 func (t *IrcModeSetTool) Execute(ctx context.Context, args map[string]any) (string, error) {
-	chatCtx, err := GetIRCContext(ctx)
+	chatCtx, msg, err := validateAdminOp(ctx)
 	if err != nil {
 		return "", err
 	}
-
-	if err := ctx.Err(); err != nil {
-		return "", err
-	}
-
-	// Check admin permission
-	if !chatCtx.IsAdmin() {
-		return "You are not authorized to use this tool", nil
-	}
-
-	// Check if bot has operator status
-	if !isBotOpped(chatCtx) {
-		return "Bot does not have operator status in the channel", nil
+	if msg != "" {
+		return msg, nil
 	}
 
 	modes, ok := args["modes"].(string)
@@ -592,9 +510,7 @@ func (t *IrcModeSetTool) Execute(ctx context.Context, args map[string]any) (stri
 
 // IrcModeQueryTool queries current channel modes
 type IrcModeQueryTool struct {
-}
-
-func (t *IrcModeQueryTool) SetContext(ctx any) {
+	BaseIRCTool
 }
 
 func (t *IrcModeQueryTool) GetSchema() *jsonschema.Schema {
@@ -611,21 +527,9 @@ func (t *IrcModeQueryTool) GetName() string {
 	return "irc_mode_query"
 }
 
-func (t *IrcModeQueryTool) GetType() string {
-	return "native"
-}
-
-func (t *IrcModeQueryTool) GetSource() string {
-	return "builtin"
-}
-
 func (t *IrcModeQueryTool) Execute(ctx context.Context, args map[string]any) (string, error) {
-	chatCtx, err := GetIRCContext(ctx)
+	chatCtx, err := validateContext(ctx)
 	if err != nil {
-		return "", err
-	}
-
-	if err := ctx.Err(); err != nil {
 		return "", err
 	}
 
@@ -649,9 +553,7 @@ func (t *IrcModeQueryTool) Execute(ctx context.Context, args map[string]any) (st
 
 // IrcInviteTool invites users to the channel
 type IrcInviteTool struct {
-}
-
-func (t *IrcInviteTool) SetContext(ctx any) {
+	BaseIRCTool
 }
 
 func (t *IrcInviteTool) GetSchema() *jsonschema.Schema {
@@ -676,32 +578,13 @@ func (t *IrcInviteTool) GetName() string {
 	return "irc_invite"
 }
 
-func (t *IrcInviteTool) GetType() string {
-	return "native"
-}
-
-func (t *IrcInviteTool) GetSource() string {
-	return "builtin"
-}
-
 func (t *IrcInviteTool) Execute(ctx context.Context, args map[string]any) (string, error) {
-	chatCtx, err := GetIRCContext(ctx)
+	chatCtx, msg, err := validateAdminOp(ctx)
 	if err != nil {
 		return "", err
 	}
-
-	if err := ctx.Err(); err != nil {
-		return "", err
-	}
-
-	// Check admin permission
-	if !chatCtx.IsAdmin() {
-		return "You are not authorized to use this tool", nil
-	}
-
-	// Check if bot has operator status
-	if !isBotOpped(chatCtx) {
-		return "Bot does not have operator status in the channel", nil
+	if msg != "" {
+		return msg, nil
 	}
 
 	usersRaw, ok := args["users"].([]any)
@@ -740,9 +623,7 @@ func (t *IrcInviteTool) Execute(ctx context.Context, args map[string]any) (strin
 
 // IrcNamesTool lists all users in the channel
 type IrcNamesTool struct {
-}
-
-func (t *IrcNamesTool) SetContext(ctx any) {
+	BaseIRCTool
 }
 
 func (t *IrcNamesTool) GetSchema() *jsonschema.Schema {
@@ -759,21 +640,9 @@ func (t *IrcNamesTool) GetName() string {
 	return "irc_names"
 }
 
-func (t *IrcNamesTool) GetType() string {
-	return "native"
-}
-
-func (t *IrcNamesTool) GetSource() string {
-	return "builtin"
-}
-
 func (t *IrcNamesTool) Execute(ctx context.Context, args map[string]any) (string, error) {
-	chatCtx, err := GetIRCContext(ctx)
+	chatCtx, err := validateContext(ctx)
 	if err != nil {
-		return "", err
-	}
-
-	if err := ctx.Err(); err != nil {
 		return "", err
 	}
 
@@ -801,8 +670,8 @@ func (t *IrcNamesTool) Execute(ctx context.Context, args map[string]any) (string
 		adminMap[admin.Nick] = true
 	}
 	trustedMap := make(map[string]bool)
-	for _, t := range trusted {
-		trustedMap[t.Nick] = true
+	for _, tu := range trusted {
+		trustedMap[tu.Nick] = true
 	}
 
 	// Build list of nicks with their prefixes (@, +, etc.)
@@ -824,17 +693,15 @@ func (t *IrcNamesTool) Execute(ctx context.Context, args map[string]any) (string
 
 // IrcWhoisTool gets detailed information about a user
 type IrcWhoisTool struct {
+	BaseIRCTool
 	ctx core.ChatContextInterface
 }
 
+// SetContext overrides BaseIRCTool to store context for later use
 func (t *IrcWhoisTool) SetContext(ctx any) {
 	if chatCtx, ok := ctx.(core.ChatContextInterface); ok {
 		t.ctx = chatCtx
 	}
-}
-
-func (t *IrcWhoisTool) SetIRCContext(ctx core.ChatContextInterface) {
-	t.ctx = ctx
 }
 
 func (t *IrcWhoisTool) GetSchema() *jsonschema.Schema {
@@ -854,14 +721,6 @@ func (t *IrcWhoisTool) GetSchema() *jsonschema.Schema {
 
 func (t *IrcWhoisTool) GetName() string {
 	return "irc_whois"
-}
-
-func (t *IrcWhoisTool) GetType() string {
-	return "native"
-}
-
-func (t *IrcWhoisTool) GetSource() string {
-	return "builtin"
 }
 
 func (t *IrcWhoisTool) Execute(ctx context.Context, args map[string]any) (string, error) {

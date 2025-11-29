@@ -12,14 +12,11 @@ import (
 	"crypto/tls"
 	"fmt"
 	"os"
-	"regexp"
 	"strings"
 	"time"
 
 	"github.com/lrstanley/girc"
-	"github.com/mazznoer/colorgrad"
-	"github.com/urfave/cli/v2"
-	"github.com/urfave/cli/v2/altsrc"
+	"github.com/urfave/cli/v3"
 	"go.uber.org/zap"
 
 	"pkdindustries/soulshack/internal/bot"
@@ -27,114 +24,27 @@ import (
 	"pkdindustries/soulshack/internal/core"
 )
 
-var urlPattern = regexp.MustCompile(`^https?://[^\s]+`)
-
 const version = "0.91"
 
 func main() {
-	fmt.Printf("%s\n", getBanner())
+	fmt.Printf("%s\n", bot.GetBanner(version))
 
-	flags := []cli.Flag{
-		// Config file
-		&cli.StringFlag{Name: "config", Aliases: []string{"b"}, Usage: "use the named configuration file", EnvVars: []string{"SOULSHACK_CONFIG"}},
-
-		// IRC Client Configuration
-		altsrc.NewStringFlag(&cli.StringFlag{Name: "nick", Aliases: []string{"n"}, Value: "soulshack", Usage: "bot's nickname on the irc server", EnvVars: []string{"SOULSHACK_NICK"}}),
-		altsrc.NewStringFlag(&cli.StringFlag{Name: "server", Aliases: []string{"s"}, Value: "localhost", Usage: "irc server address", EnvVars: []string{"SOULSHACK_SERVER"}}),
-		altsrc.NewBoolFlag(&cli.BoolFlag{Name: "tls", Aliases: []string{"e"}, Usage: "enable TLS for the IRC connection", EnvVars: []string{"SOULSHACK_TLS"}}),
-		altsrc.NewBoolFlag(&cli.BoolFlag{Name: "tlsinsecure", Usage: "skip TLS certificate verification", EnvVars: []string{"SOULSHACK_TLSINSECURE"}}),
-		altsrc.NewIntFlag(&cli.IntFlag{Name: "port", Aliases: []string{"p"}, Value: 6667, Usage: "irc server port", EnvVars: []string{"SOULSHACK_PORT"}}),
-		altsrc.NewStringFlag(&cli.StringFlag{Name: "channel", Aliases: []string{"c"}, Usage: "irc channel to join", EnvVars: []string{"SOULSHACK_CHANNEL"}}),
-		altsrc.NewStringFlag(&cli.StringFlag{Name: "saslnick", Usage: "nick used for SASL", EnvVars: []string{"SOULSHACK_SASLNICK"}}),
-		altsrc.NewStringFlag(&cli.StringFlag{Name: "saslpass", Usage: "password for SASL plain", EnvVars: []string{"SOULSHACK_SASLPASS"}}),
-
-		// Bot Configuration
-		altsrc.NewStringSliceFlag(&cli.StringSliceFlag{Name: "admins", Aliases: []string{"A"}, Usage: "comma-separated list of allowed hostmasks to administrate the bot", EnvVars: []string{"SOULSHACK_ADMINS"}}),
-		altsrc.NewBoolFlag(&cli.BoolFlag{Name: "verbose", Aliases: []string{"V"}, Usage: "enable verbose logging of sessions and configuration", EnvVars: []string{"SOULSHACK_VERBOSE"}}),
-
-		// API Configuration
-		altsrc.NewStringFlag(&cli.StringFlag{Name: "openaikey", Usage: "OpenAI API key", EnvVars: []string{"SOULSHACK_OPENAIKEY"}}),
-		altsrc.NewStringFlag(&cli.StringFlag{Name: "openaiurl", Usage: "OpenAI API URL (for custom endpoints)", EnvVars: []string{"SOULSHACK_OPENAIURL"}}),
-		altsrc.NewStringFlag(&cli.StringFlag{Name: "anthropickey", Usage: "Anthropic API key", EnvVars: []string{"SOULSHACK_ANTHROPICKEY"}}),
-		altsrc.NewStringFlag(&cli.StringFlag{Name: "geminikey", Usage: "Google Gemini API key", EnvVars: []string{"SOULSHACK_GEMINIKEY"}}),
-		altsrc.NewStringFlag(&cli.StringFlag{Name: "ollamaurl", Value: "http://localhost:11434", Usage: "Ollama API URL", EnvVars: []string{"SOULSHACK_OLLAMAURL"}}),
-		altsrc.NewStringFlag(&cli.StringFlag{Name: "ollamakey", Usage: "Ollama API key (Bearer token for authentication)", EnvVars: []string{"SOULSHACK_OLLAMAKEY"}}),
-		altsrc.NewIntFlag(&cli.IntFlag{Name: "maxtokens", Value: 4096, Usage: "maximum number of tokens to generate", EnvVars: []string{"SOULSHACK_MAXTOKENS"}}),
-		altsrc.NewStringFlag(&cli.StringFlag{Name: "model", Value: "ollama/llama3.2", Usage: "model to be used for responses", EnvVars: []string{"SOULSHACK_MODEL"}}),
-		altsrc.NewDurationFlag(&cli.DurationFlag{Name: "apitimeout", Aliases: []string{"t"}, Value: time.Minute * 5, Usage: "timeout for each completion request", EnvVars: []string{"SOULSHACK_APITIMEOUT"}}),
-		altsrc.NewFloat64Flag(&cli.Float64Flag{Name: "temperature", Value: 0.7, Usage: "temperature for the completion", EnvVars: []string{"SOULSHACK_TEMPERATURE"}}),
-		altsrc.NewFloat64Flag(&cli.Float64Flag{Name: "top_p", Value: 1.0, Usage: "top P value for the completion", EnvVars: []string{"SOULSHACK_TOP_P"}}),
-		altsrc.NewBoolFlag(&cli.BoolFlag{Name: "thinking", Usage: "enable thinking/reasoning for models that support it", EnvVars: []string{"SOULSHACK_THINKING"}}),
-		altsrc.NewStringSliceFlag(&cli.StringSliceFlag{Name: "tool", Usage: "tools to load (shell scripts, MCP server JSON files, or native tools like irc_op)", EnvVars: []string{"SOULSHACK_TOOL"}}),
-		altsrc.NewBoolFlag(&cli.BoolFlag{Name: "showthinkingaction", Value: true, Usage: "show '[thinking]' IRC action when bot is reasoning", EnvVars: []string{"SOULSHACK_SHOWTHINKINGACTION"}}),
-		altsrc.NewBoolFlag(&cli.BoolFlag{Name: "showtoolactions", Value: true, Usage: "show '[calling toolname]' IRC actions when executing tools", EnvVars: []string{"SOULSHACK_SHOWTOOLACTIONS"}}),
-		altsrc.NewBoolFlag(&cli.BoolFlag{Name: "urlwatcher", Usage: "enable passive URL watching and analysis", EnvVars: []string{"SOULSHACK_URLWATCHER"}}),
-
-		// Timeouts and Behavior
-		altsrc.NewBoolFlag(&cli.BoolFlag{Name: "addressed", Aliases: []string{"a"}, Value: true, Usage: "require bot be addressed by nick for response", EnvVars: []string{"SOULSHACK_ADDRESSED"}}),
-		altsrc.NewDurationFlag(&cli.DurationFlag{Name: "sessionduration", Aliases: []string{"S"}, Value: time.Minute * 10, Usage: "message context will be cleared after it is unused for this duration", EnvVars: []string{"SOULSHACK_SESSIONDURATION"}}),
-		altsrc.NewIntFlag(&cli.IntFlag{Name: "sessionhistory", Aliases: []string{"H"}, Value: 250, Usage: "maximum number of lines of context to keep per session", EnvVars: []string{"SOULSHACK_SESSIONHISTORY"}}),
-		altsrc.NewIntFlag(&cli.IntFlag{Name: "chunkmax", Aliases: []string{"m"}, Value: 350, Usage: "maximum number of characters to send as a single message", EnvVars: []string{"SOULSHACK_CHUNKMAX"}}),
-
-		// Personality / Prompting
-		altsrc.NewStringFlag(&cli.StringFlag{Name: "greeting", Value: "hello.", Usage: "prompt to be used when the bot joins the channel", EnvVars: []string{"SOULSHACK_GREETING"}}),
-		altsrc.NewStringFlag(&cli.StringFlag{Name: "prompt", Value: "you are a helpful chatbot. do not use caps. do not use emoji.", Usage: "initial system prompt", EnvVars: []string{"SOULSHACK_PROMPT"}}),
-	}
-
-	app := &cli.App{
+	cmd := &cli.Command{
 		Name:    "soulshack",
 		Usage:   "because real people are overrated",
 		Version: version + " - http://github.com/pkdindustries/soulshack",
-		Flags:   flags,
-		Before:  altsrc.InitInputSourceWithContext(flags, altsrc.NewYamlSourceFromFlagFunc("config")),
+		Flags:   config.GetFlags(),
 		Action:  runBot,
 	}
 
-	if err := app.Run(os.Args); err != nil {
+	if err := cmd.Run(context.Background(), os.Args); err != nil {
 		// Print to stderr first in case logger isn't initialized
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		zap.S().Fatal(err)
 	}
 }
 
-func getBanner() string {
-	banner := `
- ____                    _   ____    _                      _
-/ ___|    ___    _   _  | | / ___|  | |__     __ _    ___  | | __
-\___ \   / _ \  | | | | | | \___ \  | '_ \   / _' |  / __| | |/ /
- ___) | | (_) | | |_| | | |  ___) | | | | | | (_| | | (__  |   <
-|____/   \___/   \__,_| |_| |____/  |_| |_|  \__,_|  \___| |_|\_\
- .  .  .  because  real  people  are  overrated  [v` + version + `]
-`
-	grad, _ := colorgrad.NewGradient().
-		HtmlColors("#1115f0ff", "#fdfdfdff").
-		Build()
-
-	lines := strings.Split(banner, "\n")
-
-	// Find max line length for gradient spread
-	maxLen := 0
-	for _, line := range lines {
-		if len(line) > maxLen {
-			maxLen = len(line)
-		}
-	}
-
-	colors := grad.Colors(uint(maxLen))
-	var coloredBanner strings.Builder
-
-	for _, line := range lines {
-		for i, ch := range line {
-			r, g, b, _ := colors[i].RGBA255()
-			coloredBanner.WriteString(fmt.Sprintf("\x1b[38;2;%d;%d;%dm%c", r, g, b, ch))
-		}
-		coloredBanner.WriteString("\x1b[0m\n")
-	}
-
-	return coloredBanner.String()
-}
-
-func runBot(c *cli.Context) error {
+func runBot(ctx context.Context, c *cli.Command) error {
 
 	cfg := config.NewConfiguration(c)
 	core.InitLogger(cfg.Bot.Verbose)
@@ -177,13 +87,7 @@ func runBot(c *cli.Context) error {
 		defer cancel()
 
 		// Check for URL trigger
-		urlTriggered := false
-		if cfg.Bot.URLWatcher && !ctx.IsAddressed() {
-			if urlPattern.MatchString(e.Last()) {
-				urlTriggered = true
-				ctx.GetLogger().Info("URL detected, triggering response")
-			}
-		}
+		urlTriggered := bot.CheckURLTrigger(ctx, e.Last())
 
 		if ctx.Valid() || urlTriggered {
 			// Get lock for this channel to serialize message processing
@@ -220,7 +124,7 @@ func runBot(c *cli.Context) error {
 			case "/?":
 				ctx.Reply("Supported commands: /set, /get, /leave, /help, /version")
 			case "/version":
-				ctx.Reply(c.App.Version)
+				ctx.Reply(c.Root().Version)
 			default:
 				bot.CompletionResponse(ctx)
 			}

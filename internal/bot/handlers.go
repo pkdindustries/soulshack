@@ -4,23 +4,203 @@ import (
 	"fmt"
 	"os"
 	"path"
-	"slices"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
 	"go.uber.org/zap"
 
+	"pkdindustries/soulshack/internal/config"
 	"pkdindustries/soulshack/internal/core"
 	"pkdindustries/soulshack/internal/llm"
 )
 
-var ModifiableConfigKeys = []string{
-	"addressed", "prompt", "model", "maxtokens", "temperature", "top_p",
-	"admins", "openaiurl", "ollamaurl", "ollamakey", "openaikey",
-	"anthropickey", "geminikey", "tools", "thinking", "showthinkingaction",
-	"showtoolactions", "sessionduration", "apitimeout", "sessionhistory",
-	"chunkmax", "urlwatcher",
+// configField defines how to get and set a configuration value
+type configField struct {
+	setter func(*config.Configuration, string) error
+	getter func(*config.Configuration) string
+}
+
+// configFields maps parameter names to their handlers
+var configFields = map[string]configField{
+	"addressed": {
+		setter: func(c *config.Configuration, v string) error {
+			b, err := strconv.ParseBool(v)
+			if err != nil {
+				return fmt.Errorf("invalid value for addressed. Please provide 'true' or 'false'")
+			}
+			c.Bot.Addressed = b
+			return nil
+		},
+		getter: func(c *config.Configuration) string { return fmt.Sprintf("%t", c.Bot.Addressed) },
+	},
+	"prompt": {
+		setter: func(c *config.Configuration, v string) error { c.Bot.Prompt = v; return nil },
+		getter: func(c *config.Configuration) string { return c.Bot.Prompt },
+	},
+	"model": {
+		setter: func(c *config.Configuration, v string) error { c.Model.Model = v; return nil },
+		getter: func(c *config.Configuration) string { return c.Model.Model },
+	},
+	"maxtokens": {
+		setter: func(c *config.Configuration, v string) error {
+			n, err := strconv.Atoi(v)
+			if err != nil {
+				return fmt.Errorf("invalid value for maxtokens. Please provide a valid integer")
+			}
+			c.Model.MaxTokens = n
+			return nil
+		},
+		getter: func(c *config.Configuration) string { return fmt.Sprintf("%d", c.Model.MaxTokens) },
+	},
+	"temperature": {
+		setter: func(c *config.Configuration, v string) error {
+			f, err := strconv.ParseFloat(v, 32)
+			if err != nil {
+				return fmt.Errorf("invalid value for temperature. Please provide a valid float")
+			}
+			c.Model.Temperature = float32(f)
+			return nil
+		},
+		getter: func(c *config.Configuration) string { return fmt.Sprintf("%f", c.Model.Temperature) },
+	},
+	"top_p": {
+		setter: func(c *config.Configuration, v string) error {
+			f, err := strconv.ParseFloat(v, 32)
+			if err != nil {
+				return fmt.Errorf("invalid value for top_p. Please provide a valid float")
+			}
+			if f < 0 || f > 1 {
+				return fmt.Errorf("invalid value for top_p. Please provide a float between 0 and 1")
+			}
+			c.Model.TopP = float32(f)
+			return nil
+		},
+		getter: func(c *config.Configuration) string { return fmt.Sprintf("%f", c.Model.TopP) },
+	},
+	"openaiurl": {
+		setter: func(c *config.Configuration, v string) error { c.API.OpenAIURL = v; return nil },
+		getter: func(c *config.Configuration) string { return c.API.OpenAIURL },
+	},
+	"ollamaurl": {
+		setter: func(c *config.Configuration, v string) error { c.API.OllamaURL = v; return nil },
+		getter: func(c *config.Configuration) string { return c.API.OllamaURL },
+	},
+	"ollamakey": {
+		setter: func(c *config.Configuration, v string) error { c.API.OllamaKey = v; return nil },
+		getter: func(c *config.Configuration) string { return maskAPIKey(c.API.OllamaKey) },
+	},
+	"openaikey": {
+		setter: func(c *config.Configuration, v string) error { c.API.OpenAIKey = v; return nil },
+		getter: func(c *config.Configuration) string { return maskAPIKey(c.API.OpenAIKey) },
+	},
+	"anthropickey": {
+		setter: func(c *config.Configuration, v string) error { c.API.AnthropicKey = v; return nil },
+		getter: func(c *config.Configuration) string { return maskAPIKey(c.API.AnthropicKey) },
+	},
+	"geminikey": {
+		setter: func(c *config.Configuration, v string) error { c.API.GeminiKey = v; return nil },
+		getter: func(c *config.Configuration) string { return maskAPIKey(c.API.GeminiKey) },
+	},
+	"thinking": {
+		setter: func(c *config.Configuration, v string) error {
+			b, err := strconv.ParseBool(v)
+			if err != nil {
+				return fmt.Errorf("invalid value for thinking. Please provide 'true' or 'false'")
+			}
+			c.Model.Thinking = b
+			return nil
+		},
+		getter: func(c *config.Configuration) string { return fmt.Sprintf("%t", c.Model.Thinking) },
+	},
+	"showthinkingaction": {
+		setter: func(c *config.Configuration, v string) error {
+			b, err := strconv.ParseBool(v)
+			if err != nil {
+				return fmt.Errorf("invalid value for showthinkingaction. Please provide 'true' or 'false'")
+			}
+			c.Bot.ShowThinkingAction = b
+			return nil
+		},
+		getter: func(c *config.Configuration) string { return fmt.Sprintf("%t", c.Bot.ShowThinkingAction) },
+	},
+	"showtoolactions": {
+		setter: func(c *config.Configuration, v string) error {
+			b, err := strconv.ParseBool(v)
+			if err != nil {
+				return fmt.Errorf("invalid value for showtoolactions. Please provide 'true' or 'false'")
+			}
+			c.Bot.ShowToolActions = b
+			return nil
+		},
+		getter: func(c *config.Configuration) string { return fmt.Sprintf("%t", c.Bot.ShowToolActions) },
+	},
+	"sessionduration": {
+		setter: func(c *config.Configuration, v string) error {
+			d, err := time.ParseDuration(v)
+			if err != nil {
+				return fmt.Errorf("invalid value for sessionduration. Please provide a valid duration (e.g. 10m, 1h)")
+			}
+			c.Session.TTL = d
+			return nil
+		},
+		getter: func(c *config.Configuration) string { return c.Session.TTL.String() },
+	},
+	"apitimeout": {
+		setter: func(c *config.Configuration, v string) error {
+			d, err := time.ParseDuration(v)
+			if err != nil {
+				return fmt.Errorf("invalid value for apitimeout. Please provide a valid duration (e.g. 30s, 5m)")
+			}
+			c.API.Timeout = d
+			return nil
+		},
+		getter: func(c *config.Configuration) string { return c.API.Timeout.String() },
+	},
+	"sessionhistory": {
+		setter: func(c *config.Configuration, v string) error {
+			n, err := strconv.Atoi(v)
+			if err != nil {
+				return fmt.Errorf("invalid value for sessionhistory. Please provide a valid integer")
+			}
+			c.Session.MaxHistory = n
+			return nil
+		},
+		getter: func(c *config.Configuration) string { return fmt.Sprintf("%d", c.Session.MaxHistory) },
+	},
+	"chunkmax": {
+		setter: func(c *config.Configuration, v string) error {
+			n, err := strconv.Atoi(v)
+			if err != nil {
+				return fmt.Errorf("invalid value for chunkmax. Please provide a valid integer")
+			}
+			c.Session.ChunkMax = n
+			return nil
+		},
+		getter: func(c *config.Configuration) string { return fmt.Sprintf("%d", c.Session.ChunkMax) },
+	},
+	"urlwatcher": {
+		setter: func(c *config.Configuration, v string) error {
+			b, err := strconv.ParseBool(v)
+			if err != nil {
+				return fmt.Errorf("invalid value for urlwatcher. Please provide 'true' or 'false'")
+			}
+			c.Bot.URLWatcher = b
+			return nil
+		},
+		getter: func(c *config.Configuration) string { return fmt.Sprintf("%t", c.Bot.URLWatcher) },
+	},
+}
+
+// getConfigKeys returns all available config keys
+func getConfigKeys() []string {
+	keys := make([]string, 0, len(configFields)+2)
+	for k := range configFields {
+		keys = append(keys, k)
+	}
+	keys = append(keys, "admins", "tools")
+	return keys
 }
 
 func Greeting(ctx core.ChatContextInterface) {
@@ -44,65 +224,20 @@ func SlashSet(ctx core.ChatContextInterface) {
 		return
 	}
 
+	keys := getConfigKeys()
 	if len(ctx.GetArgs()) < 3 {
-		ctx.Reply(fmt.Sprintf("Usage: /set <key> <value>. Available keys: %s", strings.Join(ModifiableConfigKeys, ", ")))
+		ctx.Reply(fmt.Sprintf("Usage: /set <key> <value>. Available keys: %s", strings.Join(keys, ", ")))
 		return
 	}
 
 	param, v := ctx.GetArgs()[1], ctx.GetArgs()[2:]
 	value := strings.Join(v, " ")
-	config := ctx.GetConfig()
+	cfg := ctx.GetConfig()
 
 	ctx.GetLogger().With("param", param, "value", value).Debug("Configuration change request")
 
-	if !contains(ModifiableConfigKeys, param) {
-		ctx.Reply(fmt.Sprintf("Available keys: %s", strings.Join(ModifiableConfigKeys, " ")))
-		return
-	}
-
+	// Handle special cases first
 	switch param {
-	case "addressed":
-		addressed, err := strconv.ParseBool(value)
-		if err != nil {
-			ctx.Reply("Invalid value for addressed. Please provide 'true' or 'false'.")
-			return
-		}
-		config.Bot.Addressed = addressed
-		ctx.Reply(fmt.Sprintf("%s set to: %t", param, config.Bot.Addressed))
-	case "prompt":
-		config.Bot.Prompt = value
-		ctx.Reply(fmt.Sprintf("%s set to: %s", param, config.Bot.Prompt))
-	case "model":
-		config.Model.Model = value
-		ctx.Reply(fmt.Sprintf("%s set to: %s", param, config.Model.Model))
-	case "maxtokens":
-		maxTokens, err := strconv.Atoi(value)
-		if err != nil {
-			ctx.Reply("Invalid value for maxtokens. Please provide a valid integer.")
-			return
-		}
-		config.Model.MaxTokens = maxTokens
-		ctx.Reply(fmt.Sprintf("%s set to: %d", param, config.Model.MaxTokens))
-	case "temperature":
-		temperature, err := strconv.ParseFloat(value, 32)
-		if err != nil {
-			ctx.Reply("Invalid value for temperature. Please provide a valid float.")
-			return
-		}
-		config.Model.Temperature = float32(temperature)
-		ctx.Reply(fmt.Sprintf("%s set to: %f", param, config.Model.Temperature))
-	case "top_p":
-		topP, err := strconv.ParseFloat(value, 32)
-		if err != nil {
-			ctx.Reply("Invalid value for top_p. Please provide a valid float.")
-			return
-		}
-		if topP < 0 || topP > 1 {
-			ctx.Reply("Invalid value for top_p. Please provide a float between 0 and 1.")
-			return
-		}
-		config.Model.TopP = float32(topP)
-		ctx.Reply(fmt.Sprintf("%s set to: %f", param, config.Model.TopP))
 	case "admins":
 		admins := strings.Split(value, ",")
 		for _, admin := range admins {
@@ -111,255 +246,154 @@ func SlashSet(ctx core.ChatContextInterface) {
 				return
 			}
 		}
-		config.Bot.Admins = admins
-		ctx.Reply(fmt.Sprintf("%s set to: %s", param, strings.Join(config.Bot.Admins, ", ")))
-	case "openaiurl":
-		config.API.OpenAIURL = value
-		ctx.Reply(fmt.Sprintf("%s set to: %s", param, config.API.OpenAIURL))
-	case "ollamaurl":
-		config.API.OllamaURL = value
-		ctx.Reply(fmt.Sprintf("%s set to: %s", param, config.API.OllamaURL))
-	case "ollamakey":
-		config.API.OllamaKey = value
-		ctx.Reply(fmt.Sprintf("%s set to: %s", param, maskAPIKey(value)))
-	case "openaikey":
-		config.API.OpenAIKey = value
-		ctx.Reply(fmt.Sprintf("%s set to: %s", param, maskAPIKey(value)))
-	case "anthropickey":
-		config.API.AnthropicKey = value
-		ctx.Reply(fmt.Sprintf("%s set to: %s", param, maskAPIKey(value)))
-	case "geminikey":
-		config.API.GeminiKey = value
-		ctx.Reply(fmt.Sprintf("%s set to: %s", param, maskAPIKey(value)))
+		cfg.Bot.Admins = admins
+		ctx.Reply(fmt.Sprintf("%s set to: %s", param, strings.Join(cfg.Bot.Admins, ", ")))
+		ctx.GetSession().Clear()
+		return
+
 	case "tools":
-		// Simple tools management - just add and remove
-		registry := ctx.GetSystem().GetToolRegistry()
-		parts := strings.Fields(value)
-
-		if len(parts) == 0 {
-			ctx.Reply("Usage: /set tools [add|remove]")
-			return
-		}
-
-		subcommand := parts[0]
-		switch subcommand {
-		case "add":
-			if len(parts) < 2 {
-				ctx.Reply("Usage: /set tools add <path>")
-				return
-			}
-			toolPath := strings.Join(parts[1:], " ")
-
-			// Try to load the tool (polly now handles native, shell, and MCP tools)
-			_, err := registry.LoadToolAuto(toolPath)
-			if err != nil {
-				ctx.Reply(fmt.Sprintf("Failed: %v", err))
-			} else {
-				ctx.Reply(fmt.Sprintf("Added tool: %s", toolPath))
-			}
-
-		case "remove":
-			if len(parts) < 2 {
-				ctx.Reply("Usage: /set tools remove <name or pattern>")
-				return
-			}
-			pattern := strings.Join(parts[1:], " ")
-
-			// Check if it's a wildcard pattern
-			if strings.Contains(pattern, "*") {
-				// Wildcard removal
-				var removed []string
-				for _, tool := range registry.All() {
-					name := tool.GetName()
-					matched, _ := path.Match(pattern, name)
-					if matched {
-						registry.Remove(name)
-						removed = append(removed, name)
-					}
-				}
-
-				if len(removed) > 0 {
-					ctx.Reply(fmt.Sprintf("Removed %d tools: %s", len(removed), strings.Join(removed, ", ")))
-				} else {
-					ctx.Reply(fmt.Sprintf("No tools matched pattern: %s", pattern))
-				}
-			} else {
-				// Exact match removal
-				if _, exists := registry.Get(pattern); !exists {
-					ctx.Reply(fmt.Sprintf("Not found: %s", pattern))
-				} else {
-					registry.Remove(pattern)
-					ctx.Reply(fmt.Sprintf("Removed: %s", pattern))
-				}
-			}
-
-		default:
-			ctx.Reply("Usage: /set tools [add|remove]")
-		}
-	case "thinking":
-		thinking, err := strconv.ParseBool(value)
-		if err != nil {
-			ctx.Reply("Invalid value for thinking. Please provide 'true' or 'false'.")
-			return
-		}
-		config.Model.Thinking = thinking
-		ctx.Reply(fmt.Sprintf("%s set to: %t", param, config.Model.Thinking))
-	case "showthinkingaction":
-		showThinking, err := strconv.ParseBool(value)
-		if err != nil {
-			ctx.Reply("Invalid value for showthinkingaction. Please provide 'true' or 'false'.")
-			return
-		}
-		config.Bot.ShowThinkingAction = showThinking
-		ctx.Reply(fmt.Sprintf("%s set to: %t", param, config.Bot.ShowThinkingAction))
-	case "showtoolactions":
-		showTools, err := strconv.ParseBool(value)
-		if err != nil {
-			ctx.Reply("Invalid value for showtoolactions. Please provide 'true' or 'false'.")
-			return
-		}
-		config.Bot.ShowToolActions = showTools
-		ctx.Reply(fmt.Sprintf("%s set to: %t", param, config.Bot.ShowToolActions))
-	case "sessionduration":
-		duration, err := time.ParseDuration(value)
-		if err != nil {
-			ctx.Reply("Invalid value for sessionduration. Please provide a valid duration (e.g. 10m, 1h).")
-			return
-		}
-		config.Session.TTL = duration
-		ctx.Reply(fmt.Sprintf("%s set to: %s", param, config.Session.TTL))
-	case "apitimeout":
-		duration, err := time.ParseDuration(value)
-		if err != nil {
-			ctx.Reply("Invalid value for apitimeout. Please provide a valid duration (e.g. 30s, 5m).")
-			return
-		}
-		config.API.Timeout = duration
-		ctx.Reply(fmt.Sprintf("%s set to: %s", param, config.API.Timeout))
-	case "sessionhistory":
-		history, err := strconv.Atoi(value)
-		if err != nil {
-			ctx.Reply("Invalid value for sessionhistory. Please provide a valid integer.")
-			return
-		}
-		config.Session.MaxHistory = history
-		ctx.Reply(fmt.Sprintf("%s set to: %d", param, config.Session.MaxHistory))
-	case "chunkmax":
-		chunkMax, err := strconv.Atoi(value)
-		if err != nil {
-			ctx.Reply("Invalid value for chunkmax. Please provide a valid integer.")
-			return
-		}
-		config.Session.ChunkMax = chunkMax
-		ctx.Reply(fmt.Sprintf("%s set to: %d", param, config.Session.ChunkMax))
-	case "urlwatcher":
-		urlwatcher, err := strconv.ParseBool(value)
-		if err != nil {
-			ctx.Reply("Invalid value for urlwatcher. Please provide 'true' or 'false'.")
-			return
-		}
-		config.Bot.URLWatcher = urlwatcher
-		ctx.Reply(fmt.Sprintf("%s set to: %t", param, config.Bot.URLWatcher))
+		handleToolsSet(ctx, value)
+		return
 	}
 
+	// Handle standard config fields
+	field, ok := configFields[param]
+	if !ok {
+		ctx.Reply(fmt.Sprintf("Unknown key. Available keys: %s", strings.Join(keys, ", ")))
+		return
+	}
+
+	if err := field.setter(cfg, value); err != nil {
+		ctx.Reply(err.Error())
+		return
+	}
+
+	ctx.Reply(fmt.Sprintf("%s set to: %s", param, field.getter(cfg)))
 	ctx.GetSession().Clear()
 }
 
-func SlashGet(ctx core.ChatContextInterface) {
+// handleToolsSet handles the /set tools subcommand
+func handleToolsSet(ctx core.ChatContextInterface, value string) {
+	registry := ctx.GetSystem().GetToolRegistry()
+	parts := strings.Fields(value)
 
+	if len(parts) == 0 {
+		ctx.Reply("Usage: /set tools [add|remove]")
+		return
+	}
+
+	subcommand := parts[0]
+	switch subcommand {
+	case "add":
+		if len(parts) < 2 {
+			ctx.Reply("Usage: /set tools add <path>")
+			return
+		}
+		toolPath := strings.Join(parts[1:], " ")
+
+		_, err := registry.LoadToolAuto(toolPath)
+		if err != nil {
+			ctx.Reply(fmt.Sprintf("Failed: %v", err))
+		} else {
+			ctx.Reply(fmt.Sprintf("Added tool: %s", toolPath))
+		}
+
+	case "remove":
+		if len(parts) < 2 {
+			ctx.Reply("Usage: /set tools remove <name or pattern>")
+			return
+		}
+		pattern := strings.Join(parts[1:], " ")
+
+		if strings.Contains(pattern, "*") {
+			var removed []string
+			for _, tool := range registry.All() {
+				name := tool.GetName()
+				matched, _ := path.Match(pattern, name)
+				if matched {
+					registry.Remove(name)
+					removed = append(removed, name)
+				}
+			}
+
+			if len(removed) > 0 {
+				ctx.Reply(fmt.Sprintf("Removed %d tools: %s", len(removed), strings.Join(removed, ", ")))
+			} else {
+				ctx.Reply(fmt.Sprintf("No tools matched pattern: %s", pattern))
+			}
+		} else {
+			if _, exists := registry.Get(pattern); !exists {
+				ctx.Reply(fmt.Sprintf("Not found: %s", pattern))
+			} else {
+				registry.Remove(pattern)
+				ctx.Reply(fmt.Sprintf("Removed: %s", pattern))
+			}
+		}
+
+	default:
+		ctx.Reply("Usage: /set tools [add|remove]")
+	}
+}
+
+func SlashGet(ctx core.ChatContextInterface) {
+	keys := getConfigKeys()
 	if len(ctx.GetArgs()) < 2 {
-		ctx.Reply(fmt.Sprintf("Usage: /get <key>. Available keys: %s", strings.Join(ModifiableConfigKeys, ", ")))
+		ctx.Reply(fmt.Sprintf("Usage: /get <key>. Available keys: %s", strings.Join(keys, ", ")))
 		return
 	}
 
 	param := ctx.GetArgs()[1]
-	if !contains(ModifiableConfigKeys, param) {
-		ctx.Reply(fmt.Sprintf("Unknown key %s. Available keys: %s", param, strings.Join(ModifiableConfigKeys, ", ")))
-		return
-	}
-	config := ctx.GetConfig()
+	cfg := ctx.GetConfig()
 
+	// Handle special cases first
 	switch param {
-	case "addressed":
-		ctx.Reply(fmt.Sprintf("%s: %t", param, config.Bot.Addressed))
-	case "prompt":
-		ctx.Reply(fmt.Sprintf("%s: %s", param, config.Bot.Prompt))
-	case "model":
-		ctx.Reply(fmt.Sprintf("%s: %s", param, config.Model.Model))
-	case "maxtokens":
-		ctx.Reply(fmt.Sprintf("%s: %d", param, config.Model.MaxTokens))
-	case "temperature":
-		ctx.Reply(fmt.Sprintf("%s: %f", param, config.Model.Temperature))
-	case "top_p":
-		ctx.Reply(fmt.Sprintf("%s: %f", param, config.Model.TopP))
 	case "admins":
-		if len(config.Bot.Admins) == 0 {
+		if len(cfg.Bot.Admins) == 0 {
 			ctx.Reply("empty admin list, all nicks are permitted to use admin commands")
 			return
 		}
-		ctx.Reply(fmt.Sprintf("%s: %s", param, strings.Join(config.Bot.Admins, ", ")))
-	case "openaiurl":
-		ctx.Reply(fmt.Sprintf("%s: %s", param, config.API.OpenAIURL))
-	case "ollamaurl":
-		ctx.Reply(fmt.Sprintf("%s: %s", param, config.API.OllamaURL))
-	case "ollamakey":
-		masked := maskAPIKey(config.API.OllamaKey)
-		ctx.Reply(fmt.Sprintf("%s: %s", param, masked))
-	case "openaikey":
-		masked := maskAPIKey(config.API.OpenAIKey)
-		ctx.Reply(fmt.Sprintf("%s: %s", param, masked))
-	case "anthropickey":
-		masked := maskAPIKey(config.API.AnthropicKey)
-		ctx.Reply(fmt.Sprintf("%s: %s", param, masked))
-	case "geminikey":
-		masked := maskAPIKey(config.API.GeminiKey)
-		ctx.Reply(fmt.Sprintf("%s: %s", param, masked))
+		ctx.Reply(fmt.Sprintf("%s: %s", param, strings.Join(cfg.Bot.Admins, ", ")))
+		return
+
 	case "tools":
-		// Simple tool listing
-		registry := ctx.GetSystem().GetToolRegistry()
-		allTools := registry.All()
-
-		if len(allTools) == 0 {
-			ctx.Reply("No tools loaded")
-		} else {
-			// Just list tool names, comma-separated
-			var toolNames []string
-			for _, tool := range allTools {
-				toolNames = append(toolNames, tool.GetName())
-			}
-
-			message := "Tools: " + strings.Join(toolNames, ", ")
-			// Truncate if too long for IRC
-			maxLen := config.Session.ChunkMax
-			if maxLen <= 0 {
-				maxLen = 350
-			}
-			if len(message) > maxLen {
-				message = message[:maxLen-3] + "..."
-			}
-			ctx.Reply(message)
-		}
-	case "thinking":
-		ctx.Reply(fmt.Sprintf("%s: %t", param, config.Model.Thinking))
-	case "showthinkingaction":
-		ctx.Reply(fmt.Sprintf("%s: %t", param, config.Bot.ShowThinkingAction))
-	case "showtoolactions":
-		ctx.Reply(fmt.Sprintf("%s: %t", param, config.Bot.ShowToolActions))
-	case "sessionduration":
-		ctx.Reply(fmt.Sprintf("%s: %s", param, config.Session.TTL))
-	case "apitimeout":
-		ctx.Reply(fmt.Sprintf("%s: %s", param, config.API.Timeout))
-	case "sessionhistory":
-		ctx.Reply(fmt.Sprintf("%s: %d", param, config.Session.MaxHistory))
-	case "chunkmax":
-		ctx.Reply(fmt.Sprintf("%s: %d", param, config.Session.ChunkMax))
-	case "urlwatcher":
-		ctx.Reply(fmt.Sprintf("%s: %t", param, config.Bot.URLWatcher))
+		handleToolsGet(ctx)
+		return
 	}
+
+	// Handle standard config fields
+	field, ok := configFields[param]
+	if !ok {
+		ctx.Reply(fmt.Sprintf("Unknown key %s. Available keys: %s", param, strings.Join(keys, ", ")))
+		return
+	}
+
+	ctx.Reply(fmt.Sprintf("%s: %s", param, field.getter(cfg)))
 }
 
-func contains(slice []string, item string) bool {
-	return slices.Contains(slice, item)
+// handleToolsGet handles the /get tools command
+func handleToolsGet(ctx core.ChatContextInterface) {
+	registry := ctx.GetSystem().GetToolRegistry()
+	allTools := registry.All()
+
+	if len(allTools) == 0 {
+		ctx.Reply("No tools loaded")
+		return
+	}
+
+	var toolNames []string
+	for _, tool := range allTools {
+		toolNames = append(toolNames, tool.GetName())
+	}
+
+	message := "Tools: " + strings.Join(toolNames, ", ")
+	maxLen := ctx.GetConfig().Session.ChunkMax
+	if maxLen <= 0 {
+		maxLen = 350
+	}
+	if len(message) > maxLen {
+		message = message[:maxLen-3] + "..."
+	}
+	ctx.Reply(message)
 }
 
 // maskAPIKey returns a masked version of an API key showing only first 4 chars
@@ -402,4 +436,21 @@ func CompletionResponse(ctx core.ChatContextInterface) {
 		ctx.Reply(res)
 	}
 
+}
+
+var urlPattern = regexp.MustCompile(`^https?://[^\s]+`)
+
+// CheckURLTrigger checks if the message contains a URL and should trigger a response
+func CheckURLTrigger(ctx core.ChatContextInterface, message string) bool {
+	if !ctx.GetConfig().Bot.URLWatcher {
+		return false
+	}
+	if ctx.IsAddressed() {
+		return false
+	}
+	if urlPattern.MatchString(message) {
+		ctx.GetLogger().Info("URL detected, triggering response")
+		return true
+	}
+	return false
 }

@@ -14,7 +14,11 @@ import (
 	"pkdindustries/soulshack/internal/config"
 )
 
-type Event interface {
+// ChatContextInterface provides all context needed for handling IRC messages
+type ChatContextInterface interface {
+	context.Context
+
+	// Event methods
 	IsAddressed() bool
 	IsAdmin() bool
 	Valid() bool
@@ -22,14 +26,12 @@ type Event interface {
 	GetCommand() string
 	GetSource() string
 	GetArgs() []string
-}
 
-type Responder interface {
+	// Responder methods
 	Reply(string)
 	Action(string)
-}
 
-type Controller interface {
+	// Controller methods
 	Join(string) bool
 	Nick(string) bool
 	Mode(string, string, string) bool
@@ -39,21 +41,12 @@ type Controller interface {
 	LookupUser(string) (string, string, bool)
 	LookupChannel(string) *girc.Channel
 	GetClient() *girc.Client
-}
 
-type Runtime interface {
+	// Runtime methods
 	GetSession() sessions.Session
 	GetConfig() *config.Configuration
 	GetSystem() System
 	GetLogger() *zap.SugaredLogger
-}
-
-type ChatContextInterface interface {
-	context.Context
-	Event
-	Responder
-	Controller
-	Runtime
 }
 
 type ChatContext struct {
@@ -181,7 +174,7 @@ func (c ChatContext) IsAdmin() bool {
 	c.logger.Debugw("Checking hostmask", "hostmask", hostmask)
 	// XXX: if no admins are configured, all hostmasks are admins
 	if len(c.Config.Bot.Admins) == 0 {
-		c.logger.Warn("All hostmasks are admin; please configure admins")
+		c.logger.Debug("All hostmasks are admin; please configure admins")
 		return true
 	}
 	for _, user := range c.Config.Bot.Admins {
