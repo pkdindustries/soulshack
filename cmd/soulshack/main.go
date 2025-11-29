@@ -30,7 +30,7 @@ func main() {
 		Version: version + " - http://github.com/pkdindustries/soulshack",
 		Flags:   config.GetFlags(),
 		Action: func(ctx context.Context, c *cli.Command) error {
-			return bot.Run(config.NewConfiguration(c))
+			return bot.Run(ctx, config.NewConfiguration(c))
 		},
 	}
 

@@ -16,7 +16,7 @@ import (
 )
 
 // Run starts the IRC bot with the given configuration
-func Run(cfg *config.Configuration) error {
+func Run(ctx context.Context, cfg *config.Configuration) error {
 	core.InitLogger(cfg.Bot.Verbose)
 	defer zap.L().Sync()
 
@@ -38,6 +38,13 @@ func Run(cfg *config.Configuration) error {
 			Pass: cfg.Server.SASLPass,
 		}
 	}
+
+	// Handle graceful shutdown
+	go func() {
+		<-ctx.Done()
+		zap.S().Info("Context cancelled, shutting down IRC client...")
+		ircClient.Close()
+	}()
 
 	ircClient.Handlers.AddBg(girc.CONNECTED, func(client *girc.Client, e girc.Event) {
 		zap.S().Infof("Joining channel: %s", cfg.Server.Channel)
