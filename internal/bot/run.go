@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"fmt"
+
 	"github.com/lrstanley/girc"
 	"go.uber.org/zap"
 
@@ -102,22 +104,26 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 	})
 
 	// Reconnect loop
-	maxRetries := 5
-	for range maxRetries {
+	const maxRetries = 5
+	for i := range maxRetries {
+		if ctx.Err() != nil {
+			return nil
+		}
+
 		zap.S().Infow("Connecting to server",
 			"server", ircClient.Config.Server,
 			"port", ircClient.Config.Port,
 			"tls", ircClient.Config.SSL,
 			"sasl", ircClient.Config.SASL != nil,
 		)
+
 		if err := ircClient.Connect(); err != nil {
-			// Check if we are shutting down
 			if ctx.Err() != nil {
 				return nil
 			}
 
 			zap.S().Errorw("Connection failed", "error", err)
-			zap.S().Info("Reconnecting in 5 seconds")
+			zap.S().Infof("Reconnecting in 5 seconds (attempt %d/%d)", i+1, maxRetries)
 
 			select {
 			case <-time.After(5 * time.Second):
@@ -128,6 +134,6 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 		}
 		return nil
 	}
-	zap.S().Info("Maximum retry limit reached; exiting")
-	return nil
+
+	return fmt.Errorf("failed to connect after %d attempts", maxRetries)
 }
