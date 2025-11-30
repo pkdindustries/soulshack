@@ -1,0 +1,60 @@
+package commands
+
+import (
+	"fmt"
+	"strings"
+
+	"pkdindustries/soulshack/internal/irc"
+)
+
+// SetCommand handles the /set command for configuration changes
+type SetCommand struct{}
+
+func (c *SetCommand) Name() string    { return "/set" }
+func (c *SetCommand) AdminOnly() bool { return true }
+
+func (c *SetCommand) Execute(ctx irc.ChatContextInterface) {
+	keys := getConfigKeys()
+	if len(ctx.GetArgs()) < 3 {
+		ctx.Reply(fmt.Sprintf("Usage: /set <key> <value>. Available keys: %s", strings.Join(keys, ", ")))
+		return
+	}
+
+	param, v := ctx.GetArgs()[1], ctx.GetArgs()[2:]
+	value := strings.Join(v, " ")
+	cfg := ctx.GetConfig()
+
+	ctx.GetLogger().With("param", param, "value", value).Debug("Configuration change request")
+
+	// Handle special cases first
+	switch param {
+	case "admins":
+		admins := strings.Split(value, ",")
+		for _, admin := range admins {
+			if admin == "" {
+				ctx.Reply("Invalid value for admins. Please provide a comma-separated list of hostmasks.")
+				return
+			}
+		}
+		cfg.Bot.Admins = admins
+		ctx.Reply(fmt.Sprintf("%s set to: %s", param, strings.Join(cfg.Bot.Admins, ", ")))
+		ctx.GetSession().Clear()
+		return
+
+	}
+
+	// Handle standard config fields
+	field, ok := configFields[param]
+	if !ok {
+		ctx.Reply(fmt.Sprintf("Unknown key. Available keys: %s", strings.Join(keys, ", ")))
+		return
+	}
+
+	if err := field.setter(cfg, value); err != nil {
+		ctx.Reply(err.Error())
+		return
+	}
+
+	ctx.Reply(fmt.Sprintf("%s set to: %s", param, field.getter(cfg)))
+	ctx.GetSession().Clear()
+}

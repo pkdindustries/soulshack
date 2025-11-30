@@ -7,15 +7,17 @@ import (
 	"github.com/mazznoer/colorgrad"
 )
 
+const Version = "0.91"
+
 // GetBanner returns a colorized ASCII art banner
-func GetBanner(version string) string {
+func GetBanner() string {
 	banner := `
  ____                    _   ____    _                      _
 / ___|    ___    _   _  | | / ___|  | |__     __ _    ___  | | __
 \___ \   / _ \  | | | | | | \___ \  | '_ \   / _' |  / __| | |/ /
  ___) | | (_) | | |_| | | |  ___) | | | | | | (_| | | (__  |   <
 |____/   \___/   \__,_| |_| |____/  |_| |_|  \__,_|  \___| |_|\_\
- .  .  .  because  real  people  are  overrated  [v` + version + `]
+ .  .  .  because  real  people  are  overrated  [v` + Version + `]
 `
 	grad, _ := colorgrad.NewGradient().
 		HtmlColors("#1115f0ff", "#fdfdfdff").

@@ -2,103 +2,12 @@ package commands
 
 import (
 	"fmt"
-	"path"
 	"strconv"
 	"strings"
 	"time"
 
 	"pkdindustries/soulshack/internal/config"
-	"pkdindustries/soulshack/internal/irc"
 )
-
-// handleToolsGet handles the /get tools command
-func handleToolsGet(ctx irc.ChatContextInterface) {
-	registry := ctx.GetSystem().GetToolRegistry()
-	allTools := registry.All()
-
-	if len(allTools) == 0 {
-		ctx.Reply("No tools loaded")
-		return
-	}
-
-	var toolNames []string
-	for _, tool := range allTools {
-		toolNames = append(toolNames, tool.GetName())
-	}
-
-	message := "Tools: " + strings.Join(toolNames, ", ")
-	maxLen := ctx.GetConfig().Session.ChunkMax
-	if maxLen <= 0 {
-		maxLen = 350
-	}
-	if len(message) > maxLen {
-		message = message[:maxLen-3] + "..."
-	}
-	ctx.Reply(message)
-}
-
-// handleToolsSet handles the /set tools subcommand
-func handleToolsSet(ctx irc.ChatContextInterface, value string) {
-	registry := ctx.GetSystem().GetToolRegistry()
-	parts := strings.Fields(value)
-
-	if len(parts) == 0 {
-		ctx.Reply("Usage: /set tools [add|remove]")
-		return
-	}
-
-	subcommand := parts[0]
-	switch subcommand {
-	case "add":
-		if len(parts) < 2 {
-			ctx.Reply("Usage: /set tools add <path>")
-			return
-		}
-		toolPath := strings.Join(parts[1:], " ")
-
-		_, err := registry.LoadToolAuto(toolPath)
-		if err != nil {
-			ctx.Reply(fmt.Sprintf("Failed: %v", err))
-		} else {
-			ctx.Reply(fmt.Sprintf("Added tool: %s", toolPath))
-		}
-
-	case "remove":
-		if len(parts) < 2 {
-			ctx.Reply("Usage: /set tools remove <name or pattern>")
-			return
-		}
-		pattern := strings.Join(parts[1:], " ")
-
-		if strings.Contains(pattern, "*") {
-			var removed []string
-			for _, tool := range registry.All() {
-				name := tool.GetName()
-				matched, _ := path.Match(pattern, name)
-				if matched {
-					registry.Remove(name)
-					removed = append(removed, name)
-				}
-			}
-
-			if len(removed) > 0 {
-				ctx.Reply(fmt.Sprintf("Removed %d tools: %s", len(removed), strings.Join(removed, ", ")))
-			} else {
-				ctx.Reply(fmt.Sprintf("No tools matched pattern: %s", pattern))
-			}
-		} else {
-			if _, exists := registry.Get(pattern); !exists {
-				ctx.Reply(fmt.Sprintf("Not found: %s", pattern))
-			} else {
-				registry.Remove(pattern)
-				ctx.Reply(fmt.Sprintf("Removed: %s", pattern))
-			}
-		}
-
-	default:
-		ctx.Reply("Usage: /set tools [add|remove]")
-	}
-}
 
 // configField defines how to get and set a configuration value
 type configField struct {
@@ -283,7 +192,7 @@ func getConfigKeys() []string {
 	for k := range configFields {
 		keys = append(keys, k)
 	}
-	keys = append(keys, "admins", "tools")
+	keys = append(keys, "admins")
 	return keys
 }
 

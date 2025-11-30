@@ -21,10 +21,8 @@ import (
 	"pkdindustries/soulshack/internal/config"
 )
 
-const version = "0.91"
-
 func main() {
-	fmt.Printf("%s\n", bot.GetBanner(version))
+	fmt.Printf("%s\n", bot.GetBanner())
 
 	// Create a context that cancels on SIGINT or SIGTERM
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -33,7 +31,7 @@ func main() {
 	cmd := &cli.Command{
 		Name:    "soulshack",
 		Usage:   "because real people are overrated",
-		Version: version + " - http://github.com/pkdindustries/soulshack",
+		Version: bot.Version + " - http://github.com/pkdindustries/soulshack",
 		Flags:   config.GetFlags(),
 		Action: func(_ context.Context, c *cli.Command) error {
 			// Use our cancellable context, not the CLI's context

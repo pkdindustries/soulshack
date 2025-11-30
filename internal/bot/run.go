@@ -24,6 +24,15 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 
 	sys := NewSystem(cfg)
 
+	// Initialize command registry
+	cmdRegistry := commands.NewRegistry()
+	cmdRegistry.Register(&commands.SetCommand{})
+	cmdRegistry.Register(&commands.GetCommand{})
+	cmdRegistry.Register(commands.NewHelpCommand(cmdRegistry))
+	cmdRegistry.Register(&commands.VersionCommand{Version: "v" + Version})
+	cmdRegistry.Register(&commands.CompletionCommand{})
+	cmdRegistry.Register(&commands.ToolsCommand{})
+
 	ircClient := girc.New(girc.Config{
 		Server:    cfg.Server.Server,
 		Port:      cfg.Server.Port,
@@ -56,7 +65,7 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 		if e.Source.Name == cfg.Server.Nick {
 			ctx, cancel := irc.NewChatContext(ctx, cfg, sys, client, &e)
 			defer cancel()
-			commands.Greeting(ctx)
+			Greeting(ctx)
 		}
 	})
 
@@ -64,7 +73,7 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 		ctx, cancel := irc.NewChatContext(ctx, cfg, sys, client, &e)
 		defer cancel()
 
-		urlTriggered := commands.CheckURLTrigger(ctx, e.Last())
+		urlTriggered := CheckURLTrigger(ctx, e.Last())
 
 		if ctx.Valid() || urlTriggered {
 			channelKey := e.Params[0]
@@ -86,20 +95,7 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 			}()
 
 			ctx.GetLogger().Infof(">> %s", strings.Join(e.Params[1:], " "))
-			switch ctx.GetCommand() {
-			case "/set":
-				commands.SlashSet(ctx)
-			case "/get":
-				commands.SlashGet(ctx)
-			case "/leave":
-				commands.SlashLeave(ctx)
-			case "/help", "/?":
-				ctx.Reply("Supported commands: /set, /get, /leave, /help, /version")
-			case "/version":
-				ctx.Reply(cfg.Server.Nick + " v0.91")
-			default:
-				commands.CompletionResponse(ctx)
-			}
+			cmdRegistry.Dispatch(ctx)
 		}
 	})
 
