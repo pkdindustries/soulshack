@@ -39,11 +39,10 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 		}
 	}
 
-	// Handle graceful shutdown
 	go func() {
 		<-ctx.Done()
-		zap.S().Info("Context cancelled, shutting down IRC client...")
-		ircClient.Close()
+		ircClient.Quit("Shutting down...")
+		zap.S().Info("IRC client closed")
 	}()
 
 	ircClient.Handlers.AddBg(girc.CONNECTED, func(client *girc.Client, e girc.Event) {
@@ -112,10 +111,20 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 			"sasl", ircClient.Config.SASL != nil,
 		)
 		if err := ircClient.Connect(); err != nil {
+			// Check if we are shutting down
+			if ctx.Err() != nil {
+				return nil
+			}
+
 			zap.S().Errorw("Connection failed", "error", err)
 			zap.S().Info("Reconnecting in 5 seconds")
-			time.Sleep(5 * time.Second)
-			continue
+
+			select {
+			case <-time.After(5 * time.Second):
+				continue
+			case <-ctx.Done():
+				return nil
+			}
 		}
 		return nil
 	}
