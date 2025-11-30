@@ -65,7 +65,11 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 		if e.Source.Name == cfg.Server.Nick {
 			ctx, cancel := irc.NewChatContext(ctx, cfg, sys, client, &e)
 			defer cancel()
-			Greeting(ctx)
+
+			channelKey := e.Params[0]
+			core.WithRequestLock(ctx, channelKey, "join", func() {
+				Greeting(ctx)
+			}, nil)
 		}
 	})
 
@@ -80,22 +84,13 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 			if !girc.IsValidChannel(channelKey) {
 				channelKey = e.Source.Name
 			}
-			lock := core.GetRequestLock(channelKey)
 
-			ctx.GetLogger().Debugf("Acquiring lock for channel '%s'", channelKey)
-			if !lock.LockWithContext(ctx) {
-				ctx.GetLogger().Warnf("Failed to acquire lock for channel '%s' (timeout)", channelKey)
+			core.WithRequestLock(ctx, channelKey, "privmsg", func() {
+				ctx.GetLogger().Infof(">> %s", strings.Join(e.Params[1:], " "))
+				cmdRegistry.Dispatch(ctx)
+			}, func() {
 				ctx.Reply("Request timed out waiting for previous operation to complete")
-				return
-			}
-			ctx.GetLogger().Debugf("Lock acquired for channel '%s'", channelKey)
-			defer func() {
-				ctx.GetLogger().Debugf("Releasing lock for channel '%s'", channelKey)
-				lock.Unlock()
-			}()
-
-			ctx.GetLogger().Infof(">> %s", strings.Join(e.Params[1:], " "))
-			cmdRegistry.Dispatch(ctx)
+			})
 		}
 	})
 

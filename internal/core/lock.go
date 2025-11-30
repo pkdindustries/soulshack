@@ -3,6 +3,8 @@ package core
 import (
 	"context"
 	"sync"
+
+	"go.uber.org/zap"
 )
 
 // RequestLock provides context-aware locking for serializing request processing
@@ -49,4 +51,34 @@ func GetRequestLock(key string) *RequestLock {
 	newLock := NewRequestLock()
 	actual, _ := requestLocks.LoadOrStore(key, newLock)
 	return actual.(*RequestLock)
+}
+
+// WithRequestLock acquires a lock for the given key and executes the onSuccess function.
+// If the lock cannot be acquired within the context's deadline, onTimeout is called (if provided).
+func WithRequestLock(ctx context.Context, key string, operation string, onSuccess func(), onTimeout func()) {
+	lock := GetRequestLock(key)
+
+	// Try to get logger from context, fallback to global logger
+	var logger *zap.SugaredLogger
+	if logCtx, ok := ctx.(interface{ GetLogger() *zap.SugaredLogger }); ok {
+		logger = logCtx.GetLogger()
+	} else {
+		logger = GetLogger()
+	}
+
+	logger.Debugf("Acquiring lock for channel '%s' (%s)", key, operation)
+	if !lock.LockWithContext(ctx) {
+		logger.Warnf("Failed to acquire lock for channel '%s' (%s timeout)", key, operation)
+		if onTimeout != nil {
+			onTimeout()
+		}
+		return
+	}
+	logger.Debugf("Lock acquired for channel '%s' (%s)", key, operation)
+	defer func() {
+		logger.Debugf("Releasing lock for channel '%s' (%s)", key, operation)
+		lock.Unlock()
+	}()
+
+	onSuccess()
 }
