@@ -55,6 +55,14 @@ func (c *SetCommand) Execute(ctx irc.ChatContextInterface) {
 		return
 	}
 
+	// If an API key or URL was set, update the LLM client
+	if strings.Contains(param, "key") || strings.Contains(param, "url") || strings.Contains(param, "model") {
+		if err := ctx.GetSystem().UpdateLLM(*cfg.API); err != nil {
+			ctx.GetLogger().Errorw("Failed to update LLM client", "error", err)
+			ctx.Reply("Configuration saved, but failed to update LLM client")
+		}
+	}
+
 	ctx.Reply(fmt.Sprintf("%s set to: %s", param, field.getter(cfg)))
 	ctx.GetSession().Clear()
 }

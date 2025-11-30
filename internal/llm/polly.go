@@ -5,6 +5,7 @@ import (
 	"github.com/alexschlessinger/pollytool/messages"
 
 	"pkdindustries/soulshack/internal/config"
+	"pkdindustries/soulshack/internal/core"
 	"pkdindustries/soulshack/internal/irc"
 )
 
@@ -31,7 +32,7 @@ func NewPollyLLM(config config.APIConfig) *PollyLLM {
 }
 
 // ChatCompletionStream returns a single byte channel with chunked output for IRC
-func (p *PollyLLM) ChatCompletionStream(req *CompletionRequest, chatCtx irc.ChatContextInterface) <-chan []byte {
+func (p *PollyLLM) ChatCompletionStream(req *CompletionRequest, chatCtx core.ChatContextInterface) <-chan []byte {
 	// Set base URL for ollama if provided
 	config := chatCtx.GetConfig()
 	if config != nil && config.API != nil && config.API.OllamaURL != "" {

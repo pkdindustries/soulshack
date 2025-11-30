@@ -1,6 +1,8 @@
 package bot
 
 import (
+	"sync/atomic"
+
 	"github.com/alexschlessinger/pollytool/sessions"
 	"github.com/alexschlessinger/pollytool/tools"
 	"go.uber.org/zap"
@@ -8,10 +10,35 @@ import (
 	"pkdindustries/soulshack/internal/config"
 	"pkdindustries/soulshack/internal/core"
 	"pkdindustries/soulshack/internal/irc"
+	"pkdindustries/soulshack/internal/llm"
 )
 
+type SystemImpl struct {
+	Store sessions.SessionStore
+	Tools *tools.ToolRegistry
+	llm   atomic.Value // stores core.LLM
+}
+
+func (s *SystemImpl) GetToolRegistry() *tools.ToolRegistry {
+	return s.Tools
+}
+
+func (s *SystemImpl) GetSessionStore() sessions.SessionStore {
+	return s.Store
+}
+
+func (s *SystemImpl) GetLLM() core.LLM {
+	return s.llm.Load().(core.LLM)
+}
+
+func (s *SystemImpl) UpdateLLM(cfg config.APIConfig) error {
+	zap.S().Info("Updating LLM client...")
+	s.llm.Store(llm.NewPollyLLM(cfg))
+	return nil
+}
+
 func NewSystem(c *config.Configuration) core.System {
-	s := core.SystemImpl{}
+	s := &SystemImpl{}
 	// Initialize empty tool registry
 	s.Tools = tools.NewToolRegistry([]tools.Tool{})
 
@@ -38,5 +65,8 @@ func NewSystem(c *config.Configuration) core.System {
 		SystemPrompt: c.Bot.Prompt,
 	})
 
-	return &s
+	// Initialize LLM
+	s.UpdateLLM(*c.API)
+
+	return s
 }

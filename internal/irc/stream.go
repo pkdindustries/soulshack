@@ -16,7 +16,7 @@ import (
 
 // IRCEventProcessor handles event processing for IRC with chunking and actions
 type IRCEventProcessor struct {
-	ctx             ChatContextInterface
+	ctx             core.ChatContextInterface
 	byteChan        chan<- []byte
 	chunkBuffer     *bytes.Buffer
 	maxChunkSize    int
@@ -38,7 +38,7 @@ type IRCEventProcessor struct {
 
 // NewIRCEventProcessor creates a new IRC event processor
 func NewIRCEventProcessor(
-	ctx ChatContextInterface,
+	ctx core.ChatContextInterface,
 	byteChan chan<- []byte,
 	maxChunkSize int,
 	registry *tools.ToolRegistry,

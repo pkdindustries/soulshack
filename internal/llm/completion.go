@@ -11,11 +11,6 @@ import (
 	"github.com/alexschlessinger/pollytool/tools"
 )
 
-type LLM interface {
-	// New simplified interface - single byte channel output
-	ChatCompletionStream(*CompletionRequest, irc.ChatContextInterface) <-chan []byte
-}
-
 type CompletionRequest = llm.CompletionRequest
 
 func NewCompletionRequest(config *config.Configuration, session sessions.Session, tools []tools.Tool) *CompletionRequest {
@@ -63,7 +58,7 @@ func complete(ctx irc.ChatContextInterface) (<-chan string, error) {
 	}
 
 	req := NewCompletionRequest(config, session, allTools)
-	llm := NewPollyLLM(*config.API)
+	llm := sys.GetLLM()
 
 	// Get the byte stream from the new interface
 	byteChan := llm.ChatCompletionStream(req, ctx)
