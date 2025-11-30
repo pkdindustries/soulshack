@@ -32,25 +32,10 @@ func NewPollyLLM(config config.APIConfig) *PollyLLM {
 
 // ChatCompletionStream returns a single byte channel with chunked output for IRC
 func (p *PollyLLM) ChatCompletionStream(req *CompletionRequest, chatCtx irc.ChatContextInterface) <-chan []byte {
-	// Convert soulshack request to pollytool request
-	pollyReq := &llm.CompletionRequest{
-		Model:       req.Model,
-		Messages:    req.Session.GetHistory(),
-		Temperature: req.Temperature,
-		MaxTokens:   req.MaxTokens,
-		Tools:       req.Tools,
-		Timeout:     req.Timeout,
-	}
-
-	// Set thinking effort if enabled
-	if req.Thinking {
-		pollyReq.ThinkingEffort = "medium" // Default to medium effort when enabled
-	}
-
 	// Set base URL for ollama if provided
 	config := chatCtx.GetConfig()
 	if config != nil && config.API != nil && config.API.OllamaURL != "" {
-		pollyReq.BaseURL = config.API.OllamaURL
+		req.BaseURL = config.API.OllamaURL
 	}
 
 	// Get the system for registry access
@@ -71,10 +56,10 @@ func (p *PollyLLM) ChatCompletionStream(req *CompletionRequest, chatCtx irc.Chat
 
 		// Create IRC processor with all necessary context
 		processor := irc.NewIRCEventProcessor(chatCtx, byteChan, maxChunkSize, registry, p.client, p.streamProcessor)
-		processor.SetRequest(pollyReq)
+		processor.SetRequest(req)
 
 		// Get event stream from LLM
-		eventChan := p.client.ChatCompletionStream(chatCtx, pollyReq, p.streamProcessor)
+		eventChan := p.client.ChatCompletionStream(chatCtx, req, p.streamProcessor)
 
 		// Process events using the standardized processor
 		response := messages.ProcessEventStream(chatCtx, eventChan, processor)
@@ -84,7 +69,7 @@ func (p *PollyLLM) ChatCompletionStream(req *CompletionRequest, chatCtx irc.Chat
 
 		// Handle tool continuation if needed
 		if len(response.ToolCalls) > 0 {
-			processor.HandleToolContinuation(chatCtx, pollyReq)
+			processor.HandleToolContinuation(chatCtx, req)
 		}
 	}()
 
