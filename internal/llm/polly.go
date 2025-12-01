@@ -80,14 +80,13 @@ func (p *PollyLLM) ChatCompletionStream(req *CompletionRequest, chatCtx core.Cha
 				// Show thinking action if enabled, throttled to every 5 seconds
 				if cfg.Bot.ShowThinkingAction {
 					now := time.Now()
-					if lastThinkingTime.IsZero() || now.Sub(lastThinkingTime) > 5*time.Second {
-						elapsed := now.Sub(startTime).Round(time.Second)
-						if elapsed > 0 {
+					// Only show if we've been thinking for at least 5 seconds
+					if now.Sub(startTime) > 5*time.Second {
+						if lastThinkingTime.IsZero() || now.Sub(lastThinkingTime) > 5*time.Second {
+							elapsed := now.Sub(startTime).Round(time.Second)
 							chatCtx.Action(fmt.Sprintf("is thinking... (%s)", elapsed))
-						} else {
-							chatCtx.Action("is thinking...")
+							lastThinkingTime = now
 						}
-						lastThinkingTime = now
 					}
 				}
 			},
