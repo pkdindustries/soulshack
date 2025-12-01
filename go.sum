@@ -6,8 +6,8 @@ cloud.google.com/go/compute/metadata v0.9.0 h1:pDUj4QMoPejqq20dK0Pg2N4yG9zIkYGdB
 cloud.google.com/go/compute/metadata v0.9.0/go.mod h1:E0bWwX5wTnLPedCKqk3pJmVgCBSM6qQI1yTBdEb3C10=
 dario.cat/mergo v1.0.2 h1:85+piFYR1tMbRrLcDwR18y4UKJ3aH1Tbzi24VRW1TK8=
 dario.cat/mergo v1.0.2/go.mod h1:E/hbnu0NxMFBjpMIE34DRGLWqDy0g5FuKDhCb31ngxA=
-github.com/alexschlessinger/pollytool v0.0.0-20251201013412-4cfd0cd036fe h1:HRkGPUI4X2ywMpiQhweKqK6vHyHbUqc/EkR2PONMsEY=
-github.com/alexschlessinger/pollytool v0.0.0-20251201013412-4cfd0cd036fe/go.mod h1:vRmFZ/GPmhO+pCu9dUDgZQcAmX5vTi5PFK6jYw2/LOM=
+github.com/alexschlessinger/pollytool v0.0.0-20251201065023-c90b849bedc3 h1:89D1Z2vMp++XF23pC74jtXSwzzltyCurWdQZMc796FM=
+github.com/alexschlessinger/pollytool v0.0.0-20251201065023-c90b849bedc3/go.mod h1:8t0K5eBalpD6xwq1b0RilxacQRkdWJ8JSUYAypiaZn4=
 github.com/anthropics/anthropic-sdk-go v1.19.0 h1:mO6E+ffSzLRvR/YUH9KJC0uGw0uV8GjISIuzem//3KE=
 github.com/anthropics/anthropic-sdk-go v1.19.0/go.mod h1:WTz31rIUHUHqai2UslPpw5CwXrQP3geYBioRV4WOLvE=
 github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc h1:U9qPSI2PIWSS1VwoXQT9A3Wy9MM3WgvqSxFWenqJduM=
