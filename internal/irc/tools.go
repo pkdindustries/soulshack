@@ -25,6 +25,13 @@ func GetIRCContext(ctx context.Context) (ChatContextInterface, error) {
 	return nil, fmt.Errorf("no IRC context available")
 }
 
+// InjectContext stores the IRC context for tools to retrieve.
+// This must be used (rather than direct context.WithValue) to ensure
+// the correct key type is used.
+func InjectContext(ctx context.Context, chatCtx ChatContextInterface) context.Context {
+	return context.WithValue(ctx, kContextKey, chatCtx)
+}
+
 // isBotOpped checks if the bot has operator status in the channel
 func isBotOpped(ctx ChatContextInterface) bool {
 	channel := ctx.GetConfig().Server.Channel
