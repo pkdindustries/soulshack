@@ -109,7 +109,7 @@ func (c ChatContext) Topic(channel, topic string) bool {
 }
 
 func (s ChatContext) IsAddressed() bool {
-	return strings.HasPrefix(s.event.Last(), s.client.GetNick())
+	return CheckAddressed(s.event.Last(), s.client.GetNick())
 }
 
 func (c ChatContext) Nick(nickname string) bool {
@@ -141,18 +141,13 @@ func (c ChatContext) GetSource() string {
 func (c ChatContext) IsAdmin() bool {
 	hostmask := c.event.Source.String()
 	c.logger.Debugw("Checking hostmask", "hostmask", hostmask)
-	// XXX: if no admins are configured, all hostmasks are admins
-	if len(c.Config.Bot.Admins) == 0 {
+	isAdmin := CheckAdmin(hostmask, c.Config.Bot.Admins)
+	if isAdmin && len(c.Config.Bot.Admins) == 0 {
 		c.logger.Debug("All hostmasks are admin; please configure admins")
-		return true
+	} else if isAdmin {
+		c.logger.Debugw("User is admin", "hostmask", hostmask)
 	}
-	for _, user := range c.Config.Bot.Admins {
-		if user == hostmask {
-			c.logger.Debugw("User is admin", "hostmask", hostmask)
-			return true
-		}
-	}
-	return false
+	return isAdmin
 }
 
 func (c ChatContext) Reply(message string) {
@@ -185,11 +180,11 @@ func (c ChatContext) LookupChannel(channel string) *girc.Channel {
 
 // checks if the message is valid for processing
 func (c ChatContext) Valid() bool {
-	return (c.IsAddressed() || !c.Config.Bot.Addressed || c.IsPrivate()) && len(c.args) > 0
+	return CheckValid(c.IsAddressed(), c.Config.Bot.Addressed, c.IsPrivate(), len(c.args))
 }
 
 func (c ChatContext) IsPrivate() bool {
-	return !strings.HasPrefix(c.event.Params[0], "#")
+	return CheckPrivate(c.event.Params[0])
 }
 
 func (c ChatContext) GetCommand() string {

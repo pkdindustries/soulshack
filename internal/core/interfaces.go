@@ -5,6 +5,7 @@ import (
 
 	"github.com/alexschlessinger/pollytool/llm"
 	"github.com/alexschlessinger/pollytool/sessions"
+	"github.com/alexschlessinger/pollytool/tools"
 	"github.com/lrstanley/girc"
 	"go.uber.org/zap"
 
@@ -50,4 +51,11 @@ type ChatContextInterface interface {
 type LLM interface {
 	// ChatCompletionStream returns a single byte channel with chunked output for IRC
 	ChatCompletionStream(*llm.CompletionRequest, ChatContextInterface) <-chan []byte
+}
+
+type System interface {
+	GetToolRegistry() *tools.ToolRegistry
+	GetSessionStore() sessions.SessionStore
+	GetLLM() LLM
+	UpdateLLM(config.APIConfig) error
 }
