@@ -54,24 +54,24 @@ jobs:
         env:
           GOOS: linux
           GOARCH: amd64
-        run: go build -o ${{ github.event.repository.name }}-linux-amd64 ./...
+        run: go build -o ${{ github.event.repository.name }}-linux-amd64 ./cmd/soulshack
       - name: Build release - Linux arm64
         env:
           GOOS: linux
           GOARCH: arm64
-        run: go build -o ${{ github.event.repository.name }}-linux-arm64 ./...
+        run: go build -o ${{ github.event.repository.name }}-linux-arm64 ./cmd/soulshack
       - name: Build release - macOS arm64
         env:
           GOOS: darwin
           GOARCH: arm64
-        run: go build -o ${{ github.event.repository.name }}-darwin-arm64 ./...
+        run: go build -o ${{ github.event.repository.name }}-darwin-arm64 ./cmd/soulshack
       - name: Build release - Windows amd64
         env:
           GOOS: windows
           GOARCH: amd64
         run: >-
           go build -o
-          ${{ github.event.repository.name }}-windows-amd64.exe ./...
+          ${{ github.event.repository.name }}-windows-amd64.exe ./cmd/soulshack
       - name: Package examples directory
         run: tar czf examples.tar.gz examples/
       - name: Upload examples tarball
