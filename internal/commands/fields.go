@@ -188,11 +188,10 @@ var configFields = map[string]configField{
 
 // getConfigKeys returns all available config keys
 func getConfigKeys() []string {
-	keys := make([]string, 0, len(configFields)+2)
+	keys := make([]string, 0, len(configFields))
 	for k := range configFields {
 		keys = append(keys, k)
 	}
-	keys = append(keys, "admins")
 	return keys
 }
 

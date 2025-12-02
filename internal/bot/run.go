@@ -32,6 +32,7 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 	cmdRegistry.Register(&commands.VersionCommand{Version: "v" + Version})
 	cmdRegistry.Register(&commands.CompletionCommand{})
 	cmdRegistry.Register(&commands.ToolsCommand{})
+	cmdRegistry.Register(&commands.AdminCommand{})
 
 	ircClient := girc.New(girc.Config{
 		Server:    cfg.Server.Server,

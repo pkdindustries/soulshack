@@ -26,23 +26,6 @@ func (c *SetCommand) Execute(ctx irc.ChatContextInterface) {
 
 	ctx.GetLogger().With("param", param, "value", value).Debug("Configuration change request")
 
-	// Handle special cases first
-	switch param {
-	case "admins":
-		admins := strings.Split(value, ",")
-		for _, admin := range admins {
-			if admin == "" {
-				ctx.Reply("Invalid value for admins. Please provide a comma-separated list of hostmasks.")
-				return
-			}
-		}
-		cfg.Bot.Admins = admins
-		ctx.Reply(fmt.Sprintf("%s set to: %s", param, strings.Join(cfg.Bot.Admins, ", ")))
-		ctx.GetSession().Clear()
-		return
-
-	}
-
 	// Handle standard config fields
 	field, ok := configFields[param]
 	if !ok {
