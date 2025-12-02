@@ -109,12 +109,15 @@ configure via flags, environment variables (`SOULSHACK_*`), or yaml config file 
 | `/tools` | no | list loaded tools |
 | `/tools add <spec>` | yes | add tool (path or irc_*) |
 | `/tools remove <pattern>` | yes | remove tool(s) by name/pattern |
+| `/admins` | yes | list bot admins |
+| `/admins add <hostmask>` | yes | add admin hostmask |
+| `/admins remove <hostmask>` | yes | remove admin hostmask |
 | `/help` | no | show available commands |
 | `/version` | no | show bot version |
 
 ### configurable parameters
 
-`model`, `prompt`, `maxtokens`, `temperature`, `top_p`, `addressed`, `admins`, `openaiurl`, `ollamaurl`, `ollamakey`, `openaikey`, `anthropickey`, `geminikey`, `thinking`, `showthinkingaction`, `showtoolactions`, `sessionduration`, `apitimeout`, `sessionhistory`, `chunkmax`, `urlwatcher`
+`model`, `prompt`, `maxtokens`, `temperature`, `top_p`, `addressed`, `openaiurl`, `ollamaurl`, `ollamakey`, `openaikey`, `anthropickey`, `geminikey`, `thinking`, `showthinkingaction`, `showtoolactions`, `sessionduration`, `apitimeout`, `sessionhistory`, `chunkmax`, `urlwatcher`
 
 ## tools
 
