@@ -1,9 +1,5 @@
-    //  ____                    _   ____    _                      _
-    // / ___|    ___    _   _  | | / ___|  | |__     __ _    ___  | | __
-    // \___ \   / _ \  | | | | | | \___ \  | '_ \   / _` |  / __| | |/ /
-    //  ___) | | (_) | | |_| | | |  ___) | | | | | | (_| | | (__  |   <
-    // |____/   \___/   \__,_| |_| |____/  |_| |_|  \__,_|  \___| |_|\_\
-    //  .  .  .  because  real  people  are  overrated  [v0.91]
+![soulshack](https://i.imgur.com/48mbm6x.png)
+
 
 ## overview
 
@@ -181,7 +177,5 @@ built-in channel management (require appropriate permissions):
 | `irc_invite` | invite users |
 | `irc_names` | list channel users |
 | `irc_whois` | user info lookup |
-
-![jacob, high five me](https://i.imgur.com/CDccJ5r.png)
 
 ## named as tribute to my old friend dayv, sp0t, who i think of often
