@@ -19,8 +19,8 @@ type MockLLM struct {
 }
 
 // ChatCompletionStream implements core.LLM
-func (m *MockLLM) ChatCompletionStream(req *llm.CompletionRequest, ctx core.ChatContextInterface) <-chan []byte {
-	ch := make(chan []byte, len(m.Responses)+1)
+func (m *MockLLM) ChatCompletionStream(req *llm.CompletionRequest, ctx core.ChatContextInterface) <-chan string {
+	ch := make(chan string, len(m.Responses)+1)
 	go func() {
 		defer close(ch)
 		for _, resp := range m.Responses {
@@ -34,11 +34,11 @@ func (m *MockLLM) ChatCompletionStream(req *llm.CompletionRequest, ctx core.Chat
 			select {
 			case <-ctx.Done():
 				return
-			case ch <- []byte(resp):
+			case ch <- resp:
 			}
 		}
 		if m.Error != nil {
-			ch <- []byte("Error: " + m.Error.Error())
+			ch <- "Error: " + m.Error.Error()
 		}
 	}()
 	return ch

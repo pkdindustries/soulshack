@@ -1,14 +1,15 @@
 package llm
 
 import (
-	"pkdindustries/soulshack/internal/config"
-	"pkdindustries/soulshack/internal/irc"
 	"time"
 
 	"github.com/alexschlessinger/pollytool/llm"
 	"github.com/alexschlessinger/pollytool/messages"
 	"github.com/alexschlessinger/pollytool/sessions"
 	"github.com/alexschlessinger/pollytool/tools"
+
+	"pkdindustries/soulshack/internal/config"
+	"pkdindustries/soulshack/internal/irc"
 )
 
 type CompletionRequest = llm.CompletionRequest
@@ -31,54 +32,49 @@ func NewCompletionRequest(config *config.Configuration, session sessions.Session
 	return req
 }
 
-func CompleteWithText(ctx irc.ChatContextInterface, msg string) (<-chan string, error) {
+// Complete processes a user message and returns a channel of response chunks.
+func Complete(ctx irc.ChatContextInterface, msg string) (<-chan string, error) {
+	// Add user message to session
 	cmsg := messages.ChatMessage{
 		Role:    messages.MessageRoleUser,
 		Content: msg,
 	}
-	truncated := cmsg.Content
+	truncated := msg
 	if len(truncated) > 100 {
 		truncated = truncated[:100] + "..."
 	}
 	ctx.GetLogger().Infof("Processing user message: %q", truncated)
 	ctx.GetSession().AddMessage(cmsg)
 
-	return complete(ctx)
-}
-
-func complete(ctx irc.ChatContextInterface) (<-chan string, error) {
+	// Build completion request
 	session := ctx.GetSession()
-	config := ctx.GetConfig()
+	cfg := ctx.GetConfig()
 	sys := ctx.GetSystem()
 
-	// Get all tools from registry
 	var allTools []tools.Tool
 	if sys.GetToolRegistry() != nil {
 		allTools = sys.GetToolRegistry().All()
 	}
 
-	req := NewCompletionRequest(config, session, allTools)
-	llm := sys.GetLLM()
+	req := NewCompletionRequest(cfg, session, allTools)
 
-	// Get the byte stream from the new interface
-	byteChan := llm.ChatCompletionStream(req, ctx)
+	// Get response stream from LLM
+	stream := sys.GetLLM().ChatCompletionStream(req, ctx)
 
-	// Convert bytes to strings for IRC output
-	outputChan := make(chan string, 10)
-
+	// Wrap with duration logging
+	output := make(chan string, 10)
 	startTime := time.Now()
 
 	go func() {
-		defer close(outputChan)
+		defer close(output)
 		defer func() {
-			duration := time.Since(startTime)
-			ctx.GetLogger().Infow("Request completed", "duration_ms", duration.Milliseconds())
+			ctx.GetLogger().Infow("Request completed", "duration_ms", time.Since(startTime).Milliseconds())
 		}()
 
-		for bytes := range byteChan {
-			outputChan <- string(bytes)
+		for chunk := range stream {
+			output <- chunk
 		}
 	}()
 
-	return outputChan, nil
+	return output, nil
 }

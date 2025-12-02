@@ -8,7 +8,7 @@ import (
 // Greeting sends a greeting message when the bot joins a channel
 func Greeting(ctx irc.ChatContextInterface) {
 	config := ctx.GetConfig()
-	outch, err := llm.CompleteWithText(ctx, config.Bot.Greeting)
+	outch, err := llm.Complete(ctx, config.Bot.Greeting)
 
 	if err != nil {
 		ctx.Reply(err.Error())

@@ -28,7 +28,7 @@ func TestComplete_ContextCancellation(t *testing.T) {
 		WithArgs("hello")
 
 	// Start completion
-	outch, err := CompleteWithText(mockCtx, "test message")
+	outch, err := Complete(mockCtx, "test message")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -76,7 +76,7 @@ func TestComplete_Timeout(t *testing.T) {
 		WithArgs("hello")
 
 	// Start completion
-	outch, err := CompleteWithText(mockCtx, "test message")
+	outch, err := Complete(mockCtx, "test message")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -106,7 +106,7 @@ func TestComplete_NoLeakedGoroutines(t *testing.T) {
 		WithArgs("hello")
 
 	// Run completion
-	outch, err := CompleteWithText(mockCtx, "test message")
+	outch, err := Complete(mockCtx, "test message")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

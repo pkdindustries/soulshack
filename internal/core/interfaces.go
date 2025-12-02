@@ -49,8 +49,8 @@ type ChatContextInterface interface {
 
 // LLM defines the interface for the language model client
 type LLM interface {
-	// ChatCompletionStream returns a single byte channel with chunked output for IRC
-	ChatCompletionStream(*llm.CompletionRequest, ChatContextInterface) <-chan []byte
+	// ChatCompletionStream returns a channel of string chunks for IRC output
+	ChatCompletionStream(*llm.CompletionRequest, ChatContextInterface) <-chan string
 }
 
 type System interface {

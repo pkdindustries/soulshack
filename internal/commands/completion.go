@@ -17,7 +17,7 @@ func (c *CompletionCommand) AdminOnly() bool  { return false }
 func (c *CompletionCommand) Execute(ctx irc.ChatContextInterface) {
 	msg := strings.Join(ctx.GetArgs(), " ")
 
-	outch, err := llm.CompleteWithText(ctx, fmt.Sprintf("(nick:%s) %s", ctx.GetSource(), msg))
+	outch, err := llm.Complete(ctx, fmt.Sprintf("(nick:%s) %s", ctx.GetSource(), msg))
 
 	if err != nil {
 		ctx.GetLogger().Errorw("Completion response error", "error", err)
