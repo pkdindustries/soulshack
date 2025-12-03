@@ -34,7 +34,8 @@ func NewPollyLLM(config config.APIConfig) *PollyLLM {
 // ChatCompletionStream returns a channel of string chunks for IRC output
 func (p *PollyLLM) ChatCompletionStream(chatCtx core.ChatContextInterface, req *CompletionRequest) <-chan string {
 	cfg := chatCtx.GetConfig()
-	if cfg.API.OllamaURL != "" {
+	// Only apply OllamaURL for ollama/ models
+	if strings.HasPrefix(req.Model, "ollama/") && cfg.API.OllamaURL != "" {
 		req.BaseURL = cfg.API.OllamaURL
 	}
 
