@@ -26,14 +26,18 @@ type MockChatContext struct {
 	Args      []string
 
 	// Recorded calls (for assertions)
-	Replies    []string
-	Actions    []string
-	JoinCalls  []string
-	NickCalls  []string
-	KickCalls  []KickCall
-	ModeCalls  []ModeCall
-	TopicCalls []TopicCall
-	OperCalls  []OperCall
+	Replies         []string
+	Actions         []string
+	JoinCalls       []string
+	NickCalls       []string
+	KickCalls       []KickCall
+	SetModeCalls    []ModeCall
+	TopicCalls      []TopicCall
+	OperCalls       []OperCall
+	BanCalls        []string
+	UnbanCalls      []string
+	InviteCalls     []InviteCall
+	SendActionCalls []ActionCall
 
 	// Injected dependencies
 	session sessions.Session
@@ -43,14 +47,20 @@ type MockChatContext struct {
 	client  *girc.Client
 
 	// Mock data for lookups
-	Users    map[string]UserInfo // nick -> UserInfo for LookupUser
-	Channels map[string]*girc.Channel
+	Users        map[string]*core.UserInfo
+	Channels     map[string]*core.ChannelInfo
+	ChannelUsers map[string][]core.ChannelUser
+	BotNick      string
 }
 
-// UserInfo holds mock user data for LookupUser
-type UserInfo struct {
-	Ident string
-	Host  string
+type InviteCall struct {
+	Channel string
+	Nick    string
+}
+
+type ActionCall struct {
+	Target  string
+	Message string
 }
 
 // Verify MockChatContext implements core.ChatContextInterface
@@ -59,20 +69,22 @@ var _ core.ChatContextInterface = (*MockChatContext)(nil)
 // NewMockContext creates a new MockChatContext with sensible defaults
 func NewMockContext() *MockChatContext {
 	return &MockChatContext{
-		Context:   context.Background(),
-		ValidFlag: true,
-		Addressed: true,
-		Admin:     false,
-		Private:   false,
-		Source:    "testuser",
-		Args:      []string{},
-		Replies:   []string{},
-		Actions:   []string{},
-		cfg:       DefaultTestConfig(),
-		logger:    zap.NewNop().Sugar(),
-		client:    NewMockIRCClient(),
-		Users:     make(map[string]UserInfo),
-		Channels:  make(map[string]*girc.Channel),
+		Context:      context.Background(),
+		ValidFlag:    true,
+		Addressed:    true,
+		Admin:        false,
+		Private:      false,
+		Source:       "testuser",
+		Args:         []string{},
+		Replies:      []string{},
+		Actions:      []string{},
+		cfg:          DefaultTestConfig(),
+		logger:       zap.NewNop().Sugar(),
+		client:       NewMockIRCClient(),
+		Users:        make(map[string]*core.UserInfo),
+		Channels:     make(map[string]*core.ChannelInfo),
+		ChannelUsers: make(map[string][]core.ChannelUser),
+		BotNick:      "soulshack",
 	}
 }
 
@@ -155,7 +167,7 @@ func (m *MockChatContext) WithURLWatcher(enabled bool) *MockChatContext {
 
 // WithUser adds a mock user for LookupUser
 func (m *MockChatContext) WithUser(nick, ident, host string) *MockChatContext {
-	m.Users[nick] = UserInfo{Ident: ident, Host: host}
+	m.Users[nick] = &core.UserInfo{Nick: nick, Ident: ident, Host: host}
 	return m
 }
 
@@ -195,8 +207,12 @@ func (m *MockChatContext) Reply(msg string) {
 	m.Replies = append(m.Replies, msg)
 }
 
-func (m *MockChatContext) Action(msg string) {
+func (m *MockChatContext) ReplyAction(msg string) {
 	m.Actions = append(m.Actions, msg)
+}
+
+func (m *MockChatContext) SendAction(target, msg string) {
+	m.SendActionCalls = append(m.SendActionCalls, ActionCall{Target: target, Message: msg})
 }
 
 // Controller methods
@@ -211,8 +227,8 @@ func (m *MockChatContext) Nick(nickname string) bool {
 	return true
 }
 
-func (m *MockChatContext) Mode(channel, mode, target string) bool {
-	m.ModeCalls = append(m.ModeCalls, ModeCall{Channel: channel, Mode: mode, Target: target})
+func (m *MockChatContext) SetMode(target, flags string, args ...string) bool {
+	m.SetModeCalls = append(m.SetModeCalls, ModeCall{Channel: target, Mode: flags, Target: strings.Join(args, " ")})
 	return true
 }
 
@@ -231,19 +247,35 @@ func (m *MockChatContext) Oper(channel, nick string) bool {
 	return true
 }
 
-func (m *MockChatContext) LookupUser(nick string) (string, string, bool) {
-	if info, ok := m.Users[nick]; ok {
-		return info.Ident, info.Host, true
-	}
-	return "", "", false
+func (m *MockChatContext) Ban(channel, target string) bool {
+	m.BanCalls = append(m.BanCalls, target)
+	return true
 }
 
-func (m *MockChatContext) LookupChannel(channel string) *girc.Channel {
+func (m *MockChatContext) Unban(channel, target string) bool {
+	m.UnbanCalls = append(m.UnbanCalls, target)
+	return true
+}
+
+func (m *MockChatContext) Invite(channel, nick string) bool {
+	m.InviteCalls = append(m.InviteCalls, InviteCall{Channel: channel, Nick: nick})
+	return true
+}
+
+func (m *MockChatContext) GetUser(nick string) *core.UserInfo {
+	return m.Users[nick]
+}
+
+func (m *MockChatContext) GetChannel(channel string) *core.ChannelInfo {
 	return m.Channels[channel]
 }
 
-func (m *MockChatContext) GetClient() *girc.Client {
-	return m.client
+func (m *MockChatContext) GetChannelUsers(channel string) []core.ChannelUser {
+	return m.ChannelUsers[channel]
+}
+
+func (m *MockChatContext) GetBotNick() string {
+	return m.BotNick
 }
 
 // Runtime methods

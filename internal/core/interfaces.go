@@ -6,7 +6,6 @@ import (
 	"github.com/alexschlessinger/pollytool/llm"
 	"github.com/alexschlessinger/pollytool/sessions"
 	"github.com/alexschlessinger/pollytool/tools"
-	"github.com/lrstanley/girc"
 	"go.uber.org/zap"
 
 	"pkdindustries/soulshack/internal/config"
@@ -27,18 +26,25 @@ type ChatContextInterface interface {
 
 	// Responder methods
 	Reply(string)
-	Action(string)
+	ReplyAction(string)
+	SendAction(target, message string)
 
 	// Controller methods
 	Join(string) bool
 	Nick(string) bool
-	Mode(string, string, string) bool
-	Kick(string, string, string) bool
-	Topic(string, string) bool
+	SetMode(target, flags string, args ...string) bool
+	Kick(channel, nick, reason string) bool
+	Ban(channel, target string) bool
+	Unban(channel, target string) bool
+	Invite(channel, nick string) bool
+	Topic(channel, topic string) bool
 	Oper(string, string) bool
-	LookupUser(string) (string, string, bool)
-	LookupChannel(string) *girc.Channel
-	GetClient() *girc.Client
+
+	// State methods
+	GetUser(nick string) *UserInfo
+	GetChannel(name string) *ChannelInfo
+	GetChannelUsers(channel string) []ChannelUser
+	GetBotNick() string
 
 	// Runtime methods
 	GetSession() sessions.Session
@@ -50,7 +56,7 @@ type ChatContextInterface interface {
 // LLM defines the interface for the language model client
 type LLM interface {
 	// ChatCompletionStream returns a channel of string chunks for IRC output
-	ChatCompletionStream(*llm.CompletionRequest, ChatContextInterface) <-chan string
+	ChatCompletionStream(ChatContextInterface, *llm.CompletionRequest) <-chan string
 }
 
 type System interface {

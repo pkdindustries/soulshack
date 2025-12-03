@@ -59,7 +59,7 @@ func Complete(ctx irc.ChatContextInterface, msg string) (<-chan string, error) {
 	req := NewCompletionRequest(cfg, session, allTools)
 
 	// Get response stream from LLM
-	stream := sys.GetLLM().ChatCompletionStream(req, ctx)
+	stream := sys.GetLLM().ChatCompletionStream(ctx, req)
 
 	// Wrap with duration logging
 	output := make(chan string, 10)

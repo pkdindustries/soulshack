@@ -32,7 +32,7 @@ func NewPollyLLM(config config.APIConfig) *PollyLLM {
 }
 
 // ChatCompletionStream returns a channel of string chunks for IRC output
-func (p *PollyLLM) ChatCompletionStream(req *CompletionRequest, chatCtx core.ChatContextInterface) <-chan string {
+func (p *PollyLLM) ChatCompletionStream(chatCtx core.ChatContextInterface, req *CompletionRequest) <-chan string {
 	cfg := chatCtx.GetConfig()
 	if cfg.API.OllamaURL != "" {
 		req.BaseURL = cfg.API.OllamaURL
@@ -113,7 +113,7 @@ func (h *callbackHandler) onReasoning(content string) {
 	if now.Sub(h.startTime) > 5*time.Second {
 		if h.lastThinkingTime.IsZero() || now.Sub(h.lastThinkingTime) > 5*time.Second {
 			elapsed := now.Sub(h.startTime).Round(time.Second)
-			h.chatCtx.Action(fmt.Sprintf("is thinking... (%s)", elapsed))
+			h.chatCtx.ReplyAction(fmt.Sprintf("is thinking... (%s)", elapsed))
 			h.lastThinkingTime = now
 		}
 	}
@@ -134,7 +134,7 @@ func (h *callbackHandler) onToolStart(tc messages.ChatMessageToolCall) {
 		if idx := strings.Index(displayName, "__"); idx != -1 {
 			displayName = displayName[idx+2:]
 		}
-		h.chatCtx.Action(fmt.Sprintf("calling %s", displayName))
+		h.chatCtx.ReplyAction(fmt.Sprintf("calling %s", displayName))
 	}
 
 	core.WithTool(h.chatCtx.GetLogger(), tc.Name, nil).Info("Executing tool")

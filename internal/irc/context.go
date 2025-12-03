@@ -93,11 +93,6 @@ func (c ChatContext) Oper(channel, nick string) bool {
 	return true
 }
 
-func (c ChatContext) Mode(channel, target, mode string) bool {
-	c.client.Cmd.Mode(channel, target, mode)
-	return true
-}
-
 func (c ChatContext) Kick(channel, nick, reason string) bool {
 	c.client.Cmd.Kick(channel, nick, reason)
 	return true
@@ -130,8 +125,8 @@ func (c ChatContext) GetSession() sessions.Session {
 	return c.Session
 }
 
-func (c ChatContext) GetClient() *girc.Client {
-	return c.client
+func (c ChatContext) GetBotNick() string {
+	return c.client.GetNick()
 }
 
 func (c ChatContext) GetSource() string {
@@ -155,7 +150,11 @@ func (c ChatContext) Reply(message string) {
 
 }
 
-func (c ChatContext) Action(message string) {
+func (c ChatContext) SendAction(target, message string) {
+	c.client.Cmd.Action(target, message)
+}
+
+func (c ChatContext) ReplyAction(message string) {
 	target := c.event.Params[0]
 	if !girc.IsValidChannel(target) {
 		// For PMs, send a regular message instead of an action
@@ -165,17 +164,83 @@ func (c ChatContext) Action(message string) {
 	c.client.Cmd.Action(target, message)
 }
 
-func (c ChatContext) LookupUser(nick string) (string, string, bool) {
-	user := c.client.LookupUser(nick)
-	if user == nil {
-		return "", "", false
-	}
-	// Return ident and host separately for flexibility
-	return user.Ident, user.Host, true
+func (c ChatContext) SetMode(target, flags string, args ...string) bool {
+	c.client.Cmd.Mode(target, flags, args...)
+	return true
 }
 
-func (c ChatContext) LookupChannel(channel string) *girc.Channel {
-	return c.client.LookupChannel(channel)
+func (c ChatContext) Ban(channel, target string) bool {
+	c.client.Cmd.Ban(channel, target)
+	return true
+}
+
+func (c ChatContext) Unban(channel, target string) bool {
+	c.client.Cmd.Unban(channel, target)
+	return true
+}
+
+func (c ChatContext) Invite(channel, nick string) bool {
+	c.client.Cmd.Invite(channel, nick)
+	return true
+}
+
+func (c ChatContext) GetUser(nick string) *core.UserInfo {
+	user := c.client.LookupUser(nick)
+	if user == nil {
+		return nil
+	}
+	return &core.UserInfo{
+		Nick:     user.Nick,
+		Ident:    user.Ident,
+		Host:     user.Host,
+		RealName: user.Extras.Name,
+		Account:  user.Extras.Account,
+		Away:     user.Extras.Away,
+		Channels: user.ChannelList,
+	}
+}
+
+func (c ChatContext) GetChannel(name string) *core.ChannelInfo {
+	ch := c.client.LookupChannel(name)
+	if ch == nil {
+		return nil
+	}
+	return &core.ChannelInfo{
+		Name:  ch.Name,
+		Modes: ch.Modes.String(),
+		Topic: ch.Topic,
+	}
+}
+
+func (c ChatContext) GetChannelUsers(channel string) []core.ChannelUser {
+	ch := c.client.LookupChannel(channel)
+	if ch == nil {
+		return nil
+	}
+
+	client := c.client
+	users := ch.Users(client)
+	admins := ch.Admins(client)
+	trusted := ch.Trusted(client)
+
+	adminMap := make(map[string]bool)
+	for _, admin := range admins {
+		adminMap[admin.Nick] = true
+	}
+	trustedMap := make(map[string]bool)
+	for _, tu := range trusted {
+		trustedMap[tu.Nick] = true
+	}
+
+	var result []core.ChannelUser
+	for _, user := range users {
+		result = append(result, core.ChannelUser{
+			Nick:    user.Nick,
+			IsOp:    adminMap[user.Nick],
+			IsVoice: trustedMap[user.Nick],
+		})
+	}
+	return result
 }
 
 // checks if the message is valid for processing

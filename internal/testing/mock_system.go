@@ -19,7 +19,7 @@ type MockLLM struct {
 }
 
 // ChatCompletionStream implements core.LLM
-func (m *MockLLM) ChatCompletionStream(req *llm.CompletionRequest, ctx core.ChatContextInterface) <-chan string {
+func (m *MockLLM) ChatCompletionStream(ctx core.ChatContextInterface, req *llm.CompletionRequest) <-chan string {
 	ch := make(chan string, len(m.Responses)+1)
 	go func() {
 		defer close(ch)

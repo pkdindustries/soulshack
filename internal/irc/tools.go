@@ -35,18 +35,16 @@ func InjectContext(ctx context.Context, chatCtx ChatContextInterface) context.Co
 // isBotOpped checks if the bot has operator status in the channel
 func isBotOpped(ctx ChatContextInterface) bool {
 	channel := ctx.GetConfig().Server.Channel
-	client := ctx.GetClient()
-	botNick := client.GetNick()
+	botNick := ctx.GetBotNick()
 
-	ch := ctx.LookupChannel(channel)
-	if ch == nil {
+	users := ctx.GetChannelUsers(channel)
+	if users == nil {
 		return false
 	}
 
-	admins := ch.Admins(client)
-	for _, admin := range admins {
-		if admin.Nick == botNick {
-			return true
+	for _, user := range users {
+		if user.Nick == botNick {
+			return user.IsOp
 		}
 	}
 	return false
@@ -199,7 +197,7 @@ func (t *IrcOpTool) Execute(ctx context.Context, args map[string]any) (string, e
 		if err := ctx.Err(); err != nil {
 			return "", err
 		}
-		chatCtx.Mode(channel, mode, nick)
+		chatCtx.SetMode(channel, mode, nick)
 	}
 
 	usersStr := strings.Join(users, ", ")
@@ -327,11 +325,11 @@ func (t *IrcBanTool) Execute(ctx context.Context, args map[string]any) (string, 
 	banMask := target
 	if !strings.Contains(target, "!") && !strings.Contains(target, "*") {
 		// Try to look up the user to get their actual ident and host
-		if ident, host, found := chatCtx.LookupUser(target); found {
+		if user := chatCtx.GetUser(target); user != nil {
 			// Create a ban mask that bans *!ident@host
 			// This is more specific than *!*@host and prevents banning other users on the same host
-			banMask = fmt.Sprintf("*!%s@%s", ident, host)
-			chatCtx.GetLogger().Infow("IRC BAN: Found user", "target", target, "ident", ident, "host", host, "ban_mask", banMask)
+			banMask = fmt.Sprintf("*!%s@%s", user.Ident, user.Host)
+			chatCtx.GetLogger().Infow("IRC BAN: Found user", "target", target, "ident", user.Ident, "host", user.Host, "ban_mask", banMask)
 		} else {
 			// User not found in channel, use simple pattern
 			banMask = target + "!*@*"
@@ -341,11 +339,10 @@ func (t *IrcBanTool) Execute(ctx context.Context, args map[string]any) (string, 
 
 	// Execute the IRC command using girc's dedicated Ban/Unban methods
 	channel := chatCtx.GetConfig().Server.Channel
-	client := chatCtx.GetClient()
 	if ban {
-		client.Cmd.Ban(channel, banMask)
+		chatCtx.Ban(channel, banMask)
 	} else {
-		client.Cmd.Unban(channel, banMask)
+		chatCtx.Unban(channel, banMask)
 	}
 
 	chatCtx.GetLogger().Infow("IRC BAN: Action completed", "action", action, "ban_mask", banMask, "channel", channel)
@@ -435,7 +432,7 @@ func (t *IrcActionTool) Execute(ctx context.Context, args map[string]any) (strin
 
 	// Send IRC action directly to the configured channel
 	channel := chatCtx.GetConfig().Server.Channel
-	chatCtx.GetClient().Cmd.Action(channel, message)
+	chatCtx.SendAction(channel, message)
 
 	chatCtx.GetLogger().Infow("IRC ACTION: Sent action", "message", message)
 	return fmt.Sprintf("* %s", message), nil
@@ -490,11 +487,10 @@ func (t *IrcModeSetTool) Execute(ctx context.Context, args map[string]any) (stri
 
 	// Execute the IRC MODE command for channel-wide modes
 	channel := chatCtx.GetConfig().Server.Channel
-	client := chatCtx.GetClient()
 	if len(modeParams) > 0 {
-		client.Cmd.Mode(channel, modeFlags, modeParams...)
+		chatCtx.SetMode(channel, modeFlags, modeParams...)
 	} else {
-		client.Cmd.Mode(channel, modeFlags)
+		chatCtx.SetMode(channel, modeFlags)
 	}
 
 	chatCtx.GetLogger().Infow("IRC MODE SET: Set modes", "modes", modes, "channel", channel)
@@ -527,14 +523,14 @@ func (t *IrcModeQueryTool) Execute(ctx context.Context, args map[string]any) (st
 	}
 
 	channel := chatCtx.GetConfig().Server.Channel
-	ch := chatCtx.LookupChannel(channel)
+	ch := chatCtx.GetChannel(channel)
 
 	if ch == nil {
 		return fmt.Sprintf("Channel %s not found in state (not joined yet?)", channel), nil
 	}
 
 	// Get modes as string from girc's CModes type
-	modeStr := ch.Modes.String()
+	modeStr := ch.Modes
 
 	if modeStr == "" {
 		return fmt.Sprintf("Channel %s has no modes set", channel), nil
@@ -587,12 +583,11 @@ func (t *IrcInviteTool) Execute(ctx context.Context, args map[string]any) (strin
 
 	// Execute the IRC INVITE command
 	channel := chatCtx.GetConfig().Server.Channel
-	client := chatCtx.GetClient()
 	for _, user := range users {
 		if err := ctx.Err(); err != nil {
 			return "", err
 		}
-		client.Cmd.Invite(channel, user)
+		chatCtx.Invite(channel, user)
 	}
 
 	usersStr := strings.Join(users, ", ")
@@ -626,40 +621,23 @@ func (t *IrcNamesTool) Execute(ctx context.Context, args map[string]any) (string
 	}
 
 	channel := chatCtx.GetConfig().Server.Channel
-	ch := chatCtx.LookupChannel(channel)
+	users := chatCtx.GetChannelUsers(channel)
 
-	if ch == nil {
+	if users == nil {
 		return fmt.Sprintf("Channel %s not found in state (not joined yet?)", channel), nil
 	}
 
-	client := chatCtx.GetClient()
-	users := ch.Users(client)
-
 	if len(users) == 0 {
 		return fmt.Sprintf("No users found in %s", channel), nil
-	}
-
-	// Get lists of admins and trusted users for prefix determination
-	admins := ch.Admins(client)
-	trusted := ch.Trusted(client)
-
-	// Create maps for quick lookup
-	adminMap := make(map[string]bool)
-	for _, admin := range admins {
-		adminMap[admin.Nick] = true
-	}
-	trustedMap := make(map[string]bool)
-	for _, tu := range trusted {
-		trustedMap[tu.Nick] = true
 	}
 
 	// Build list of nicks with their prefixes (@, +, etc.)
 	var nicks []string
 	for _, user := range users {
 		prefix := ""
-		if adminMap[user.Nick] {
+		if user.IsOp {
 			prefix = "@"
-		} else if trustedMap[user.Nick] {
+		} else if user.IsVoice {
 			prefix = "+"
 		}
 		nicks = append(nicks, prefix+user.Nick)
@@ -705,8 +683,7 @@ func (t *IrcWhoisTool) Execute(ctx context.Context, args map[string]any) (string
 		return "", fmt.Errorf("nick must be a string")
 	}
 
-	client := chatCtx.GetClient()
-	user := client.LookupUser(nick)
+	user := chatCtx.GetUser(nick)
 
 	if user == nil {
 		return fmt.Sprintf("User %s not found in cached state", nick), nil
@@ -718,18 +695,18 @@ func (t *IrcWhoisTool) Execute(ctx context.Context, args map[string]any) (string
 	info.WriteString(fmt.Sprintf("Hostmask: %s!%s@%s\n", user.Nick, user.Ident, user.Host))
 
 	// Add extras if available
-	if user.Extras.Name != "" {
-		info.WriteString(fmt.Sprintf("Real name: %s\n", user.Extras.Name))
+	if user.RealName != "" {
+		info.WriteString(fmt.Sprintf("Real name: %s\n", user.RealName))
 	}
-	if user.Extras.Account != "" {
-		info.WriteString(fmt.Sprintf("Account: %s (authenticated)\n", user.Extras.Account))
+	if user.Account != "" {
+		info.WriteString(fmt.Sprintf("Account: %s (authenticated)\n", user.Account))
 	}
-	if user.Extras.Away != "" {
-		info.WriteString(fmt.Sprintf("Away: %s\n", user.Extras.Away))
+	if user.Away != "" {
+		info.WriteString(fmt.Sprintf("Away: %s\n", user.Away))
 	}
 
 	// List channels
-	channels := user.ChannelList
+	channels := user.Channels
 	if len(channels) > 0 {
 		info.WriteString(fmt.Sprintf("Channels (%d): %s\n", len(channels), strings.Join(channels, ", ")))
 	}
