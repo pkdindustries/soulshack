@@ -1,181 +1,130 @@
-![soulshack](https://i.imgur.com/48mbm6x.png)
+# Soulshack User Guide
 
+![soulshack](docs/images/logo.png)
 
-## overview
+**Soulshack** is an advanced IRC chatbot powered by LLMs, designed to bridge traditional chat with modern AI capabilities.
 
-soulshack is an IRC chatbot powered by LLMs. supports OpenAI, Anthropic, Google Gemini, and Ollama.
+## Features
 
-- multi-provider llm support (openai, anthropic, gemini, ollama)
-- unified tool system (shell scripts, MCP servers, IRC channel tools)
-- ssl/tls and SASL authentication
-- session management with configurable history and ttl
-- streaming responses with irc-appropriate chunking
-- passive url watching mode
-- runtime configuration via irc commands
+-   **Multi-Provider Support**: Works with OpenAI, Anthropic, Google Gemini, and Ollama.
+-   **Unified Tool System**: Supports shell scripts, MCP servers, and native IRC tools.
+-   **Secure**: Full SSL/TLS and SASL authentication support.
+-   **Session Management**: Configurable history, context window, and session TTL.
+-   **Streaming**: Real-time responses with IRC-appropriate chunking.
+-   **Passive Mode**: Optional URL watching and analysis.
+-   **Runtime Configuration**: Manage settings via IRC commands.
 
-## quickstart
+## Quickstart
 
-```bash
-go build ./cmd/soulshack
-```
+### Option 1: Docker
 
 ```bash
 docker build . -t soulshack:dev
+docker run -e SOULSHACK_OPENAIKEY=sk-... soulshack:dev --channel '#soulshack'
 ```
 
-model format is `provider/model-name`:
+### Option 2: Build from Source
 
-```bash
-# openai
-SOULSHACK_OPENAIKEY=sk-... \
-soulshack --nick chatbot --server irc.example.net --port 6697 --tls \
-  --channel '#soulshack' --model openai/gpt-5
+**Prerequisites**: Go 1.23+
 
-# anthropic
-SOULSHACK_ANTHROPICKEY=sk-ant-... \
-soulshack --channel '#soulshack' --model anthropic/claude-sonnet-4-5-20250929
+1.  **Clone and Build**:
+    ```bash
+    git clone https://github.com/pkdindustries/soulshack.git
+    cd soulshack
+    go build -o soulshack cmd/soulshack/main.go
+    ```
 
-# gemini
-SOULSHACK_GEMINIKEY=AIza... \
-soulshack --channel '#soulshack' --model gemini/gemini-3-pro-preview
+2.  **Run**:
+    ```bash
+    # OpenAI
+    ./soulshack --nick chatbot --server irc.libera.chat --tls \
+      --channel '#soulshack' --model openai/gpt-4o --openaikey "sk-..."
 
-# ollama (local)
-soulshack --channel '#soulshack' --model ollama/llama3.2
-```
+    # Ollama (Local)
+    ./soulshack --channel '#soulshack' --model ollama/llama3.2
+    ```
 
-with tools:
+## Configuration
 
-```bash
-soulshack --channel '#soulshack' --model ollama/llama3.2 \
-  --tool examples/tools/datetime.sh \
-  --tool examples/mcp/filesystem.json \
-  --tool irc_op --tool irc_kick
-```
+Soulshack can be configured via command-line flags, environment variables (`SOULSHACK_*`), or a YAML config file.
 
-see `examples/chatbot.yml` for a full config example.
+### Configuration Flags
 
-## configuration
-
-configure via flags, environment variables (`SOULSHACK_*`), or yaml config file (`--config`).
-
-### flags
-
-| flag | default | description |
+| Flag | Default | Description |
 |------|---------|-------------|
-| `-n, --nick` | soulshack | bot nickname |
-| `-s, --server` | localhost | irc server |
-| `-p, --port` | 6667 | irc port |
-| `-c, --channel` | | channel to join |
-| `-e, --tls` | false | enable tls |
-| `--tlsinsecure` | false | skip cert verification |
-| `--saslnick` | | sasl username |
-| `--saslpass` | | sasl password |
-| `-b, --config` | | yaml config file |
-| `-A, --admins` | | admin hostmasks (comma-separated) |
-| `-V, --verbose` | false | debug logging |
-| `--model` | ollama/llama3.2 | llm model (provider/name) |
-| `--maxtokens` | 4096 | max response tokens |
-| `--temperature` | 0.7 | sampling temperature |
-| `--top_p` | 1.0 | nucleus sampling |
-| `-t, --apitimeout` | 5m | api request timeout |
-| `--openaikey` | | openai api key |
-| `--openaiurl` | | custom openai endpoint |
-| `--anthropickey` | | anthropic api key |
-| `--geminikey` | | gemini api key |
-| `--ollamaurl` | http://localhost:11434 | ollama endpoint |
-| `--ollamakey` | | ollama bearer token |
-| `--tool` | | tool to load (repeatable) |
-| `--thinking` | false | enable reasoning mode |
-| `--showthinkingaction` | true | show [thinking] irc action |
-| `--showtoolactions` | true | show [calling tool] irc action |
-| `--urlwatcher` | false | passive url watching |
-| `-a, --addressed` | true | require nick addressing |
-| `-S, --sessionduration` | 10m | session ttl |
-| `-H, --sessionhistory` | 250 | max history lines |
-| `-m, --chunkmax` | 350 | max chars per message |
-| `--prompt` | (default) | system prompt |
-| `--greeting` | hello. | channel join greeting |
+| `-n, --nick` | soulshack | Bot nickname |
+| `-s, --server` | localhost | IRC server address |
+| `-p, --port` | 6667 | IRC server port |
+| `-c, --channel` | | Channel to join |
+| `-e, --tls` | false | Enable TLS |
+| `--tlsinsecure` | false | Skip TLS cert verification |
+| `--saslnick` | | SASL username |
+| `--saslpass` | | SASL password |
+| `-b, --config` | | Path to YAML config file |
+| `-A, --admins` | | Comma-separated admin hostmasks |
+| `-V, --verbose` | false | Enable debug logging |
+| `--model` | ollama/llama3.2 | LLM model (`provider/name`) |
+| `--maxtokens` | 4096 | Max tokens per response |
+| `--temperature` | 0.7 | Sampling temperature |
+| `-t, --apitimeout` | 5m | API request timeout |
+| `--openaikey` | | OpenAI API key |
+| `--anthropickey` | | Anthropic API key |
+| `--geminikey` | | Google Gemini API key |
+| `--ollamaurl` | http://localhost:11434 | Ollama API endpoint |
+| `--tool` | | Path to tool definition (repeatable) |
+| `--thinking` | false | Enable reasoning mode |
+| `--urlwatcher` | false | Enable passive URL watching |
 
-## commands
+### YAML Configuration
 
-| command | admin | description |
-|---------|-------|-------------|
-| `/set <key> <value>` | yes | set config parameter |
-| `/get <key>` | no | get config parameter |
-| `/tools` | no | list loaded tools |
-| `/tools add <spec>` | yes | add tool (path or irc_*) |
-| `/tools remove <pattern>` | yes | remove tool(s) by name/pattern |
-| `/admins` | yes | list bot admins |
-| `/admins add <hostmask>` | yes | add admin hostmask |
-| `/admins remove <hostmask>` | yes | remove admin hostmask |
-| `/help` | no | show available commands |
-| `/version` | no | show bot version |
+Create a `config.yaml` file:
 
-### configurable parameters
+```yaml
+server:
+  nick: "soulshack"
+  server: "irc.libera.chat"
+  port: 6697
+  channel: "#soulshack"
+  tls: true
 
-`model`, `prompt`, `maxtokens`, `temperature`, `top_p`, `addressed`, `openaiurl`, `ollamaurl`, `ollamakey`, `openaikey`, `anthropickey`, `geminikey`, `thinking`, `showthinkingaction`, `showtoolactions`, `sessionduration`, `apitimeout`, `sessionhistory`, `chunkmax`, `urlwatcher`
-
-## tools
-
-unified tool system supporting shell scripts, MCP servers, and IRC tools.
-
-tool names are namespaced: `script__datetime`, `filesystem__read_file`, `irc_op`
-
-### shell tools
-
-executable scripts responding to `--schema` (json) and `--execute <json>`:
-
-```bash
-#!/bin/bash
-if [[ "$1" == "--schema" ]]; then
-  cat <<EOF
-{
-  "title": "get_date",
-  "description": "get current date",
-  "type": "object",
-  "properties": {
-    "format": { "type": "string", "description": "date format" }
-  },
-  "required": ["format"]
-}
-EOF
-  exit 0
-fi
-
-if [[ "$1" == "--execute" ]]; then
-  format=$(jq -r '.format' <<< "$2")
-  date -- "$format"
-fi
+bot:
+  admins: ["nick!user@host"]
+  tools:
+    - "examples/tools/datetime.sh"
+    - "examples/mcp/filesystem.json"
 ```
 
-### MCP servers
+Run with: `./soulshack --config config.yaml`
 
-json config for MCP protocol servers:
+## Commands
 
-```json
-{
-  "command": "npx",
-  "args": ["@modelcontextprotocol/server-filesystem", "/tmp"]
-}
-```
+| Command | Admin? | Description |
+|---------|--------|-------------|
+| `/help` | No | Show available commands |
+| `/version` | No | Show bot version |
+| `/tools` | No | List loaded tools |
+| `/tools add <spec>` | Yes | Add a tool at runtime |
+| `/tools remove <pattern>` | Yes | Remove a tool |
+| `/admins` | Yes | List admins |
+| `/admins add <hostmask>` | Yes | Add an admin |
+| `/set <key> <value>` | Yes | Set config parameter |
+| `/get <key>` | No | Get config parameter |
 
-see [modelcontextprotocol.io](https://modelcontextprotocol.io)
+## Built-in Tools
 
-### IRC tools
+Soulshack comes with native IRC management tools (permissions apply):
 
-built-in channel management (require appropriate permissions):
+-   `irc_op`, `irc_deop`: Grant/revoke operator status.
+-   `irc_kick`, `irc_ban`, `irc_unban`: User management.
+-   `irc_topic`: Set channel topic.
+-   `irc_invite`: Invite users to channel.
+-   `irc_mode_set`, `irc_mode_query`: Manage channel modes.
+-   `irc_names`, `irc_whois`: User information.
 
-| tool | description |
-|------|-------------|
-| `irc_op` | grant/revoke operator status |
-| `irc_kick` | kick users |
-| `irc_ban` | ban/unban users |
-| `irc_topic` | set channel topic |
-| `irc_action` | send /me action |
-| `irc_mode_set` | set channel modes |
-| `irc_mode_query` | query channel modes |
-| `irc_invite` | invite users |
-| `irc_names` | list channel users |
-| `irc_whois` | user info lookup |
+## Documentation
 
-## named as tribute to my old friend dayv, sp0t, who i think of often
+-   [Modifying Code](docs/modifying_code.md): Guide for adding commands and tools.
+-   [Architecture](docs/architecture.md): High-level system overview.
+
+---
+*Named as tribute to my old friend dayv, sp0t, who i think of often.*
