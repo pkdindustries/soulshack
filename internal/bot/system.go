@@ -60,7 +60,6 @@ func NewSystem(c *config.Configuration) core.System {
 	zap.S().Info("Initialized session store: syncmap")
 
 	s.Store = sessions.NewSyncMapSessionStore(&sessions.Metadata{
-		MaxHistory:       c.Session.MaxHistory,
 		MaxHistoryTokens: c.Session.MaxContext,
 		TTL:              c.Session.TTL,
 		SystemPrompt:     c.Bot.Prompt,

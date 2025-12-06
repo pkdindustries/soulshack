@@ -151,17 +151,6 @@ var configFields = map[string]configField{
 		},
 		getter: func(c *config.Configuration) string { return c.API.Timeout.String() },
 	},
-	"sessionhistory": {
-		setter: func(c *config.Configuration, v string) error {
-			n, err := strconv.Atoi(v)
-			if err != nil {
-				return fmt.Errorf("invalid value for sessionhistory. Please provide a valid integer")
-			}
-			c.Session.MaxHistory = n
-			return nil
-		},
-		getter: func(c *config.Configuration) string { return fmt.Sprintf("%d", c.Session.MaxHistory) },
-	},
 	"chunkmax": {
 		setter: func(c *config.Configuration, v string) error {
 			n, err := strconv.Atoi(v)
