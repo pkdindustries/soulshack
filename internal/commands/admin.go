@@ -58,6 +58,11 @@ func (c *AdminCommand) addAdmin(ctx irc.ChatContextInterface, hostmask string) {
 		return
 	}
 
+	if err := irc.ValidateHostmask(hostmask); err != nil {
+		ctx.Reply(fmt.Sprintf("Invalid hostmask: %s", err))
+		return
+	}
+
 	cfg := ctx.GetConfig()
 
 	// Check if already exists

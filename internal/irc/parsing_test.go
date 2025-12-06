@@ -152,3 +152,84 @@ func TestCheckPrivate(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateHostmask_Valid(t *testing.T) {
+	tests := []struct {
+		name     string
+		hostmask string
+	}{
+		{"basic", "nick!user@host.com"},
+		{"with tilde prefix", "nick!~user@host.com"},
+		{"with hyphen in nick", "nick-name!user@host.com"},
+		{"with underscore in user", "nick!user_name@host.com"},
+		{"with dot in user", "nick!user.name@host.com"},
+		{"ipv4 host", "nick!user@192.168.1.1"},
+		{"ipv6 host", "nick!user@::1"},
+		{"ipv6 full", "nick!user@2001:db8::1"},
+		{"subdomain", "nick!user@sub.domain.example.com"},
+		{"special nick chars", "[nick]!user@host.com"},
+		{"backslash nick", "nick\\name!user@host.com"},
+		{"caret nick", "nick^name!user@host.com"},
+		{"backtick nick", "`nick!user@host.com"},
+		{"pipe nick", "nick|away!user@host.com"},
+		{"curly nick", "{nick}!user@host.com"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateHostmask(tt.hostmask)
+			if err != nil {
+				t.Errorf("ValidateHostmask(%q) = %v, want nil", tt.hostmask, err)
+			}
+		})
+	}
+}
+
+func TestValidateHostmask_Invalid(t *testing.T) {
+	tests := []struct {
+		name     string
+		hostmask string
+		wantErr  string
+	}{
+		{"empty", "", "cannot be empty"},
+		{"no exclamation", "nick@host.com", "must contain '!'"},
+		{"no at sign", "nick!userhost.com", "must contain '@'"},
+		{"wrong order", "nick@user!host.com", "'!' must come before '@'"},
+		{"empty nick", "!user@host.com", "nick cannot be empty"},
+		{"empty user", "nick!@host.com", "user cannot be empty"},
+		{"empty host", "nick!user@", "host cannot be empty"},
+		{"nick starts with digit", "1nick!user@host.com", "invalid nick"},
+		{"nick starts with hyphen", "-nick!user@host.com", "invalid nick"},
+		{"nick with space", "nick name!user@host.com", "invalid nick"},
+		{"user with space", "nick!user name@host.com", "invalid user"},
+		{"invalid host", "nick!user@host..com", "invalid host"},
+		{"host with space", "nick!user@host name.com", "invalid host"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateHostmask(tt.hostmask)
+			if err == nil {
+				t.Errorf("ValidateHostmask(%q) = nil, want error containing %q", tt.hostmask, tt.wantErr)
+				return
+			}
+			if !contains(err.Error(), tt.wantErr) {
+				t.Errorf("ValidateHostmask(%q) error = %q, want error containing %q", tt.hostmask, err.Error(), tt.wantErr)
+			}
+		})
+	}
+}
+
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(substr) == 0 ||
+		(len(s) > 0 && len(substr) > 0 && findSubstring(s, substr)))
+}
+
+func findSubstring(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}
