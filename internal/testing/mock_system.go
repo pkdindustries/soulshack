@@ -59,9 +59,9 @@ func NewMockSystem() *MockSystem {
 	return &MockSystem{
 		ToolRegistry: tools.NewToolRegistry([]tools.Tool{}),
 		SessionStore: sessions.NewSyncMapSessionStore(&sessions.Metadata{
-			MaxHistory:   50,
-			TTL:          time.Minute * 10,
-			SystemPrompt: "You are a test bot.",
+			MaxHistoryTokens: 100000,
+			TTL:              time.Minute * 10,
+			SystemPrompt:     "You are a test bot.",
 		}),
 		LLM: &MockLLM{
 			Responses: []string{"Hello from mock LLM"},

@@ -71,7 +71,7 @@ greeting: wave hello
 # ============================================================================
 
 sessionduration: 30m           # Clear context after idle time (default: 10m)
-sessionhistory: 1000            # Max messages to keep in context
+maxcontext: 100000              # Max tokens to keep in context (default: 100000)
 # chunkmax: 350                  # Max chars per IRC message
 
 # ============================================================================

@@ -35,7 +35,7 @@ func DefaultTestConfig() *config.Configuration {
 		},
 		Session: &config.SessionConfig{
 			ChunkMax:   350,
-			MaxHistory: 50,
+			MaxContext: 100000,
 			TTL:        time.Minute * 10,
 		},
 		API: &config.APIConfig{
