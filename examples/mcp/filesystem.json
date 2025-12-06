@@ -1,5 +1,0 @@
-{
-  "command": "npx",
-  "args": ["@modelcontextprotocol/server-filesystem", "/tmp"],
-  "env": {}
-}

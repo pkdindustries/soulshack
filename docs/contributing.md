@@ -68,17 +68,41 @@ fi
 To use: Add the script path to your config or use `/tools add ./get_date.sh`.
 
 #### 2. MCP Servers
-Soulshack supports the [Model Context Protocol](https://modelcontextprotocol.io). You can load MCP servers by providing a JSON configuration file.
+Soulshack supports the [Model Context Protocol](https://modelcontextprotocol.io). You can load MCP servers by providing a JSON configuration file using the Claude Desktop format.
 
-**Example (`filesystem.json`):**
+**Local Server Example (`filesystem.json`):**
 ```json
 {
-  "command": "npx",
-  "args": ["@modelcontextprotocol/server-filesystem", "/tmp"],
-  "env": {
-    "DEBUG": "true"
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["@modelcontextprotocol/server-filesystem", "/tmp"],
+      "env": {}
+    }
   }
 }
+```
+
+**Remote Server Example (SSE transport):**
+```json
+{
+  "mcpServers": {
+    "remote-api": {
+      "url": "https://api.example.com/mcp",
+      "transport": "sse",
+      "headers": {
+        "Authorization": "Bearer your-api-key"
+      },
+      "timeout": "30s"
+    }
+  }
+}
+```
+
+**Multi-server configs:** If a config file contains multiple servers, use `#servername` to select one:
+```bash
+--tool mcp.json#filesystem
+/tools add mcp.json#git
 ```
 
 To use: Add the JSON file path to your config or use `/tools add ./filesystem.json`.

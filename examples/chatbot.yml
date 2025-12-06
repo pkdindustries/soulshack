@@ -78,23 +78,23 @@ sessionhistory: 1000            # Max messages to keep in context
 # TOOLS CONFIGURATION
 # ============================================================================
 
-# Unified tool system - handles shell scripts, MCP servers, and IRC tools
+# Unified tool system - handles shell scripts, MCP servers, and native tools
 # Shell scripts: provide direct path to executable
 # MCP servers: provide path to JSON config file
-# IRC tools: use irc_ prefix (e.g., irc_op, irc_kick)
+# Native tools: use irc__ prefix (e.g., irc__op)
 tool:
-  - examples/tools/datetime.sh   # Shell script for date/time queries
+  - examples/tools/datetime.sh     # Shell script for date/time queries
 
-  - irc_op                        # Grant/revoke op status
-  - irc_kick                      # Kick users from channel
-  - irc_ban                       # Ban/unban users (smart hostmask lookup)
-  - irc_mode_set                  # Set channel modes (+m, +t, +n, +i, +k, +l)
-  - irc_invite                    # Invite users to channel
-  - irc_mode_query                # Query current channel modes
-  - irc_names                     # List users in channel with prefixes
-  - irc_whois                     # Get detailed user info (instant, cached)
-  - irc_topic                     # Change channel topic
-  - irc_action                    # Send /me actions
+  - irc__op                        # Grant/revoke op status
+  - irc__kick                      # Kick users from channel
+  - irc__ban                       # Ban/unban users (smart hostmask lookup)
+  - irc__mode_set                  # Set channel modes (+m, +t, +n, +i, +k, +l)
+  - irc__invite                    # Invite users to channel
+  - irc__mode_query                # Query current channel modes
+  - irc__names                     # List users in channel with prefixes
+  - irc__whois                     # Get detailed user info (instant, cached)
+  - irc__topic                     # Change channel topic
+  - irc__action                    # Send /me actions
 
   # - examples/mcp/filesystem.json  # MCP server config for file operations
   # - examples/mcp/git.json         # MCP server config for git operations
@@ -102,10 +102,28 @@ tool:
 
 # Example MCP server JSON config (save as filesystem.json):
 # {
-#   "command": "npx",
-#   "args": ["@modelcontextprotocol/server-filesystem", "/tmp"],
-#   "env": {}
+#   "mcpServers": {
+#     "filesystem": {
+#       "command": "npx",
+#       "args": ["@modelcontextprotocol/server-filesystem", "/tmp"],
+#       "env": {}
+#     }
+#   }
 # }
+#
+# For remote MCP servers (SSE transport):
+# {
+#   "mcpServers": {
+#     "remote": {
+#       "url": "https://api.example.com/mcp",
+#       "transport": "sse",
+#       "headers": {"Authorization": "Bearer token"},
+#       "timeout": "30s"
+#     }
+#   }
+# }
+#
+# Multi-server configs: use config.json#servername to select a specific server
 
 # ============================================================================
 # DEBUGGING
