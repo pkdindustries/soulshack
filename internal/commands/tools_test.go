@@ -33,12 +33,12 @@ func TestToolsCommand_ListEmpty(t *testing.T) {
 func TestToolsCommand_ListTools(t *testing.T) {
 	mockSys := mocktest.NewMockSystem()
 
-	// Register and load a mock tool
-	mockSys.ToolRegistry.RegisterNative("test_tool", func() tools.Tool {
-		return &mockTool{name: "test_tool"}
+	// Register and load a mock tool with full namespaced name
+	mockSys.ToolRegistry.RegisterNative("native__test_tool", func() tools.Tool {
+		return &mockTool{name: "native__test_tool"}
 	})
 	// LoadToolAuto instantiates the native tool from the factory
-	mockSys.ToolRegistry.LoadToolAuto("test_tool")
+	mockSys.ToolRegistry.LoadToolAuto("native__test_tool")
 
 	ctx := mocktest.NewMockContext().
 		WithSystem(mockSys).
@@ -50,8 +50,9 @@ func TestToolsCommand_ListTools(t *testing.T) {
 	if ctx.ReplyCount() != 1 {
 		t.Fatalf("expected 1 reply, got %d", ctx.ReplyCount())
 	}
-	if !strings.Contains(ctx.LastReply(), "test_tool") {
-		t.Errorf("expected tool list to contain 'test_tool', got: %s", ctx.LastReply())
+	// Tools are grouped by namespace; native tools are prefixed with "native__"
+	if !strings.Contains(ctx.LastReply(), "native") {
+		t.Errorf("expected tool list to contain namespace 'native', got: %s", ctx.LastReply())
 	}
 }
 

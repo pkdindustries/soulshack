@@ -130,7 +130,7 @@ func (h *callbackHandler) beforeToolExecute(ctx context.Context, tc messages.Cha
 }
 
 func (h *callbackHandler) onToolStart(tc messages.ChatMessageToolCall) {
-	if h.cfg.Bot.ShowToolActions && tc.Name != "irc_action" {
+	if h.cfg.Bot.ShowToolActions && tc.Name != "irc__action" {
 		displayName := tc.Name
 		if idx := strings.Index(displayName, "__"); idx != -1 {
 			displayName = displayName[idx+2:]

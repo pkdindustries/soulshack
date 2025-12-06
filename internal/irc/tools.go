@@ -104,34 +104,34 @@ func parseUsersArg(args map[string]any) ([]string, error) {
 
 // RegisterIRCTools registers IRC tools as native tools with polly's registry
 func RegisterIRCTools(registry *tools.ToolRegistry) {
-	registry.RegisterNative("irc_op", func() tools.Tool {
+	registry.RegisterNative("irc__op", func() tools.Tool {
 		return &IrcOpTool{}
 	})
-	registry.RegisterNative("irc_kick", func() tools.Tool {
+	registry.RegisterNative("irc__kick", func() tools.Tool {
 		return &IrcKickTool{}
 	})
-	registry.RegisterNative("irc_ban", func() tools.Tool {
+	registry.RegisterNative("irc__ban", func() tools.Tool {
 		return &IrcBanTool{}
 	})
-	registry.RegisterNative("irc_topic", func() tools.Tool {
+	registry.RegisterNative("irc__topic", func() tools.Tool {
 		return &IrcTopicTool{}
 	})
-	registry.RegisterNative("irc_action", func() tools.Tool {
+	registry.RegisterNative("irc__action", func() tools.Tool {
 		return &IrcActionTool{}
 	})
-	registry.RegisterNative("irc_mode_set", func() tools.Tool {
+	registry.RegisterNative("irc__mode_set", func() tools.Tool {
 		return &IrcModeSetTool{}
 	})
-	registry.RegisterNative("irc_mode_query", func() tools.Tool {
+	registry.RegisterNative("irc__mode_query", func() tools.Tool {
 		return &IrcModeQueryTool{}
 	})
-	registry.RegisterNative("irc_invite", func() tools.Tool {
+	registry.RegisterNative("irc__invite", func() tools.Tool {
 		return &IrcInviteTool{}
 	})
-	registry.RegisterNative("irc_names", func() tools.Tool {
+	registry.RegisterNative("irc__names", func() tools.Tool {
 		return &IrcNamesTool{}
 	})
-	registry.RegisterNative("irc_whois", func() tools.Tool {
+	registry.RegisterNative("irc__whois", func() tools.Tool {
 		return &IrcWhoisTool{}
 	})
 }
@@ -143,7 +143,7 @@ type IrcOpTool struct {
 
 func (t *IrcOpTool) GetSchema() *jsonschema.Schema {
 	return &jsonschema.Schema{
-		Title:       "irc_op",
+		Title:       "irc__op",
 		Description: "Grant or revoke IRC operator status for one or more users",
 		Type:        "object",
 		Properties: map[string]*jsonschema.Schema{
@@ -164,7 +164,7 @@ func (t *IrcOpTool) GetSchema() *jsonschema.Schema {
 }
 
 func (t *IrcOpTool) GetName() string {
-	return "irc_op"
+	return "irc__op"
 }
 
 func (t *IrcOpTool) Execute(ctx context.Context, args map[string]any) (string, error) {
@@ -212,7 +212,7 @@ type IrcKickTool struct {
 
 func (t *IrcKickTool) GetSchema() *jsonschema.Schema {
 	return &jsonschema.Schema{
-		Title:       "irc_kick",
+		Title:       "irc__kick",
 		Description: "Kick one or more users from the IRC channel",
 		Type:        "object",
 		Properties: map[string]*jsonschema.Schema{
@@ -233,7 +233,7 @@ func (t *IrcKickTool) GetSchema() *jsonschema.Schema {
 }
 
 func (t *IrcKickTool) GetName() string {
-	return "irc_kick"
+	return "irc__kick"
 }
 
 func (t *IrcKickTool) Execute(ctx context.Context, args map[string]any) (string, error) {
@@ -276,7 +276,7 @@ type IrcBanTool struct {
 
 func (t *IrcBanTool) GetSchema() *jsonschema.Schema {
 	return &jsonschema.Schema{
-		Title:       "irc_ban",
+		Title:       "irc__ban",
 		Description: "Ban or unban a user from the IRC channel",
 		Type:        "object",
 		Properties: map[string]*jsonschema.Schema{
@@ -294,7 +294,7 @@ func (t *IrcBanTool) GetSchema() *jsonschema.Schema {
 }
 
 func (t *IrcBanTool) GetName() string {
-	return "irc_ban"
+	return "irc__ban"
 }
 
 func (t *IrcBanTool) Execute(ctx context.Context, args map[string]any) (string, error) {
@@ -356,7 +356,7 @@ type IrcTopicTool struct {
 
 func (t *IrcTopicTool) GetSchema() *jsonschema.Schema {
 	return &jsonschema.Schema{
-		Title:       "irc_topic",
+		Title:       "irc__topic",
 		Description: "Set the IRC channel topic",
 		Type:        "object",
 		Properties: map[string]*jsonschema.Schema{
@@ -370,7 +370,7 @@ func (t *IrcTopicTool) GetSchema() *jsonschema.Schema {
 }
 
 func (t *IrcTopicTool) GetName() string {
-	return "irc_topic"
+	return "irc__topic"
 }
 
 func (t *IrcTopicTool) Execute(ctx context.Context, args map[string]any) (string, error) {
@@ -402,7 +402,7 @@ type IrcActionTool struct {
 
 func (t *IrcActionTool) GetSchema() *jsonschema.Schema {
 	return &jsonschema.Schema{
-		Title:       "irc_action",
+		Title:       "irc__action",
 		Description: "Send an action message to the IRC channel",
 		Type:        "object",
 		Properties: map[string]*jsonschema.Schema{
@@ -416,7 +416,7 @@ func (t *IrcActionTool) GetSchema() *jsonschema.Schema {
 }
 
 func (t *IrcActionTool) GetName() string {
-	return "irc_action"
+	return "irc__action"
 }
 
 func (t *IrcActionTool) Execute(ctx context.Context, args map[string]any) (string, error) {
@@ -445,7 +445,7 @@ type IrcModeSetTool struct {
 
 func (t *IrcModeSetTool) GetSchema() *jsonschema.Schema {
 	return &jsonschema.Schema{
-		Title:       "irc_mode_set",
+		Title:       "irc__mode_set",
 		Description: "Set or unset channel-wide modes like +m (moderated), +t (topic protection), +n (no external messages), +i (invite only), +k (channel key), +l (user limit)",
 		Type:        "object",
 		Properties: map[string]*jsonschema.Schema{
@@ -459,7 +459,7 @@ func (t *IrcModeSetTool) GetSchema() *jsonschema.Schema {
 }
 
 func (t *IrcModeSetTool) GetName() string {
-	return "irc_mode_set"
+	return "irc__mode_set"
 }
 
 func (t *IrcModeSetTool) Execute(ctx context.Context, args map[string]any) (string, error) {
@@ -504,7 +504,7 @@ type IrcModeQueryTool struct {
 
 func (t *IrcModeQueryTool) GetSchema() *jsonschema.Schema {
 	return &jsonschema.Schema{
-		Title:       "irc_mode_query",
+		Title:       "irc__mode_query",
 		Description: "Query the current channel modes (uses cached state, instant response)",
 		Type:        "object",
 		Properties:  map[string]*jsonschema.Schema{},
@@ -513,7 +513,7 @@ func (t *IrcModeQueryTool) GetSchema() *jsonschema.Schema {
 }
 
 func (t *IrcModeQueryTool) GetName() string {
-	return "irc_mode_query"
+	return "irc__mode_query"
 }
 
 func (t *IrcModeQueryTool) Execute(ctx context.Context, args map[string]any) (string, error) {
@@ -547,7 +547,7 @@ type IrcInviteTool struct {
 
 func (t *IrcInviteTool) GetSchema() *jsonschema.Schema {
 	return &jsonschema.Schema{
-		Title:       "irc_invite",
+		Title:       "irc__invite",
 		Description: "Invite one or more users to the IRC channel",
 		Type:        "object",
 		Properties: map[string]*jsonschema.Schema{
@@ -564,7 +564,7 @@ func (t *IrcInviteTool) GetSchema() *jsonschema.Schema {
 }
 
 func (t *IrcInviteTool) GetName() string {
-	return "irc_invite"
+	return "irc__invite"
 }
 
 func (t *IrcInviteTool) Execute(ctx context.Context, args map[string]any) (string, error) {
@@ -602,7 +602,7 @@ type IrcNamesTool struct {
 
 func (t *IrcNamesTool) GetSchema() *jsonschema.Schema {
 	return &jsonschema.Schema{
-		Title:       "irc_names",
+		Title:       "irc__names",
 		Description: "List all users currently in the IRC channel (uses cached state, instant response)",
 		Type:        "object",
 		Properties:  map[string]*jsonschema.Schema{},
@@ -611,7 +611,7 @@ func (t *IrcNamesTool) GetSchema() *jsonschema.Schema {
 }
 
 func (t *IrcNamesTool) GetName() string {
-	return "irc_names"
+	return "irc__names"
 }
 
 func (t *IrcNamesTool) Execute(ctx context.Context, args map[string]any) (string, error) {
@@ -655,7 +655,7 @@ type IrcWhoisTool struct {
 
 func (t *IrcWhoisTool) GetSchema() *jsonschema.Schema {
 	return &jsonschema.Schema{
-		Title:       "irc_whois",
+		Title:       "irc__whois",
 		Description: "Get detailed information about a user (uses cached state, instant response)",
 		Type:        "object",
 		Properties: map[string]*jsonschema.Schema{
@@ -669,7 +669,7 @@ func (t *IrcWhoisTool) GetSchema() *jsonschema.Schema {
 }
 
 func (t *IrcWhoisTool) GetName() string {
-	return "irc_whois"
+	return "irc__whois"
 }
 
 func (t *IrcWhoisTool) Execute(ctx context.Context, args map[string]any) (string, error) {
