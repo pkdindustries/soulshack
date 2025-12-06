@@ -20,14 +20,15 @@ type ChatContextInterface = core.ChatContextInterface
 
 type ChatContext struct {
 	context.Context
-	Sys       core.System
-	Session   sessions.Session
-	Config    *config.Configuration
-	client    *girc.Client
-	event     *girc.Event
-	args      []string
-	logger    *zap.SugaredLogger
-	requestID string
+	Sys          core.System
+	Session      sessions.Session
+	Config       *config.Configuration
+	client       *girc.Client
+	event        *girc.Event
+	args         []string
+	logger       *zap.SugaredLogger
+	requestID    string
+	urlTriggered bool
 }
 
 var _ ChatContextInterface = (*ChatContext)(nil)
@@ -73,7 +74,7 @@ func NewChatContext(parentctx context.Context, config *config.Configuration, sys
 		zap.S().Fatalw("Failed to get session for key", "key", key, "error", err)
 	}
 	ctx.Session = session
-	return ctx, cancel
+	return &ctx, cancel
 }
 
 func (c ChatContext) GetSystem() core.System {
@@ -250,6 +251,14 @@ func (c ChatContext) Valid() bool {
 
 func (c ChatContext) IsPrivate() bool {
 	return CheckPrivate(c.event.Params[0])
+}
+
+func (c *ChatContext) SetURLTriggered(triggered bool) {
+	c.urlTriggered = triggered
+}
+
+func (c ChatContext) IsURLTriggered() bool {
+	return c.urlTriggered
 }
 
 func (c ChatContext) GetCommand() string {

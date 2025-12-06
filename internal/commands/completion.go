@@ -17,6 +17,11 @@ func (c *CompletionCommand) AdminOnly() bool  { return false }
 func (c *CompletionCommand) Execute(ctx irc.ChatContextInterface) {
 	msg := strings.Join(ctx.GetArgs(), " ")
 
+	// Apply URL watcher template if this was URL-triggered
+	if ctx.IsURLTriggered() && ctx.GetConfig().Bot.URLWatcherTemplate != "" {
+		msg = fmt.Sprintf(ctx.GetConfig().Bot.URLWatcherTemplate, msg)
+	}
+
 	outch, err := llm.Complete(ctx, fmt.Sprintf("(nick:%s) %s", ctx.GetSource(), msg))
 
 	if err != nil {

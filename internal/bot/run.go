@@ -79,6 +79,7 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 		defer cancel()
 
 		urlTriggered := CheckURLTrigger(ctx, e.Last())
+		ctx.SetURLTriggered(urlTriggered)
 
 		if ctx.Valid() || urlTriggered {
 			channelKey := e.Params[0]

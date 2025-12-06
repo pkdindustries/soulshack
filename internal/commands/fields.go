@@ -184,6 +184,10 @@ var configFields = map[string]configField{
 		},
 		getter: func(c *config.Configuration) string { return fmt.Sprintf("%t", c.Bot.URLWatcher) },
 	},
+	"urlwatchertemplate": {
+		setter: func(c *config.Configuration, v string) error { c.Bot.URLWatcherTemplate = v; return nil },
+		getter: func(c *config.Configuration) string { return c.Bot.URLWatcherTemplate },
+	},
 }
 
 // getConfigKeys returns all available config keys

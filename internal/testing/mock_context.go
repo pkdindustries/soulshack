@@ -17,13 +17,14 @@ type MockChatContext struct {
 	context.Context
 
 	// Configurable return values
-	Addressed bool
-	Admin     bool
-	Private   bool
-	ValidFlag bool
-	Command   string
-	Source    string
-	Args      []string
+	Addressed    bool
+	Admin        bool
+	Private      bool
+	ValidFlag    bool
+	URLTriggered bool
+	Command      string
+	Source       string
+	Args         []string
 
 	// Recorded calls (for assertions)
 	Replies         []string
@@ -165,6 +166,12 @@ func (m *MockChatContext) WithURLWatcher(enabled bool) *MockChatContext {
 	return m
 }
 
+// WithURLTriggered sets the URLTriggered flag
+func (m *MockChatContext) WithURLTriggered(triggered bool) *MockChatContext {
+	m.URLTriggered = triggered
+	return m
+}
+
 // WithUser adds a mock user for LookupUser
 func (m *MockChatContext) WithUser(nick, ident, host string) *MockChatContext {
 	m.Users[nick] = &core.UserInfo{Nick: nick, Ident: ident, Host: host}
@@ -187,6 +194,14 @@ func (m *MockChatContext) Valid() bool {
 
 func (m *MockChatContext) IsPrivate() bool {
 	return m.Private
+}
+
+func (m *MockChatContext) IsURLTriggered() bool {
+	return m.URLTriggered
+}
+
+func (m *MockChatContext) SetURLTriggered(triggered bool) {
+	m.URLTriggered = triggered
 }
 
 func (m *MockChatContext) GetCommand() string {

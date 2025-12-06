@@ -20,6 +20,8 @@ type ChatContextInterface interface {
 	IsAdmin() bool
 	Valid() bool
 	IsPrivate() bool
+	IsURLTriggered() bool
+	SetURLTriggered(bool)
 	GetCommand() string
 	GetSource() string
 	GetArgs() []string

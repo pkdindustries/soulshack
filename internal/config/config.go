@@ -40,6 +40,7 @@ type BotConfig struct {
 	ShowThinkingAction bool
 	ShowToolActions    bool
 	URLWatcher         bool
+	URLWatcherTemplate string
 }
 
 type ModelConfig struct {
@@ -53,6 +54,7 @@ type ModelConfig struct {
 type SessionConfig struct {
 	ChunkMax   int
 	MaxHistory int
+	MaxContext int
 	TTL        time.Duration
 }
 
@@ -146,15 +148,17 @@ func GetFlags() []cli.Flag {
 		&cli.FloatFlag{Name: "temperature", Value: 0.7, Usage: "temperature for the completion", Sources: src("temperature", "SOULSHACK_TEMPERATURE")},
 		&cli.FloatFlag{Name: "top_p", Value: 1.0, Usage: "top P value for the completion", Sources: src("top_p", "SOULSHACK_TOP_P")},
 		&cli.BoolFlag{Name: "thinking", Usage: "enable thinking/reasoning for models that support it", Sources: src("thinking", "SOULSHACK_THINKING")},
-		&cli.StringSliceFlag{Name: "tool", Usage: "tools to load (shell scripts, MCP server JSON files, or native tools like irc_op)", Sources: src("tool", "SOULSHACK_TOOL")},
+		&cli.StringSliceFlag{Name: "tool", Usage: "tools to load (shell scripts, MCP server JSON files, or native tools like irc__op)", Sources: src("tool", "SOULSHACK_TOOL")},
 		&cli.BoolFlag{Name: "showthinkingaction", Value: true, Usage: "show '[thinking]' IRC action when bot is reasoning", Sources: src("showthinkingaction", "SOULSHACK_SHOWTHINKINGACTION")},
 		&cli.BoolFlag{Name: "showtoolactions", Value: true, Usage: "show '[calling toolname]' IRC actions when executing tools", Sources: src("showtoolactions", "SOULSHACK_SHOWTOOLACTIONS")},
 		&cli.BoolFlag{Name: "urlwatcher", Usage: "enable passive URL watching and analysis", Sources: src("urlwatcher", "SOULSHACK_URLWATCHER")},
+		&cli.StringFlag{Name: "urlwatchertemplate", Value: "summarize this url briefly: %s", Usage: "template for URL watcher messages (%s is replaced with the URL)", Sources: src("urlwatchertemplate", "SOULSHACK_URLWATCHERTEMPLATE")},
 
 		// Timeouts and Behavior
 		&cli.BoolFlag{Name: "addressed", Aliases: []string{"a"}, Value: true, Usage: "require bot be addressed by nick for response", Sources: src("addressed", "SOULSHACK_ADDRESSED")},
 		&cli.DurationFlag{Name: "sessionduration", Aliases: []string{"S"}, Value: time.Minute * 10, Usage: "message context will be cleared after it is unused for this duration", Sources: src("sessionduration", "SOULSHACK_SESSIONDURATION")},
 		&cli.IntFlag{Name: "sessionhistory", Aliases: []string{"H"}, Value: 250, Usage: "maximum number of lines of context to keep per session", Sources: src("sessionhistory", "SOULSHACK_SESSIONHISTORY")},
+		&cli.IntFlag{Name: "maxcontext", Value: 0, Usage: "maximum token count for session history (0 = unlimited)", Sources: src("maxcontext", "SOULSHACK_MAXCONTEXT")},
 		&cli.IntFlag{Name: "chunkmax", Aliases: []string{"m"}, Value: 350, Usage: "maximum number of characters to send as a single message", Sources: src("chunkmax", "SOULSHACK_CHUNKMAX")},
 
 		// Personality / Prompting
@@ -206,11 +210,13 @@ func (c *Configuration) PrintConfig() {
 		{"chunkmax", fmt.Sprintf("%d", c.Session.ChunkMax)},
 		{"clienttimeout", c.API.Timeout.String()},
 		{"maxhistory", fmt.Sprintf("%d", c.Session.MaxHistory)},
+		{"maxcontext", fmt.Sprintf("%d", c.Session.MaxContext)},
 		{"maxtokens", fmt.Sprintf("%d", c.Model.MaxTokens)},
 		{"tool", fmt.Sprintf("%v", c.Bot.Tools)},
 		{"showthinkingaction", fmt.Sprintf("%t", c.Bot.ShowThinkingAction)},
 		{"showtoolactions", fmt.Sprintf("%t", c.Bot.ShowToolActions)},
 		{"urlwatcher", fmt.Sprintf("%t", c.Bot.URLWatcher)},
+		{"urlwatchertemplate", c.Bot.URLWatcherTemplate},
 		{"sessionduration", c.Session.TTL.String()},
 		{"openaikey", mask(c.API.OpenAIKey)},
 		{"anthropickey", mask(c.API.AnthropicKey)},
@@ -256,6 +262,7 @@ func NewConfiguration(c *cli.Command) *Configuration {
 			ShowThinkingAction: c.Bool("showthinkingaction"),
 			ShowToolActions:    c.Bool("showtoolactions"),
 			URLWatcher:         c.Bool("urlwatcher"),
+			URLWatcherTemplate: c.String("urlwatchertemplate"),
 		},
 		Model: &ModelConfig{
 			Model:       c.String("model"),
@@ -268,6 +275,7 @@ func NewConfiguration(c *cli.Command) *Configuration {
 		Session: &SessionConfig{
 			ChunkMax:   c.Int("chunkmax"),
 			MaxHistory: c.Int("sessionhistory"),
+			MaxContext: c.Int("maxcontext"),
 			TTL:        c.Duration("sessionduration"),
 		},
 
