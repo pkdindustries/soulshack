@@ -3,7 +3,7 @@ module pkdindustries/soulshack
 go 1.24.1
 
 require (
-	github.com/alexschlessinger/pollytool v0.0.0-20251201065023-c90b849bedc3
+	github.com/alexschlessinger/pollytool v0.0.0-20251206063349-4c736f67bfa0
 	github.com/lrstanley/girc v1.1.1
 	github.com/mazznoer/colorgrad v0.10.0
 	github.com/urfave/cli/v3 v3.6.1
@@ -30,7 +30,7 @@ require (
 	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/mazznoer/csscolorparser v0.1.6 // indirect
 	github.com/modelcontextprotocol/go-sdk v1.1.0 // indirect
-	github.com/ollama/ollama v0.13.0 // indirect
+	github.com/ollama/ollama v0.13.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/sashabaranov/go-openai v1.41.2 // indirect
 	github.com/tidwall/gjson v1.18.0 // indirect
@@ -48,8 +48,8 @@ require (
 	golang.org/x/net v0.47.0 // indirect
 	golang.org/x/oauth2 v0.33.0 // indirect
 	golang.org/x/sync v0.18.0 // indirect
-	google.golang.org/genai v1.36.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20251124214823-79d6a2a48846 // indirect
+	google.golang.org/genai v1.37.0 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20251202230838-ff82c1b0f217 // indirect
 	google.golang.org/grpc v1.77.0 // indirect
 	google.golang.org/protobuf v1.36.10 // indirect
 )
