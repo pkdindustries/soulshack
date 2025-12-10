@@ -25,7 +25,7 @@ func (c *CompletionCommand) Execute(ctx irc.ChatContextInterface) {
 	outch, err := llm.Complete(ctx, fmt.Sprintf("(nick:%s) %s", ctx.GetSource(), msg))
 
 	if err != nil {
-		ctx.GetLogger().Errorw("Completion response error", "error", err)
+		ctx.GetLogger().Errorw("completion_error", "error", err)
 		ctx.Reply(err.Error())
 		return
 	}

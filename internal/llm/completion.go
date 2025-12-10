@@ -1,8 +1,6 @@
 package llm
 
 import (
-	"time"
-
 	"github.com/alexschlessinger/pollytool/llm"
 	"github.com/alexschlessinger/pollytool/messages"
 	"github.com/alexschlessinger/pollytool/sessions"
@@ -41,7 +39,7 @@ func Complete(ctx irc.ChatContextInterface, msg string) (<-chan string, error) {
 	if len(truncated) > 100 {
 		truncated = truncated[:100] + "..."
 	}
-	ctx.GetLogger().Infof("Processing user message: %q", truncated)
+	ctx.GetLogger().Infow("message_received", "message", truncated)
 	ctx.GetSession().AddMessage(cmsg)
 
 	// Build completion request
@@ -59,16 +57,10 @@ func Complete(ctx irc.ChatContextInterface, msg string) (<-chan string, error) {
 	// Get response stream from LLM
 	stream := sys.GetLLM().ChatCompletionStream(ctx, req)
 
-	// Wrap with duration logging
 	output := make(chan string, 10)
-	startTime := time.Now()
 
 	go func() {
 		defer close(output)
-		defer func() {
-			ctx.GetLogger().Infow("Request completed", "duration_ms", time.Since(startTime).Milliseconds())
-		}()
-
 		for chunk := range stream {
 			output <- chunk
 		}

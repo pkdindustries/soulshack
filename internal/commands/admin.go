@@ -40,7 +40,7 @@ func (c *AdminCommand) Execute(ctx irc.ChatContextInterface) {
 	}
 
 	cfg := ctx.GetConfig() // refresh after modification
-	ctx.GetLogger().With("admins", cfg.Bot.Admins).Debug("Admin list updated")
+	ctx.GetLogger().Debugw("admin_list_updated", "admins", cfg.Bot.Admins)
 }
 
 func (c *AdminCommand) listAdmins(ctx irc.ChatContextInterface) {

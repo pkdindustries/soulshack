@@ -54,11 +54,11 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 	go func() {
 		<-ctx.Done()
 		ircClient.Quit("Shutting down...")
-		zap.S().Info("IRC client closed")
+		zap.S().Infow("irc_client_closed")
 	}()
 
 	ircClient.Handlers.AddBg(girc.CONNECTED, func(client *girc.Client, e girc.Event) {
-		zap.S().Infof("Joining channel: %s", cfg.Server.Channel)
+		zap.S().Infow("channel_joining", "channel", cfg.Server.Channel)
 		client.Cmd.Join(cfg.Server.Channel)
 	})
 
@@ -88,7 +88,7 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 			}
 
 			core.WithRequestLock(ctx, channelKey, "privmsg", func() {
-				ctx.GetLogger().Infof(">> %s", strings.Join(e.Params[1:], " "))
+				ctx.GetLogger().Infow("privmsg_received", "text", strings.Join(e.Params[1:], " "))
 				cmdRegistry.Dispatch(ctx)
 			}, func() {
 				ctx.Reply("Request timed out waiting for previous operation to complete")
@@ -103,7 +103,7 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 			return nil
 		}
 
-		zap.S().Infow("Connecting to server",
+		zap.S().Infow("server_connecting",
 			"server", ircClient.Config.Server,
 			"port", ircClient.Config.Port,
 			"tls", ircClient.Config.SSL,
@@ -115,8 +115,8 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 				return nil
 			}
 
-			zap.S().Errorw("Connection failed", "error", err)
-			zap.S().Infof("Reconnecting in 5 seconds (attempt %d/%d)", i+1, maxRetries)
+			zap.S().Errorw("connection_failed", "error", err)
+			zap.S().Infow("connection_retry", "delay_sec", 5, "attempt", i+1, "max_attempts", maxRetries)
 
 			select {
 			case <-time.After(5 * time.Second):

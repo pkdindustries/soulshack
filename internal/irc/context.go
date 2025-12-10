@@ -136,12 +136,12 @@ func (c ChatContext) GetSource() string {
 
 func (c ChatContext) IsAdmin() bool {
 	hostmask := c.event.Source.String()
-	c.logger.Debugw("Checking hostmask", "hostmask", hostmask)
+	c.logger.Debugw("admin_check", "hostmask", hostmask)
 	isAdmin := CheckAdmin(hostmask, c.Config.Bot.Admins)
 	if isAdmin && len(c.Config.Bot.Admins) == 0 {
-		c.logger.Debug("All hostmasks are admin; please configure admins")
+		c.logger.Debugw("admin_check_warning")
 	} else if isAdmin {
-		c.logger.Debugw("User is admin", "hostmask", hostmask)
+		c.logger.Debugw("admin_verified", "hostmask", hostmask)
 	}
 	return isAdmin
 }

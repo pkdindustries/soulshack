@@ -66,17 +66,17 @@ func WithRequestLock(ctx context.Context, key string, operation string, onSucces
 		logger = GetLogger()
 	}
 
-	logger.Debugf("Acquiring lock for channel '%s' (%s)", key, operation)
+	logger.Debugw("lock_acquiring", "channel", key, "operation", operation)
 	if !lock.LockWithContext(ctx) {
-		logger.Warnf("Failed to acquire lock for channel '%s' (%s timeout)", key, operation)
+		logger.Warnw("lock_timeout", "channel", key, "operation", operation)
 		if onTimeout != nil {
 			onTimeout()
 		}
 		return
 	}
-	logger.Debugf("Lock acquired for channel '%s' (%s)", key, operation)
+	logger.Debugw("lock_acquired", "channel", key, "operation", operation)
 	defer func() {
-		logger.Debugf("Releasing lock for channel '%s' (%s)", key, operation)
+		logger.Debugw("lock_released", "channel", key, "operation", operation)
 		lock.Unlock()
 	}()
 

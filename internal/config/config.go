@@ -235,7 +235,7 @@ func (c *Configuration) PrintConfig() {
 
 func NewConfiguration(c *cli.Command) *Configuration {
 	if c.IsSet("config") {
-		zap.S().Info("Using config file", "path", c.String("config"))
+		zap.S().Infow("config_loaded", "path", c.String("config"))
 	}
 
 	config := &Configuration{

@@ -17,7 +17,7 @@ func CheckURLTrigger(ctx irc.ChatContextInterface, message string) bool {
 		return false
 	}
 	if urlPattern.MatchString(message) {
-		ctx.GetLogger().Info("URL detected, triggering response")
+		ctx.GetLogger().Infow("url_detected")
 		return true
 	}
 	return false
