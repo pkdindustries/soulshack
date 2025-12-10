@@ -72,7 +72,7 @@ Soulshack can be configured via command-line flags, environment variables (`SOUL
 | `--geminikey` | | Google Gemini API key |
 | `--ollamaurl` | http://localhost:11434 | Ollama API endpoint |
 | `--tool` | | Path to tool definition (repeatable) |
-| `--thinking` | false | Enable reasoning mode |
+| `--thinkingeffort` | off | Reasoning effort level: off, low, medium, high |
 | `--urlwatcher` | false | Enable passive URL watching |
 
 ### YAML Configuration

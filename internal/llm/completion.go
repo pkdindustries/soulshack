@@ -15,21 +15,19 @@ import (
 type CompletionRequest = llm.CompletionRequest
 
 func NewCompletionRequest(config *config.Configuration, session sessions.Session, tools []tools.Tool) *CompletionRequest {
-	req := &CompletionRequest{
-		BaseURL:     config.API.OpenAIURL,
-		Timeout:     config.API.Timeout,
-		Model:       config.Model.Model,
-		MaxTokens:   config.Model.MaxTokens,
-		Messages:    session.GetHistory(),
-		Temperature: config.Model.Temperature,
-		Tools:       tools,
-	}
+	// Parse thinking effort - validated at config load time
+	thinkingEffort, _ := llm.ParseThinkingEffort(config.Model.ThinkingEffort)
 
-	if config.Model.Thinking {
-		req.ThinkingEffort = "medium"
+	return &CompletionRequest{
+		BaseURL:        config.API.OpenAIURL,
+		Timeout:        config.API.Timeout,
+		Model:          config.Model.Model,
+		MaxTokens:      config.Model.MaxTokens,
+		Messages:       session.GetHistory(),
+		Temperature:    config.Model.Temperature,
+		Tools:          tools,
+		ThinkingEffort: thinkingEffort,
 	}
-
-	return req
 }
 
 // Complete processes a user message and returns a channel of response chunks.

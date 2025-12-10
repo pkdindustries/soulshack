@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alexschlessinger/pollytool/llm"
 	"pkdindustries/soulshack/internal/config"
 )
 
@@ -96,16 +97,15 @@ var configFields = map[string]configField{
 		setter: func(c *config.Configuration, v string) error { c.API.GeminiKey = v; return nil },
 		getter: func(c *config.Configuration) string { return maskAPIKey(c.API.GeminiKey) },
 	},
-	"thinking": {
+	"thinkingeffort": {
 		setter: func(c *config.Configuration, v string) error {
-			b, err := strconv.ParseBool(v)
-			if err != nil {
-				return fmt.Errorf("invalid value for thinking. Please provide 'true' or 'false'")
+			if _, err := llm.ParseThinkingEffort(v); err != nil {
+				return err
 			}
-			c.Model.Thinking = b
+			c.Model.ThinkingEffort = v
 			return nil
 		},
-		getter: func(c *config.Configuration) string { return fmt.Sprintf("%t", c.Model.Thinking) },
+		getter: func(c *config.Configuration) string { return c.Model.ThinkingEffort },
 	},
 	"showthinkingaction": {
 		setter: func(c *config.Configuration, v string) error {

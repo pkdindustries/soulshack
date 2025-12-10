@@ -44,11 +44,11 @@ type BotConfig struct {
 }
 
 type ModelConfig struct {
-	Model       string
-	MaxTokens   int
-	Temperature float32
-	TopP        float32
-	Thinking    bool
+	Model          string
+	MaxTokens      int
+	Temperature    float32
+	TopP           float32
+	ThinkingEffort string // off, low, medium, high
 }
 
 type SessionConfig struct {
@@ -146,7 +146,7 @@ func GetFlags() []cli.Flag {
 		&cli.DurationFlag{Name: "apitimeout", Aliases: []string{"t"}, Value: time.Minute * 5, Usage: "timeout for each completion request", Sources: src("apitimeout", "SOULSHACK_APITIMEOUT")},
 		&cli.FloatFlag{Name: "temperature", Value: 0.7, Usage: "temperature for the completion", Sources: src("temperature", "SOULSHACK_TEMPERATURE")},
 		&cli.FloatFlag{Name: "top_p", Value: 1.0, Usage: "top P value for the completion", Sources: src("top_p", "SOULSHACK_TOP_P")},
-		&cli.BoolFlag{Name: "thinking", Usage: "enable thinking/reasoning for models that support it", Sources: src("thinking", "SOULSHACK_THINKING")},
+		&cli.StringFlag{Name: "thinkingeffort", Value: "off", Usage: "thinking effort level: off, low, medium, high", Sources: src("thinkingeffort", "SOULSHACK_THINKINGEFFORT")},
 		&cli.StringSliceFlag{Name: "tool", Usage: "tools to load (shell scripts, MCP server JSON files, or native tools like irc__op)", Sources: src("tool", "SOULSHACK_TOOL")},
 		&cli.BoolFlag{Name: "showthinkingaction", Value: true, Usage: "show '[thinking]' IRC action when bot is reasoning", Sources: src("showthinkingaction", "SOULSHACK_SHOWTHINKINGACTION")},
 		&cli.BoolFlag{Name: "showtoolactions", Value: true, Usage: "show '[calling toolname]' IRC actions when executing tools", Sources: src("showtoolactions", "SOULSHACK_SHOWTOOLACTIONS")},
@@ -223,7 +223,7 @@ func (c *Configuration) PrintConfig() {
 		{"model", c.Model.Model},
 		{"temperature", fmt.Sprintf("%f", c.Model.Temperature)},
 		{"topp", fmt.Sprintf("%f", c.Model.TopP)},
-		{"thinking", fmt.Sprintf("%t", c.Model.Thinking)},
+		{"thinkingeffort", c.Model.ThinkingEffort},
 		{"prompt", c.Bot.Prompt},
 		{"greeting", c.Bot.Greeting},
 	}
@@ -262,11 +262,11 @@ func NewConfiguration(c *cli.Command) *Configuration {
 			URLWatcherTemplate: c.String("urlwatchertemplate"),
 		},
 		Model: &ModelConfig{
-			Model:       c.String("model"),
-			MaxTokens:   c.Int("maxtokens"),
-			Temperature: float32(c.Float("temperature")),
-			TopP:        float32(c.Float("top_p")),
-			Thinking:    c.Bool("thinking"),
+			Model:          c.String("model"),
+			MaxTokens:      c.Int("maxtokens"),
+			Temperature:    float32(c.Float("temperature")),
+			TopP:           float32(c.Float("top_p")),
+			ThinkingEffort: c.String("thinkingeffort"),
 		},
 
 		Session: &SessionConfig{

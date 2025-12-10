@@ -45,6 +45,9 @@ temperature: 1.0                # 0.0-2.0, higher = more creative
 # top_p: 1.0                    # 0.0-1.0, nucleus sampling parameter
 # apitimeout: 5m                # API request timeout
 
+# Thinking/reasoning mode for models that support it (Claude, o1, DeepSeek, etc.)
+# thinkingeffort: off           # off, low, medium, high (default: off)
+
 # ============================================================================
 # BOT BEHAVIOR
 # ============================================================================

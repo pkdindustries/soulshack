@@ -27,11 +27,11 @@ func DefaultTestConfig() *config.Configuration {
 			ShowToolActions:    false,
 		},
 		Model: &config.ModelConfig{
-			Model:       "test/model",
-			MaxTokens:   100,
-			Temperature: 0.7,
-			TopP:        1.0,
-			Thinking:    false,
+			Model:          "test/model",
+			MaxTokens:      100,
+			Temperature:    0.7,
+			TopP:           1.0,
+			ThinkingEffort: "off",
 		},
 		Session: &config.SessionConfig{
 			ChunkMax:   350,

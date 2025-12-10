@@ -111,8 +111,8 @@ func (h *callbackHandler) onReasoning(content string) {
 	}
 
 	now := time.Now()
-	if now.Sub(h.startTime) > 5*time.Second {
-		if h.lastThinkingTime.IsZero() || now.Sub(h.lastThinkingTime) > 5*time.Second {
+	if now.Sub(h.startTime) > 30*time.Second {
+		if h.lastThinkingTime.IsZero() || now.Sub(h.lastThinkingTime) > 30*time.Second {
 			elapsed := now.Sub(h.startTime).Round(time.Second)
 			h.chatCtx.ReplyAction(fmt.Sprintf("is thinking... (%s)", elapsed))
 			h.lastThinkingTime = now
