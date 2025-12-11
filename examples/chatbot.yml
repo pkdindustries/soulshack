@@ -29,6 +29,9 @@ model: anthropic/claude-sonnet-4-5-20250929
 # model: gemini/gemini-3-pro-preview
 # model: ollama/gpt-oss          
 
+# Enable streaming responses (ollama still hates this)
+stream: true
+
 # API keys (prefer environment variables for security)
 # anthropickey: sk-ant-xxxxx     # Or use SOULSHACK_ANTHROPICKEY env var
 # openaikey: sk-xxxxx            # Or use SOULSHACK_OPENAIKEY env var

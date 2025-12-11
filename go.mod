@@ -3,7 +3,7 @@ module pkdindustries/soulshack
 go 1.24.1
 
 require (
-	github.com/alexschlessinger/pollytool v0.0.0-20251210022837-118c6f83f442
+	github.com/alexschlessinger/pollytool v0.0.0-20251211215119-1570f53cfeba
 	github.com/lrstanley/girc v1.1.1
 	github.com/mazznoer/colorgrad v0.10.0
 	github.com/urfave/cli/v3 v3.6.1

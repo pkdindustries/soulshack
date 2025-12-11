@@ -138,7 +138,10 @@ func (h *callbackHandler) onReasoning(content string) {
 }
 
 func (h *callbackHandler) onContent(content string) {
-	h.chatCtx.GetLogger().Debugw("content_chunk", "content", content)
+	h.chatCtx.GetLogger().Debugw("oncontent_callback",
+		"content", content,
+		"content_len", len(content),
+	)
 	h.chunker.Write(content)
 }
 

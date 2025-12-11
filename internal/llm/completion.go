@@ -16,7 +16,7 @@ func NewCompletionRequest(config *config.Configuration, session sessions.Session
 	// Parse thinking effort - validated at config load time
 	thinkingEffort, _ := llm.ParseThinkingEffort(config.Model.ThinkingEffort)
 
-	return &CompletionRequest{
+	req := &CompletionRequest{
 		BaseURL:        config.API.OpenAIURL,
 		Timeout:        config.API.Timeout,
 		Model:          config.Model.Model,
@@ -26,6 +26,14 @@ func NewCompletionRequest(config *config.Configuration, session sessions.Session
 		Tools:          tools,
 		ThinkingEffort: thinkingEffort,
 	}
+
+	// Set streaming mode (nil = streaming default, false = non-streaming)
+	if !config.Model.Stream {
+		stream := false
+		req.Stream = &stream
+	}
+
+	return req
 }
 
 // Complete processes a user message and returns a channel of response chunks.
