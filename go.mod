@@ -3,13 +3,15 @@ module pkdindustries/soulshack
 go 1.24.1
 
 require (
-	github.com/alexschlessinger/pollytool v0.0.0-20251212031544-8fc3e4df87ec
+	github.com/alexschlessinger/pollytool v0.0.0-20251212045822-9af7b7378929
 	github.com/lrstanley/girc v1.1.1
 	github.com/mazznoer/colorgrad v0.10.0
 	github.com/urfave/cli/v3 v3.6.1
 	go.uber.org/zap v1.27.1
 	gopkg.in/yaml.v3 v3.0.1
 )
+
+//replace github.com/alexschlessinger/pollytool => ../polly
 
 require (
 	cloud.google.com/go v0.123.0 // indirect

@@ -34,6 +34,9 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 	cmdRegistry.Register(&commands.ToolsCommand{})
 	cmdRegistry.Register(&commands.AdminCommand{})
 
+	// Channel for fatal IRC errors (nick taken, channel join failures)
+	fatalErr := make(chan error, 1)
+
 	ircClient := girc.New(girc.Config{
 		Server:    cfg.Server.Server,
 		Port:      cfg.Server.Port,
@@ -42,6 +45,9 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 		Name:      "soulshack",
 		SSL:       cfg.Server.SSL,
 		TLSConfig: &tls.Config{InsecureSkipVerify: cfg.Server.TLSInsecure},
+		HandleNickCollide: func(oldNick string) string {
+			return "" // Don't auto-retry, we handle it via ERR_NICKNAMEINUSE
+		},
 	})
 
 	if cfg.Server.SASLNick != "" && cfg.Server.SASLPass != "" {
@@ -57,9 +63,46 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 		zap.S().Infow("irc_client_closed")
 	}()
 
+	// Handle nick already in use - exit with error
+	ircClient.Handlers.AddBg(girc.ERR_NICKNAMEINUSE, func(client *girc.Client, e girc.Event) {
+		zap.S().Errorw("nick_in_use", "nick", cfg.Server.Nick)
+		select {
+		case fatalErr <- fmt.Errorf("nick %q is already in use", cfg.Server.Nick):
+		default:
+		}
+		client.Close()
+	})
+
+	// Handle channel join failures - exit with error
+	channelErrors := map[string]string{
+		girc.ERR_NOSUCHCHANNEL:  "channel does not exist",
+		girc.ERR_CHANNELISFULL:  "channel is full",
+		girc.ERR_INVITEONLYCHAN: "channel is invite-only",
+		girc.ERR_BANNEDFROMCHAN: "banned from channel",
+		girc.ERR_BADCHANNELKEY:  "bad channel key",
+	}
+	for code, reason := range channelErrors {
+		ircClient.Handlers.AddBg(code, func(client *girc.Client, e girc.Event) {
+			channel := cfg.Server.Channel
+			if len(e.Params) > 1 {
+				channel = e.Params[1]
+			}
+			zap.S().Errorw("channel_join_failed", "channel", channel, "reason", reason)
+			select {
+			case fatalErr <- fmt.Errorf("cannot join %s: %s", channel, reason):
+			default:
+			}
+			client.Close()
+		})
+	}
+
 	ircClient.Handlers.AddBg(girc.CONNECTED, func(client *girc.Client, e girc.Event) {
 		zap.S().Infow("channel_joining", "channel", cfg.Server.Channel)
-		client.Cmd.Join(cfg.Server.Channel)
+		if cfg.Server.ChannelKey != "" {
+			client.Cmd.Join(cfg.Server.Channel, cfg.Server.ChannelKey)
+		} else {
+			client.Cmd.Join(cfg.Server.Channel)
+		}
 	})
 
 	ircClient.Handlers.AddBg(girc.JOIN, func(client *girc.Client, e girc.Event) {
@@ -115,6 +158,13 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 				return nil
 			}
 
+			// Check for fatal IRC errors (nick taken, channel join failures)
+			select {
+			case fErr := <-fatalErr:
+				return fErr
+			default:
+			}
+
 			zap.S().Errorw("connection_failed", "error", err)
 			zap.S().Infow("connection_retry", "delay_sec", 5, "attempt", i+1, "max_attempts", maxRetries)
 
@@ -125,6 +175,14 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 				return nil
 			}
 		}
+
+		// Check for fatal IRC errors after successful connection closed
+		select {
+		case fErr := <-fatalErr:
+			return fErr
+		default:
+		}
+
 		return nil
 	}
 

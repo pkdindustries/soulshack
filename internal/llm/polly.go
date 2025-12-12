@@ -149,17 +149,36 @@ func (h *callbackHandler) beforeToolExecute(ctx context.Context, tc messages.Cha
 	return irc.InjectContext(ctx, h.chatCtx)
 }
 
-func (h *callbackHandler) onToolStart(tc messages.ChatMessageToolCall) {
-	if h.cfg.Bot.ShowToolActions && tc.Name != "irc__action" {
+func (h *callbackHandler) onToolStart(calls []messages.ChatMessageToolCall) {
+	h.chunker.Flush()
+
+	h.toolCount += len(calls)
+
+	// Log each tool
+	for _, tc := range calls {
+		h.chatCtx.GetLogger().Infow("tool_started", "tool", tc.Name)
+	}
+
+	if !h.cfg.Bot.ShowToolActions || len(calls) == 0 {
+		return
+	}
+
+	// Filter and format tool names
+	var names []string
+	for _, tc := range calls {
+		if tc.Name == "irc__action" {
+			continue
+		}
 		displayName := tc.Name
 		if idx := strings.Index(displayName, "__"); idx != -1 {
 			displayName = displayName[idx+2:]
 		}
-		h.chatCtx.ReplyAction(fmt.Sprintf("calling %s", displayName))
+		names = append(names, displayName)
 	}
 
-	h.toolCount++
-	h.chatCtx.GetLogger().Infow("tool_started", "tool", tc.Name)
+	if len(names) > 0 {
+		h.chatCtx.ReplyAction(fmt.Sprintf("calling %s", strings.Join(names, ", ")))
+	}
 }
 
 func (h *callbackHandler) onToolEnd(tc messages.ChatMessageToolCall, result string, duration time.Duration, toolErr error) {

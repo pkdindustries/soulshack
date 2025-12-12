@@ -24,6 +24,7 @@ type ServerConfig struct {
 	Server      string
 	Port        int
 	Channel     string
+	ChannelKey  string
 	SSL         bool
 	TLSInsecure bool
 	SASLNick    string
@@ -128,6 +129,7 @@ func GetFlags() []cli.Flag {
 		&cli.BoolFlag{Name: "tlsinsecure", Usage: "skip TLS certificate verification", Sources: src("tlsinsecure", "SOULSHACK_TLSINSECURE")},
 		&cli.IntFlag{Name: "port", Aliases: []string{"p"}, Value: 6667, Usage: "irc server port", Sources: src("port", "SOULSHACK_PORT")},
 		&cli.StringFlag{Name: "channel", Aliases: []string{"c"}, Usage: "irc channel to join", Sources: src("channel", "SOULSHACK_CHANNEL")},
+		&cli.StringFlag{Name: "channelkey", Usage: "channel key (password) for joining", Sources: src("channelkey", "SOULSHACK_CHANNELKEY")},
 		&cli.StringFlag{Name: "saslnick", Usage: "nick used for SASL", Sources: src("saslnick", "SOULSHACK_SASLNICK")},
 		&cli.StringFlag{Name: "saslpass", Usage: "password for SASL plain", Sources: src("saslpass", "SOULSHACK_SASLPASS")},
 
@@ -200,6 +202,7 @@ func (c *Configuration) PrintConfig() {
 		{"server", c.Server.Server},
 		{"port", fmt.Sprintf("%d", c.Server.Port)},
 		{"channel", c.Server.Channel},
+		{"channelkey", mask(c.Server.ChannelKey)},
 		{"tls", fmt.Sprintf("%t", c.Server.SSL)},
 		{"tlsinsecure", fmt.Sprintf("%t", c.Server.TLSInsecure)},
 		{"saslnick", c.Server.SASLNick},
@@ -247,6 +250,7 @@ func NewConfiguration(c *cli.Command) *Configuration {
 			Server:      c.String("server"),
 			Port:        c.Int("port"),
 			Channel:     c.String("channel"),
+			ChannelKey:  c.String("channelkey"),
 			SSL:         c.Bool("tls"),
 			TLSInsecure: c.Bool("tlsinsecure"),
 			SASLNick:    c.String("saslnick"),
