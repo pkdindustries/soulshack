@@ -34,6 +34,9 @@ func main() {
 		Version: bot.Version + " - http://github.com/pkdindustries/soulshack",
 		Flags:   config.GetFlags(),
 		Action: func(_ context.Context, c *cli.Command) error {
+			if len(os.Args) == 1 {
+				return cli.ShowAppHelp(c)
+			}
 			// Use our cancellable context, not the CLI's context
 			return bot.Run(ctx, config.NewConfiguration(c))
 		},
