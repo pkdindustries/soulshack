@@ -48,6 +48,17 @@ var configFields = map[string]configField{
 		},
 		getter: func(c *config.Configuration) string { return fmt.Sprintf("%d", c.Model.MaxTokens) },
 	},
+	"maxcontext": {
+		setter: func(c *config.Configuration, v string) error {
+			n, err := strconv.Atoi(v)
+			if err != nil || n < 0 {
+				return fmt.Errorf("invalid value for maxcontext. Please provide a valid non-negative integer")
+			}
+			c.Session.MaxContext = n
+			return nil
+		},
+		getter: func(c *config.Configuration) string { return fmt.Sprintf("%d", c.Session.MaxContext) },
+	},
 	"temperature": {
 		setter: func(c *config.Configuration, v string) error {
 			f, err := strconv.ParseFloat(v, 32)

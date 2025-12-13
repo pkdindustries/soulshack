@@ -1,6 +1,8 @@
 package llm
 
 import (
+	"sync"
+
 	"github.com/alexschlessinger/pollytool/llm"
 	"github.com/alexschlessinger/pollytool/messages"
 	"github.com/alexschlessinger/pollytool/sessions"
@@ -11,6 +13,43 @@ import (
 )
 
 type CompletionRequest = llm.CompletionRequest
+
+// Track warned sessions to avoid repeated warnings
+var (
+	warnedSessions = make(map[string]int) // session_name -> last_warning_percentage
+	warningMutex   sync.RWMutex
+)
+
+// checkSessionCapacity checks if the session is approaching token limits and sends warnings
+func checkSessionCapacity(ctx irc.ChatContextInterface) {
+	session := ctx.GetSession()
+
+	// Use polly's capacity calculation
+	percentage := session.GetCapacityPercentage()
+	if percentage == 0 {
+		return // No limit set
+	}
+
+	// Get session identifier and check last warning level
+	sessionName := session.GetName()
+
+	warningMutex.Lock()
+	defer warningMutex.Unlock()
+
+	lastWarning := warnedSessions[sessionName]
+
+	// Send warnings at thresholds, avoiding repeats
+	if percentage >= 90 && lastWarning < 90 {
+		ctx.ReplyAction("Session at 90% capacity - conversation history will be trimmed soon")
+		warnedSessions[sessionName] = 90
+	} else if percentage >= 75 && lastWarning < 75 {
+		ctx.ReplyAction("Session at 75% capacity")
+		warnedSessions[sessionName] = 75
+	} else if percentage < 75 && lastWarning > 0 {
+		// Reset warning state if capacity drops below thresholds
+		delete(warnedSessions, sessionName)
+	}
+}
 
 func NewCompletionRequest(config *config.Configuration, session sessions.Session, tools []tools.Tool) *CompletionRequest {
 	// Parse thinking effort - validated at config load time
@@ -38,6 +77,9 @@ func NewCompletionRequest(config *config.Configuration, session sessions.Session
 
 // Complete processes a user message and returns a channel of response chunks.
 func Complete(ctx irc.ChatContextInterface, msg string) (<-chan string, error) {
+	// Check session capacity and warn if approaching limits
+	checkSessionCapacity(ctx)
+
 	// Add user message to session
 	cmsg := messages.ChatMessage{
 		Role:    messages.MessageRoleUser,

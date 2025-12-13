@@ -33,6 +33,7 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 	cmdRegistry.Register(&commands.CompletionCommand{})
 	cmdRegistry.Register(&commands.ToolsCommand{})
 	cmdRegistry.Register(&commands.AdminCommand{})
+	cmdRegistry.Register(&commands.StatsCommand{})
 
 	// Channel for fatal IRC errors (nick taken, channel join failures)
 	fatalErr := make(chan error, 1)

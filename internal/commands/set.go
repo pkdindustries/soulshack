@@ -48,4 +48,11 @@ func (c *SetCommand) Execute(ctx irc.ChatContextInterface) {
 
 	ctx.Reply(fmt.Sprintf("%s set to: %s", param, field.getter(cfg)))
 	ctx.GetSession().Clear()
+
+	// Update session store defaults if maxcontext was changed
+	if param == "maxcontext" {
+		metadata := ctx.GetSession().GetMetadata()
+		metadata.MaxHistoryTokens = cfg.Session.MaxContext
+		ctx.GetSession().SetMetadata(metadata)
+	}
 }

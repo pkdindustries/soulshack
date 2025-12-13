@@ -10,3 +10,4 @@ examples/tools/url.go
 play.json
 examples/tools/url
 examples/tools/mcp.json
+.gocache/
