@@ -17,7 +17,7 @@ func TestToolsCommand_ListEmpty(t *testing.T) {
 
 	ctx := mocktest.NewMockContext().
 		WithSystem(mockSys).
-		WithArgs("/tools")
+		WithArgs("/tools", "list")
 
 	cmd := &ToolsCommand{}
 	cmd.Execute(ctx)
@@ -42,7 +42,7 @@ func TestToolsCommand_ListTools(t *testing.T) {
 
 	ctx := mocktest.NewMockContext().
 		WithSystem(mockSys).
-		WithArgs("/tools")
+		WithArgs("/tools", "list")
 
 	cmd := &ToolsCommand{}
 	cmd.Execute(ctx)
