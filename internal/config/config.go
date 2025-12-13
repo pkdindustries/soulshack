@@ -160,7 +160,7 @@ func GetFlags() []cli.Flag {
 		// Timeouts and Behavior
 		&cli.BoolFlag{Name: "addressed", Aliases: []string{"a"}, Value: true, Usage: "require bot be addressed by nick for response", Sources: src("addressed", "SOULSHACK_ADDRESSED")},
 		&cli.DurationFlag{Name: "sessionduration", Aliases: []string{"S"}, Value: time.Minute * 10, Usage: "message context will be cleared after it is unused for this duration", Sources: src("sessionduration", "SOULSHACK_SESSIONDURATION")},
-		&cli.IntFlag{Name: "maxcontext", Value: 100000, Usage: "maximum token count for session history (0 = unlimited)", Sources: src("maxcontext", "SOULSHACK_MAXCONTEXT")},
+		&cli.IntFlag{Name: "maxcontext", Value: 0, Usage: "maximum token count for session history (0 = unlimited)", Sources: src("maxcontext", "SOULSHACK_MAXCONTEXT")},
 		&cli.IntFlag{Name: "chunkmax", Aliases: []string{"m"}, Value: 350, Usage: "maximum number of characters to send as a single message", Sources: src("chunkmax", "SOULSHACK_CHUNKMAX")},
 
 		// Personality / Prompting

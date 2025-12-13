@@ -7,7 +7,7 @@ import (
 	"github.com/mazznoer/colorgrad"
 )
 
-const Version = "0.91"
+const Version = "0.93"
 
 // GetBanner returns a colorized ASCII art banner
 func GetBanner() string {
