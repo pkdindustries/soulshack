@@ -21,7 +21,7 @@ func (c *ToolsCommand) Execute(ctx irc.ChatContextInterface) {
 
 	// If no arguments, list tools (equivalent to old /get tools)
 	if len(args) < 2 {
-		c.listTools(ctx)
+		ctx.Reply("Usage: /tools [list|load|rm] <args>")
 		return
 	}
 
@@ -44,12 +44,16 @@ func (c *ToolsCommand) Execute(ctx irc.ChatContextInterface) {
 	}
 
 	switch subcommand {
+	case "load":
+		fallthrough
 	case "add":
 		c.addTool(ctx, rest)
+	case "rm":
+		fallthrough
 	case "remove":
 		c.removeTool(ctx, rest)
 	default:
-		ctx.Reply("Usage: /tools [list|add|remove] <args>")
+		ctx.Reply("Usage: /tools [list|load|rm] <args>")
 	}
 }
 
