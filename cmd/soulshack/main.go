@@ -29,10 +29,10 @@ func main() {
 	defer cancel()
 
 	cmd := &cli.Command{
-		Name:        "soulshack",
-		Usage:       "",
-		Description: "",
-		Flags:       config.GetFlags(),
+		Name:    "soulshack",
+		Usage:   "because real people are overrated",
+		Version: bot.Version + " - http://github.com/pkdindustries/soulshack",
+		Flags:   config.GetFlags(),
 		Action: func(_ context.Context, c *cli.Command) error {
 			if len(os.Args) == 1 {
 				return cli.ShowAppHelp(c)
