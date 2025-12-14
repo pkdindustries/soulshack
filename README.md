@@ -35,18 +35,53 @@ docker run -e SOULSHACK_OPENAIKEY=sk-... soulshack:dev --channel '#soulshack'
     ```
 
 2.  **Run**:
-    ```bash
-    # OpenAI
-    ./soulshack --nick chatbot --server irc.libera.chat --tls \
-      --channel '#soulshack' --model openai/gpt-4o --openaikey "sk-..."
 
-    # Ollama (Local)
-    ./soulshack --channel '#soulshack' --model ollama/llama3.2
+    ### Configuration File (Recommended)
+    ```bash
+    ./soulshack --config examples/chatbot.yml
     ```
 
-## Configuration
+    ### All Flags (Kitchen Sink)
+    ```bash
+    ./soulshack \
+      --nick soulshack \
+      --server irc.example.com \
+      --port 6697 \
+      --tls \
+      --channel '#soulshack' \
+      --saslnick mybot \
+      --saslpass mypassword \
+      --admins "admin!*@*" \
+      --model openai/gpt-5.1 \
+      --openaikey "sk-..." \
+      --maxtokens 4096 \
+      --temperature 1 \
+      --apitimeout 5m \
+      --tool "examples/tools/datetime.sh" \
+      --tool "irc__op" \
+      --thinkingeffort off \
+      --urlwatcher \
+      --verbose
+    ```
 
-Soulshack can be configured via command-line flags, environment variables (`SOULSHACK_*`), or a YAML config file.
+    ### Ollama (Local)
+    ```bash
+    ./soulshack \
+      --server irc.example.com \
+      --channel '#soulshack' \
+      --model ollama/qwen3:30b \
+      --ollamaurl "http://localhost:11434"
+    ```
+
+    ### Anthropic
+    ```bash
+    ./soulshack \
+      --server irc.example.com \
+      --channel '#soulshack' \
+      --model anthropic/claude-opus-4.5 \
+      --anthropickey "sk-ant-..."
+    ```
+
 
 ### Configuration Flags
 
@@ -77,12 +112,12 @@ Soulshack can be configured via command-line flags, environment variables (`SOUL
 
 ### YAML Configuration
 
-Create a `config.yaml` file:
+Create a `config.yml` file:
 
 ```yaml
 server:
   nick: "soulshack"
-  server: "irc.libera.chat"
+  server: "irc.example.com"
   port: 6697
   channel: "#soulshack"
   tls: true
@@ -94,7 +129,7 @@ bot:
     - "examples/mcp/filesystem.json"
 ```
 
-Run with: `./soulshack --config config.yaml`
+Run with: `./soulshack --config config.yml`
 
 ## Commands
 
@@ -123,7 +158,7 @@ Soulshack comes with native IRC management tools (permissions apply):
 
 ## Documentation
 
--   [Modifying Code](docs/modifying_code.md): Guide for adding commands and tools.
+-   [Contributing](docs/contributing.md): Guide for adding commands and tools.
 -   [Architecture](docs/architecture.md): High-level system overview.
 
 ---
