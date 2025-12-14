@@ -20,7 +20,6 @@
 
 ```bash
 docker build . -t soulshack:dev
-docker run -e SOULSHACK_OPENAIKEY=sk-... soulshack:dev --channel '#soulshack'
 ```
 
 ### Option 2: Build from Source
@@ -37,11 +36,22 @@ docker run -e SOULSHACK_OPENAIKEY=sk-... soulshack:dev --channel '#soulshack'
 2.  **Run**:
 
     ### Configuration File (Recommended)
+    
+    **Local Binary**:
     ```bash
     ./soulshack --config examples/chatbot.yml
     ```
 
+    **Docker**:
+    ```bash
+    # Mount config file to container
+    docker run -v $(pwd)/examples/chatbot.yml:/config.yml soulshack:dev \
+      --config /config.yml
+    ```
+
     ### All Flags (Kitchen Sink)
+
+    **Local Binary**:
     ```bash
     ./soulshack \
       --nick soulshack \
@@ -64,7 +74,31 @@ docker run -e SOULSHACK_OPENAIKEY=sk-... soulshack:dev --channel '#soulshack'
       --verbose
     ```
 
+    **Docker**:
+    ```bash
+    docker run soulshack:dev \
+      --nick soulshack \
+      --server irc.example.com \
+      --port 6697 \
+      --tls \
+      --channel '#soulshack' \
+      --saslnick mybot \
+      --saslpass mypassword \
+      --admins "admin!*@*" \
+      --model openai/gpt-5.1 \
+      --openaikey "sk-..." \
+      --maxtokens 4096 \
+      --temperature 1 \
+      --apitimeout 5m \
+      --thinkingeffort off \
+      --urlwatcher \
+      --verbose
+    # Note: Local file tools/scripts require volume mounts to work in Docker
+    ```
+
     ### Ollama (Local)
+
+    **Local Binary**:
     ```bash
     ./soulshack \
       --server irc.example.com \
@@ -73,9 +107,30 @@ docker run -e SOULSHACK_OPENAIKEY=sk-... soulshack:dev --channel '#soulshack'
       --ollamaurl "http://localhost:11434"
     ```
 
+    **Docker**:
+    ```bash
+    # Use --network host to access Ollama on localhost
+    docker run --network host soulshack:dev \
+      --server irc.example.com \
+      --channel '#soulshack' \
+      --model ollama/qwen3:30b \
+      --ollamaurl "http://localhost:11434"
+    ```
+
     ### Anthropic
+
+    **Local Binary**:
     ```bash
     ./soulshack \
+      --server irc.example.com \
+      --channel '#soulshack' \
+      --model anthropic/claude-opus-4.5 \
+      --anthropickey "sk-ant-..."
+    ```
+
+    **Docker**:
+    ```bash
+    docker run soulshack:dev \
       --server irc.example.com \
       --channel '#soulshack' \
       --model anthropic/claude-opus-4.5 \
