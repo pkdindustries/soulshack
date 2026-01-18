@@ -20,15 +20,14 @@ type ChatContextInterface = core.ChatContextInterface
 
 type ChatContext struct {
 	context.Context
-	Sys          core.System
-	Session      sessions.Session
-	Config       *config.Configuration
-	client       *girc.Client
-	event        *girc.Event
-	args         []string
-	logger       *zap.SugaredLogger
-	requestID    string
-	urlTriggered bool
+	Sys       core.System
+	Session   sessions.Session
+	Config    *config.Configuration
+	client    *girc.Client
+	event     *girc.Event
+	args      []string
+	logger    *zap.SugaredLogger
+	requestID string
 }
 
 var _ ChatContextInterface = (*ChatContext)(nil)
@@ -251,14 +250,6 @@ func (c ChatContext) Valid() bool {
 
 func (c ChatContext) IsPrivate() bool {
 	return CheckPrivate(c.event.Params[0])
-}
-
-func (c *ChatContext) SetURLTriggered(triggered bool) {
-	c.urlTriggered = triggered
-}
-
-func (c ChatContext) IsURLTriggered() bool {
-	return c.urlTriggered
 }
 
 func (c ChatContext) GetCommand() string {

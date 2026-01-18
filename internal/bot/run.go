@@ -3,7 +3,6 @@ package bot
 import (
 	"context"
 	"crypto/tls"
-	"strings"
 	"time"
 
 	"fmt"
@@ -15,6 +14,7 @@ import (
 	"pkdindustries/soulshack/internal/config"
 	"pkdindustries/soulshack/internal/core"
 	"pkdindustries/soulshack/internal/irc"
+	"pkdindustries/soulshack/internal/triggers"
 )
 
 // Run starts the IRC bot with the given configuration
@@ -34,6 +34,14 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 	cmdRegistry.Register(&commands.ToolsCommand{})
 	cmdRegistry.Register(&commands.AdminCommand{})
 	cmdRegistry.Register(&commands.StatsCommand{})
+
+	// Initialize trigger registry (order matters: passive watchers first, addressed last as fallback)
+	triggerRegistry := triggers.NewRegistry()
+	triggerRegistry.Register(&triggers.URLTrigger{})
+	triggerRegistry.Register(&triggers.OpTrigger{BotNick: cfg.Server.Nick})
+	triggerRegistry.Register(&triggers.JoinTrigger{BotNick: cfg.Server.Nick})
+	triggerRegistry.Register(&triggers.AddressedTrigger{CmdRegistry: cmdRegistry})
+	triggerRegistry.Register(&triggers.NonAddressedTrigger{CmdRegistry: cmdRegistry})
 
 	// Channel for fatal IRC errors (nick taken, channel join failures)
 	fatalErr := make(chan error, 1)
@@ -107,37 +115,39 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 	})
 
 	ircClient.Handlers.AddBg(girc.JOIN, func(client *girc.Client, e girc.Event) {
-		if e.Source.Name == cfg.Server.Nick {
-			ctx, cancel := irc.NewChatContext(ctx, cfg, sys, client, &e)
-			defer cancel()
+		ctx, cancel := irc.NewChatContext(ctx, cfg, sys, client, &e)
+		defer cancel()
 
-			channelKey := e.Params[0]
-			core.WithRequestLock(ctx, channelKey, "join", func() {
-				Greeting(ctx)
-			}, nil)
-		}
+		channelKey := e.Params[0]
+		core.WithRequestLock(ctx, channelKey, "join", func() {
+			triggerRegistry.Process(ctx, &e)
+		}, nil)
+	})
+
+	ircClient.Handlers.AddBg(girc.MODE, func(client *girc.Client, e girc.Event) {
+		ctx, cancel := irc.NewChatContext(ctx, cfg, sys, client, &e)
+		defer cancel()
+
+		channel := e.Params[0]
+		core.WithRequestLock(ctx, channel, "mode", func() {
+			triggerRegistry.Process(ctx, &e)
+		}, nil)
 	})
 
 	ircClient.Handlers.AddBg(girc.PRIVMSG, func(client *girc.Client, e girc.Event) {
 		ctx, cancel := irc.NewChatContext(ctx, cfg, sys, client, &e)
 		defer cancel()
 
-		urlTriggered := CheckURLTrigger(ctx, e.Last())
-		ctx.SetURLTriggered(urlTriggered)
-
-		if ctx.Valid() || urlTriggered {
-			channelKey := e.Params[0]
-			if !girc.IsValidChannel(channelKey) {
-				channelKey = e.Source.Name
-			}
-
-			core.WithRequestLock(ctx, channelKey, "privmsg", func() {
-				ctx.GetLogger().Infow("privmsg_received", "text", strings.Join(e.Params[1:], " "))
-				cmdRegistry.Dispatch(ctx)
-			}, func() {
-				ctx.Reply("Request timed out waiting for previous operation to complete")
-			})
+		channelKey := e.Params[0]
+		if !girc.IsValidChannel(channelKey) {
+			channelKey = e.Source.Name
 		}
+
+		core.WithRequestLock(ctx, channelKey, "privmsg", func() {
+			triggerRegistry.Process(ctx, &e)
+		}, func() {
+			ctx.Reply("Request timed out waiting for previous operation to complete")
+		})
 	})
 
 	// Reconnect loop

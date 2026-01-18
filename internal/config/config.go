@@ -37,6 +37,8 @@ type BotConfig struct {
 	Addressed          bool
 	Prompt             string
 	Greeting           string
+	OpWatcher         bool
+	OpWatcherTemplate string
 	Tools              []string
 	ShowThinkingAction bool
 	ShowToolActions    bool
@@ -165,6 +167,8 @@ func GetFlags() []cli.Flag {
 
 		// Personality / Prompting
 		&cli.StringFlag{Name: "greeting", Value: "hello.", Usage: "prompt to be used when the bot joins the channel", Sources: src("greeting", "SOULSHACK_GREETING")},
+		&cli.BoolFlag{Name: "opwatcher", Usage: "enable +o watcher to trigger LLM on being opped", Sources: src("opwatcher", "SOULSHACK_OPWATCHER")},
+		&cli.StringFlag{Name: "opwatchertemplate", Value: "you were just given operator status by %s", Usage: "prompt when bot receives +o (%s = who opped)", Sources: src("opwatchertemplate", "SOULSHACK_OPWATCHERTEMPLATE")},
 		&cli.StringFlag{Name: "prompt", Value: "you are a helpful chatbot. do not use caps. do not use emoji.", Usage: "initial system prompt", Sources: src("prompt", "SOULSHACK_PROMPT")},
 	}
 }
@@ -232,6 +236,8 @@ func (c *Configuration) PrintConfig() {
 		{"stream", fmt.Sprintf("%t", c.Model.Stream)},
 		{"prompt", c.Bot.Prompt},
 		{"greeting", c.Bot.Greeting},
+		{"opwatcher", fmt.Sprintf("%t", c.Bot.OpWatcher)},
+		{"opwatchertemplate", c.Bot.OpWatcherTemplate},
 	}
 
 	for _, f := range fields {
@@ -262,6 +268,8 @@ func NewConfiguration(c *cli.Command) *Configuration {
 			Addressed:          c.Bool("addressed"),
 			Prompt:             c.String("prompt"),
 			Greeting:           c.String("greeting"),
+			OpWatcher:          c.Bool("opwatcher"),
+			OpWatcherTemplate:  c.String("opwatchertemplate"),
 			Tools:              c.StringSlice("tool"),
 			ShowThinkingAction: c.Bool("showthinkingaction"),
 			ShowToolActions:    c.Bool("showtoolactions"),

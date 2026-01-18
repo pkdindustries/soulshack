@@ -1,0 +1,61 @@
+package triggers
+
+import (
+	"fmt"
+	"strings"
+
+	"github.com/lrstanley/girc"
+
+	"pkdindustries/soulshack/internal/irc"
+	"pkdindustries/soulshack/internal/llm"
+)
+
+// OpTrigger responds when the bot receives +o (operator status)
+type OpTrigger struct {
+	BotNick string
+}
+
+func (t *OpTrigger) Name() string {
+	return "op"
+}
+
+func (t *OpTrigger) Events() []string {
+	return []string{girc.MODE}
+}
+
+func (t *OpTrigger) Check(ctx irc.ChatContextInterface, event *girc.Event) bool {
+	cfg := ctx.GetConfig()
+	if !cfg.Bot.OpWatcher {
+		return false
+	}
+
+	// MODE format: [channel, modes, target...]
+	// e.g., ["#channel", "+o", "botname"]
+	if len(event.Params) < 3 {
+		return false
+	}
+
+	modes := event.Params[1]
+	target := event.Params[2]
+
+	// Check if bot was opped
+	return target == t.BotNick && strings.Contains(modes, "+o")
+}
+
+func (t *OpTrigger) Execute(ctx irc.ChatContextInterface, event *girc.Event) {
+	cfg := ctx.GetConfig()
+	oppedBy := event.Source.Name
+
+	prompt := fmt.Sprintf(cfg.Bot.OpWatcherTemplate, oppedBy)
+	outch, err := llm.Complete(ctx, prompt)
+
+	if err != nil {
+		ctx.GetLogger().Errorw("op_trigger_error", "error", err)
+		ctx.Reply(err.Error())
+		return
+	}
+
+	for res := range outch {
+		ctx.Reply(res)
+	}
+}
