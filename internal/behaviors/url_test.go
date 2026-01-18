@@ -1,4 +1,4 @@
-package triggers
+package behaviors
 
 import (
 	"testing"
@@ -8,8 +8,8 @@ import (
 	mocktest "pkdindustries/soulshack/internal/testing"
 )
 
-func TestURLTrigger_Check_BasicURL(t *testing.T) {
-	trigger := &URLTrigger{}
+func TestURLBehavior_Check_BasicURL(t *testing.T) {
+	behavior := &URLBehavior{}
 
 	tests := []struct {
 		name    string
@@ -34,16 +34,16 @@ func TestURLTrigger_Check_BasicURL(t *testing.T) {
 				Params:  []string{"#test", tt.message},
 			}
 
-			got := trigger.Check(ctx, event)
+			got := behavior.Check(ctx, event)
 			if got != tt.want {
-				t.Errorf("URLTrigger.Check(%q) = %v, want %v", tt.message, got, tt.want)
+				t.Errorf("URLBehavior.Check(%q) = %v, want %v", tt.message, got, tt.want)
 			}
 		})
 	}
 }
 
-func TestURLTrigger_Check_URLWatcherDisabled(t *testing.T) {
-	trigger := &URLTrigger{}
+func TestURLBehavior_Check_URLWatcherDisabled(t *testing.T) {
+	behavior := &URLBehavior{}
 
 	ctx := mocktest.NewMockContext().
 		WithURLWatcher(false).
@@ -54,14 +54,14 @@ func TestURLTrigger_Check_URLWatcherDisabled(t *testing.T) {
 		Params:  []string{"#test", "https://example.com"},
 	}
 
-	got := trigger.Check(ctx, event)
+	got := behavior.Check(ctx, event)
 	if got != false {
 		t.Error("expected false when URLWatcher is disabled")
 	}
 }
 
-func TestURLTrigger_Check_AddressedMessage(t *testing.T) {
-	trigger := &URLTrigger{}
+func TestURLBehavior_Check_AddressedMessage(t *testing.T) {
+	behavior := &URLBehavior{}
 
 	ctx := mocktest.NewMockContext().
 		WithURLWatcher(true).
@@ -72,14 +72,14 @@ func TestURLTrigger_Check_AddressedMessage(t *testing.T) {
 		Params:  []string{"#test", "https://example.com"},
 	}
 
-	got := trigger.Check(ctx, event)
+	got := behavior.Check(ctx, event)
 	if got != false {
 		t.Error("expected false when message is addressed to bot")
 	}
 }
 
-func TestURLTrigger_Check_NoURL(t *testing.T) {
-	trigger := &URLTrigger{}
+func TestURLBehavior_Check_NoURL(t *testing.T) {
+	behavior := &URLBehavior{}
 
 	tests := []struct {
 		name    string
@@ -103,26 +103,26 @@ func TestURLTrigger_Check_NoURL(t *testing.T) {
 				Params:  []string{"#test", tt.message},
 			}
 
-			got := trigger.Check(ctx, event)
+			got := behavior.Check(ctx, event)
 			if got != false {
-				t.Errorf("URLTrigger.Check(%q) = %v, want false", tt.message, got)
+				t.Errorf("URLBehavior.Check(%q) = %v, want false", tt.message, got)
 			}
 		})
 	}
 }
 
-func TestURLTrigger_Events(t *testing.T) {
-	trigger := &URLTrigger{}
-	events := trigger.Events()
+func TestURLBehavior_Events(t *testing.T) {
+	behavior := &URLBehavior{}
+	events := behavior.Events()
 
 	if len(events) != 1 || events[0] != girc.PRIVMSG {
-		t.Errorf("URLTrigger.Events() = %v, want [%s]", events, girc.PRIVMSG)
+		t.Errorf("URLBehavior.Events() = %v, want [%s]", events, girc.PRIVMSG)
 	}
 }
 
-func TestURLTrigger_Name(t *testing.T) {
-	trigger := &URLTrigger{}
-	if trigger.Name() != "url" {
-		t.Errorf("URLTrigger.Name() = %q, want %q", trigger.Name(), "url")
+func TestURLBehavior_Name(t *testing.T) {
+	behavior := &URLBehavior{}
+	if behavior.Name() != "url" {
+		t.Errorf("URLBehavior.Name() = %q, want %q", behavior.Name(), "url")
 	}
 }

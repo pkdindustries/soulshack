@@ -1,4 +1,4 @@
-package triggers
+package behaviors
 
 import (
 	"github.com/lrstanley/girc"
@@ -8,27 +8,27 @@ import (
 	"pkdindustries/soulshack/internal/irc"
 )
 
-// NonAddressedTrigger handles all messages when addressed mode is disabled
-type NonAddressedTrigger struct {
+// NonAddressedBehavior handles all messages when addressed mode is disabled
+type NonAddressedBehavior struct {
 	CmdRegistry *commands.Registry
 }
 
-func (t *NonAddressedTrigger) Name() string {
+func (b *NonAddressedBehavior) Name() string {
 	return "nonaddressed"
 }
 
-func (t *NonAddressedTrigger) Events() []string {
+func (b *NonAddressedBehavior) Events() []string {
 	return []string{girc.PRIVMSG}
 }
 
-func (t *NonAddressedTrigger) Check(ctx irc.ChatContextInterface, event *girc.Event) bool {
+func (b *NonAddressedBehavior) Check(ctx irc.ChatContextInterface, event *girc.Event) bool {
 	cfg := ctx.GetConfig()
 	return !cfg.Bot.Addressed && !ctx.IsAddressed() && !ctx.IsPrivate() && len(ctx.GetArgs()) > 0
 }
 
-func (t *NonAddressedTrigger) Execute(ctx irc.ChatContextInterface, event *girc.Event) {
+func (b *NonAddressedBehavior) Execute(ctx irc.ChatContextInterface, event *girc.Event) {
 	core.WithRequestLock(ctx, ctx.GetLockKey(), "nonaddressed", func() {
-		t.CmdRegistry.Dispatch(ctx)
+		b.CmdRegistry.Dispatch(ctx)
 	}, func() {
 		ctx.Reply("Request timed out waiting for previous operation to complete")
 	})

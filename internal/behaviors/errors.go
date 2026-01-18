@@ -1,4 +1,4 @@
-package triggers
+package behaviors
 
 import (
 	"fmt"
@@ -9,29 +9,29 @@ import (
 	"pkdindustries/soulshack/internal/irc"
 )
 
-// NickErrorTrigger handles nick already in use errors
-type NickErrorTrigger struct{}
+// NickErrorBehavior handles nick already in use errors
+type NickErrorBehavior struct{}
 
-func (t *NickErrorTrigger) Name() string {
+func (b *NickErrorBehavior) Name() string {
 	return "nick_error"
 }
 
-func (t *NickErrorTrigger) Events() []string {
+func (b *NickErrorBehavior) Events() []string {
 	return []string{girc.ERR_NICKNAMEINUSE}
 }
 
-func (t *NickErrorTrigger) Check(ctx irc.ChatContextInterface, event *girc.Event) bool {
+func (b *NickErrorBehavior) Check(ctx irc.ChatContextInterface, event *girc.Event) bool {
 	return true
 }
 
-func (t *NickErrorTrigger) Execute(ctx irc.ChatContextInterface, event *girc.Event) {
+func (b *NickErrorBehavior) Execute(ctx irc.ChatContextInterface, event *girc.Event) {
 	cfg := ctx.GetConfig()
 	zap.S().Errorw("nick_in_use", "nick", cfg.Server.Nick)
 	ctx.FatalError(fmt.Errorf("nick %q is already in use", cfg.Server.Nick))
 }
 
-// ChannelErrorTrigger handles channel join failure errors
-type ChannelErrorTrigger struct{}
+// ChannelErrorBehavior handles channel join failure errors
+type ChannelErrorBehavior struct{}
 
 var channelErrorReasons = map[string]string{
 	girc.ERR_NOSUCHCHANNEL:  "channel does not exist",
@@ -41,11 +41,11 @@ var channelErrorReasons = map[string]string{
 	girc.ERR_BADCHANNELKEY:  "bad channel key",
 }
 
-func (t *ChannelErrorTrigger) Name() string {
+func (b *ChannelErrorBehavior) Name() string {
 	return "channel_error"
 }
 
-func (t *ChannelErrorTrigger) Events() []string {
+func (b *ChannelErrorBehavior) Events() []string {
 	return []string{
 		girc.ERR_NOSUCHCHANNEL,
 		girc.ERR_CHANNELISFULL,
@@ -55,11 +55,11 @@ func (t *ChannelErrorTrigger) Events() []string {
 	}
 }
 
-func (t *ChannelErrorTrigger) Check(ctx irc.ChatContextInterface, event *girc.Event) bool {
+func (b *ChannelErrorBehavior) Check(ctx irc.ChatContextInterface, event *girc.Event) bool {
 	return true
 }
 
-func (t *ChannelErrorTrigger) Execute(ctx irc.ChatContextInterface, event *girc.Event) {
+func (b *ChannelErrorBehavior) Execute(ctx irc.ChatContextInterface, event *girc.Event) {
 	cfg := ctx.GetConfig()
 	channel := cfg.Server.Channel
 	if len(event.Params) > 1 {

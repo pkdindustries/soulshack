@@ -1,4 +1,4 @@
-package triggers
+package behaviors
 
 import (
 	"github.com/lrstanley/girc"
@@ -8,26 +8,26 @@ import (
 	"pkdindustries/soulshack/internal/irc"
 )
 
-// AddressedTrigger handles messages addressed to the bot
-type AddressedTrigger struct {
+// AddressedBehavior handles messages addressed to the bot
+type AddressedBehavior struct {
 	CmdRegistry *commands.Registry
 }
 
-func (t *AddressedTrigger) Name() string {
+func (b *AddressedBehavior) Name() string {
 	return "addressed"
 }
 
-func (t *AddressedTrigger) Events() []string {
+func (b *AddressedBehavior) Events() []string {
 	return []string{girc.PRIVMSG}
 }
 
-func (t *AddressedTrigger) Check(ctx irc.ChatContextInterface, event *girc.Event) bool {
+func (b *AddressedBehavior) Check(ctx irc.ChatContextInterface, event *girc.Event) bool {
 	return (ctx.IsAddressed() || ctx.IsPrivate()) && len(ctx.GetArgs()) > 0
 }
 
-func (t *AddressedTrigger) Execute(ctx irc.ChatContextInterface, event *girc.Event) {
+func (b *AddressedBehavior) Execute(ctx irc.ChatContextInterface, event *girc.Event) {
 	core.WithRequestLock(ctx, ctx.GetLockKey(), "addressed", func() {
-		t.CmdRegistry.Dispatch(ctx)
+		b.CmdRegistry.Dispatch(ctx)
 	}, func() {
 		ctx.Reply("Request timed out waiting for previous operation to complete")
 	})

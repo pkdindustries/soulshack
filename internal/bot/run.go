@@ -10,11 +10,11 @@ import (
 	"github.com/lrstanley/girc"
 	"go.uber.org/zap"
 
+	"pkdindustries/soulshack/internal/behaviors"
 	"pkdindustries/soulshack/internal/commands"
 	"pkdindustries/soulshack/internal/config"
 	"pkdindustries/soulshack/internal/core"
 	"pkdindustries/soulshack/internal/irc"
-	"pkdindustries/soulshack/internal/triggers"
 )
 
 // Run starts the IRC bot with the given configuration
@@ -35,18 +35,18 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 	cmdRegistry.Register(&commands.AdminCommand{})
 	cmdRegistry.Register(&commands.StatsCommand{})
 
-	// Initialize trigger registry (order matters: passive watchers first, addressed last as fallback)
-	triggerRegistry := triggers.NewRegistry()
-	// Lifecycle triggers
-	triggerRegistry.Register(&triggers.ConnectedTrigger{})
-	triggerRegistry.Register(&triggers.NickErrorTrigger{})
-	triggerRegistry.Register(&triggers.ChannelErrorTrigger{})
-	// Behavior triggers
-	triggerRegistry.Register(&triggers.URLTrigger{})
-	triggerRegistry.Register(&triggers.OpTrigger{BotNick: cfg.Server.Nick})
-	triggerRegistry.Register(&triggers.JoinTrigger{BotNick: cfg.Server.Nick})
-	triggerRegistry.Register(&triggers.AddressedTrigger{CmdRegistry: cmdRegistry})
-	triggerRegistry.Register(&triggers.NonAddressedTrigger{CmdRegistry: cmdRegistry})
+	// Initialize behavior registry (order matters: passive watchers first, addressed last as fallback)
+	behaviorRegistry := behaviors.NewRegistry()
+	// Lifecycle behaviors
+	behaviorRegistry.Register(&behaviors.ConnectedBehavior{})
+	behaviorRegistry.Register(&behaviors.NickErrorBehavior{})
+	behaviorRegistry.Register(&behaviors.ChannelErrorBehavior{})
+	// Reactive behaviors
+	behaviorRegistry.Register(&behaviors.URLBehavior{})
+	behaviorRegistry.Register(&behaviors.OpBehavior{BotNick: cfg.Server.Nick})
+	behaviorRegistry.Register(&behaviors.JoinBehavior{BotNick: cfg.Server.Nick})
+	behaviorRegistry.Register(&behaviors.AddressedBehavior{CmdRegistry: cmdRegistry})
+	behaviorRegistry.Register(&behaviors.NonAddressedBehavior{CmdRegistry: cmdRegistry})
 
 	// Channel for fatal IRC errors (nick taken, channel join failures)
 	fatalErr := make(chan error, 1)
@@ -77,11 +77,11 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 		zap.S().Infow("irc_client_closed")
 	}()
 
-	// Single global handler routes all events through the trigger registry
+	// Single global handler routes all events through the behavior registry
 	ircClient.Handlers.AddBg(girc.ALL_EVENTS, func(client *girc.Client, e girc.Event) {
 		chatCtx, cancel := irc.NewChatContext(ctx, cfg, sys, client, &e, fatalErr)
 		defer cancel()
-		triggerRegistry.Process(chatCtx, &e)
+		behaviorRegistry.Process(chatCtx, &e)
 	})
 
 	// Reconnect loop

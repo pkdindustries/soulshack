@@ -1,4 +1,4 @@
-package triggers
+package behaviors
 
 import (
 	"github.com/lrstanley/girc"
@@ -8,30 +8,30 @@ import (
 	"pkdindustries/soulshack/internal/llm"
 )
 
-// JoinTrigger sends a greeting when the bot joins a channel
-type JoinTrigger struct {
+// JoinBehavior sends a greeting when the bot joins a channel
+type JoinBehavior struct {
 	BotNick string
 }
 
-func (t *JoinTrigger) Name() string {
+func (b *JoinBehavior) Name() string {
 	return "join"
 }
 
-func (t *JoinTrigger) Events() []string {
+func (b *JoinBehavior) Events() []string {
 	return []string{girc.JOIN}
 }
 
-func (t *JoinTrigger) Check(ctx irc.ChatContextInterface, event *girc.Event) bool {
+func (b *JoinBehavior) Check(ctx irc.ChatContextInterface, event *girc.Event) bool {
 	cfg := ctx.GetConfig()
-	return event.Source.Name == t.BotNick && cfg.Bot.Greeting != ""
+	return event.Source.Name == b.BotNick && cfg.Bot.Greeting != ""
 }
 
-func (t *JoinTrigger) Execute(ctx irc.ChatContextInterface, event *girc.Event) {
+func (b *JoinBehavior) Execute(ctx irc.ChatContextInterface, event *girc.Event) {
 	core.WithRequestLock(ctx, ctx.GetLockKey(), "join", func() {
 		cfg := ctx.GetConfig()
 		outch, err := llm.Complete(ctx, cfg.Bot.Greeting)
 		if err != nil {
-			ctx.GetLogger().Errorw("join_trigger_error", "error", err)
+			ctx.GetLogger().Errorw("join_behavior_error", "error", err)
 			ctx.Reply(err.Error())
 			return
 		}

@@ -1,4 +1,4 @@
-package triggers
+package behaviors
 
 import (
 	"github.com/lrstanley/girc"
@@ -7,22 +7,22 @@ import (
 	"pkdindustries/soulshack/internal/irc"
 )
 
-// ConnectedTrigger joins the configured channel when the bot connects
-type ConnectedTrigger struct{}
+// ConnectedBehavior joins the configured channel when the bot connects
+type ConnectedBehavior struct{}
 
-func (t *ConnectedTrigger) Name() string {
+func (b *ConnectedBehavior) Name() string {
 	return "connected"
 }
 
-func (t *ConnectedTrigger) Events() []string {
+func (b *ConnectedBehavior) Events() []string {
 	return []string{girc.CONNECTED}
 }
 
-func (t *ConnectedTrigger) Check(ctx irc.ChatContextInterface, event *girc.Event) bool {
+func (b *ConnectedBehavior) Check(ctx irc.ChatContextInterface, event *girc.Event) bool {
 	return true
 }
 
-func (t *ConnectedTrigger) Execute(ctx irc.ChatContextInterface, event *girc.Event) {
+func (b *ConnectedBehavior) Execute(ctx irc.ChatContextInterface, event *girc.Event) {
 	cfg := ctx.GetConfig()
 	zap.S().Infow("channel_joining", "channel", cfg.Server.Channel)
 	if cfg.Server.ChannelKey != "" {

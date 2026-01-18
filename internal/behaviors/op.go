@@ -1,4 +1,4 @@
-package triggers
+package behaviors
 
 import (
 	"fmt"
@@ -10,20 +10,20 @@ import (
 	"pkdindustries/soulshack/internal/llm"
 )
 
-// OpTrigger responds when the bot receives +o or -o (operator status change)
-type OpTrigger struct {
+// OpBehavior responds when the bot receives +o or -o (operator status change)
+type OpBehavior struct {
 	BotNick string
 }
 
-func (t *OpTrigger) Name() string {
+func (b *OpBehavior) Name() string {
 	return "op"
 }
 
-func (t *OpTrigger) Events() []string {
+func (b *OpBehavior) Events() []string {
 	return []string{girc.MODE}
 }
 
-func (t *OpTrigger) Check(ctx irc.ChatContextInterface, event *girc.Event) bool {
+func (b *OpBehavior) Check(ctx irc.ChatContextInterface, event *girc.Event) bool {
 	cfg := ctx.GetConfig()
 	if !cfg.Bot.OpWatcher {
 		return false
@@ -38,21 +38,21 @@ func (t *OpTrigger) Check(ctx irc.ChatContextInterface, event *girc.Event) bool 
 
 	// Check if bot is in targets
 	for _, target := range targets {
-		if target == t.BotNick {
+		if target == b.BotNick {
 			return true
 		}
 	}
 	return false
 }
 
-func (t *OpTrigger) Execute(ctx irc.ChatContextInterface, event *girc.Event) {
+func (b *OpBehavior) Execute(ctx irc.ChatContextInterface, event *girc.Event) {
 	core.WithRequestLock(ctx, ctx.GetLockKey(), "op", func() {
 		cfg := ctx.GetConfig()
 		changedBy := event.Source.Name
 		channel := event.Params[0]
 
 		action := "deopped"
-		if ctx.IsOp(channel, t.BotNick) {
+		if ctx.IsOp(channel, b.BotNick) {
 			action = "opped"
 		}
 
@@ -61,7 +61,7 @@ func (t *OpTrigger) Execute(ctx irc.ChatContextInterface, event *girc.Event) {
 		outch, err := llm.Complete(ctx, prompt)
 
 		if err != nil {
-			ctx.GetLogger().Errorw("op_trigger_error", "error", err)
+			ctx.GetLogger().Errorw("op_behavior_error", "error", err)
 			ctx.Reply(err.Error())
 			return
 		}

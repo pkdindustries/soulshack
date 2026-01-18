@@ -1,4 +1,4 @@
-package triggers
+package behaviors
 
 import (
 	"fmt"
@@ -13,18 +13,18 @@ import (
 
 var urlPattern = regexp.MustCompile(`^https?://[^\s]+`)
 
-// URLTrigger responds to messages containing URLs
-type URLTrigger struct{}
+// URLBehavior responds to messages containing URLs
+type URLBehavior struct{}
 
-func (t *URLTrigger) Name() string {
+func (b *URLBehavior) Name() string {
 	return "url"
 }
 
-func (t *URLTrigger) Events() []string {
+func (b *URLBehavior) Events() []string {
 	return []string{girc.PRIVMSG}
 }
 
-func (t *URLTrigger) Check(ctx irc.ChatContextInterface, event *girc.Event) bool {
+func (b *URLBehavior) Check(ctx irc.ChatContextInterface, event *girc.Event) bool {
 	cfg := ctx.GetConfig()
 	if !cfg.Bot.URLWatcher {
 		return false
@@ -39,7 +39,7 @@ func (t *URLTrigger) Check(ctx irc.ChatContextInterface, event *girc.Event) bool
 	return false
 }
 
-func (t *URLTrigger) Execute(ctx irc.ChatContextInterface, event *girc.Event) {
+func (b *URLBehavior) Execute(ctx irc.ChatContextInterface, event *girc.Event) {
 	core.WithRequestLock(ctx, ctx.GetLockKey(), "url", func() {
 		cfg := ctx.GetConfig()
 		msg := event.Last()
@@ -50,7 +50,7 @@ func (t *URLTrigger) Execute(ctx irc.ChatContextInterface, event *girc.Event) {
 
 		outch, err := llm.Complete(ctx, fmt.Sprintf("(nick:%s) %s", ctx.GetSource(), msg))
 		if err != nil {
-			ctx.GetLogger().Errorw("url_trigger_error", "error", err)
+			ctx.GetLogger().Errorw("url_behavior_error", "error", err)
 			ctx.Reply(err.Error())
 			return
 		}
