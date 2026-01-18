@@ -39,6 +39,19 @@ func NewChatContext(parentctx context.Context, config *config.Configuration, sys
 	// Generate a unique request ID for correlation
 	requestID := generateRequestID()
 
+	// Ensure Source is not nil for events like CONNECTED
+	if e.Source == nil {
+		e.Source = &girc.Source{
+			Name: config.Server.Channel,
+		}
+	}
+
+	// Get channel safely
+	channel := config.Server.Channel
+	if len(e.Params) > 0 {
+		channel = e.Params[0]
+	}
+
 	ctx := ChatContext{
 		Context:   timedctx,
 		Config:    config,
@@ -50,7 +63,7 @@ func NewChatContext(parentctx context.Context, config *config.Configuration, sys
 		fatalCh:   fatalCh,
 		logger: zap.S().With(
 			"request_id", requestID,
-			"channel", e.Params[0],
+			"channel", channel,
 			"source", e.Source.Name,
 		),
 	}
@@ -59,13 +72,7 @@ func NewChatContext(parentctx context.Context, config *config.Configuration, sys
 		ctx.args = ctx.args[1:]
 	}
 
-	if e.Source == nil {
-		e.Source = &girc.Source{
-			Name: config.Server.Channel,
-		}
-	}
-
-	key := e.Params[0]
+	key := channel
 	if !girc.IsValidChannel(key) {
 		key = e.Source.Name
 	}
@@ -266,6 +273,15 @@ func (c ChatContext) GetLockKey() string {
 		return c.event.Source.Name
 	}
 	return c.Config.Server.Channel
+}
+
+func (c ChatContext) IsOp(channel, nick string) bool {
+	user := c.client.LookupUser(nick)
+	if user == nil {
+		return false
+	}
+	perms, ok := user.Perms.Lookup(channel)
+	return ok && perms.IsAdmin()
 }
 
 // checks if the message is valid for processing

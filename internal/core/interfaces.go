@@ -18,7 +18,6 @@ type ChatContextInterface interface {
 	// Event methods
 	IsAddressed() bool
 	IsAdmin() bool
-	Valid() bool
 	IsPrivate() bool
 	GetCommand() string
 	GetSource() string
@@ -48,6 +47,7 @@ type ChatContextInterface interface {
 	GetChannelUsers(channel string) []ChannelUser
 	GetBotNick() string
 	GetLockKey() string
+	IsOp(channel, nick string) bool
 
 	// Runtime methods
 	GetSession() sessions.Session

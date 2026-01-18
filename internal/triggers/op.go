@@ -2,7 +2,6 @@ package triggers
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/lrstanley/girc"
 
@@ -31,16 +30,20 @@ func (t *OpTrigger) Check(ctx irc.ChatContextInterface, event *girc.Event) bool 
 	}
 
 	// MODE format: [channel, modes, target...]
-	// e.g., ["#channel", "+o", "botname"]
 	if len(event.Params) < 3 {
 		return false
 	}
 
-	modes := event.Params[1]
-	target := event.Params[2]
+	channel := event.Params[0]
+	targets := event.Params[2:]
 
-	// Check if bot was opped
-	return target == t.BotNick && strings.Contains(modes, "+o")
+	// Check if bot is in targets and is now op (girc updates state before our handler)
+	for _, target := range targets {
+		if target == t.BotNick {
+			return ctx.IsOp(channel, t.BotNick)
+		}
+	}
+	return false
 }
 
 func (t *OpTrigger) Execute(ctx irc.ChatContextInterface, event *girc.Event) {

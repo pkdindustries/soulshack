@@ -301,6 +301,10 @@ func (m *MockChatContext) GetLockKey() string {
 	return "#test"
 }
 
+func (m *MockChatContext) IsOp(channel, nick string) bool {
+	return false // override in tests as needed
+}
+
 // Runtime methods
 
 func (m *MockChatContext) GetSession() sessions.Session {
