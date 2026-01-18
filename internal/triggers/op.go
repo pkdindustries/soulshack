@@ -10,7 +10,7 @@ import (
 	"pkdindustries/soulshack/internal/llm"
 )
 
-// OpTrigger responds when the bot receives +o (operator status)
+// OpTrigger responds when the bot receives +o or -o (operator status change)
 type OpTrigger struct {
 	BotNick string
 }
@@ -34,13 +34,12 @@ func (t *OpTrigger) Check(ctx irc.ChatContextInterface, event *girc.Event) bool 
 		return false
 	}
 
-	channel := event.Params[0]
 	targets := event.Params[2:]
 
-	// Check if bot is in targets and is now op (girc updates state before our handler)
+	// Check if bot is in targets
 	for _, target := range targets {
 		if target == t.BotNick {
-			return ctx.IsOp(channel, t.BotNick)
+			return true
 		}
 	}
 	return false
@@ -49,9 +48,16 @@ func (t *OpTrigger) Check(ctx irc.ChatContextInterface, event *girc.Event) bool 
 func (t *OpTrigger) Execute(ctx irc.ChatContextInterface, event *girc.Event) {
 	core.WithRequestLock(ctx, ctx.GetLockKey(), "op", func() {
 		cfg := ctx.GetConfig()
-		oppedBy := event.Source.Name
+		changedBy := event.Source.Name
+		channel := event.Params[0]
 
-		prompt := fmt.Sprintf(cfg.Bot.OpWatcherTemplate, oppedBy)
+		action := "deopped"
+		if ctx.IsOp(channel, t.BotNick) {
+			action = "opped"
+		}
+
+		// Template takes: nick, action (e.g., "%s %s you")
+		prompt := fmt.Sprintf(cfg.Bot.OpWatcherTemplate, changedBy, action)
 		outch, err := llm.Complete(ctx, prompt)
 
 		if err != nil {
