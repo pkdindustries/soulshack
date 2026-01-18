@@ -10,16 +10,33 @@ import (
 
 var logger *slog.Logger
 
-func InitLogger(verbose bool) {
-	level := slog.LevelInfo
-	if verbose {
-		level = slog.LevelDebug
+// InitLogger initializes the global logger with level and format.
+// level: debug, info, warn, error (default: info)
+// format: text (colorized tint), json (default: text)
+func InitLogger(level, format string) {
+	var slogLevel slog.Level
+	switch level {
+	case "debug":
+		slogLevel = slog.LevelDebug
+	case "warn":
+		slogLevel = slog.LevelWarn
+	case "error":
+		slogLevel = slog.LevelError
+	default:
+		slogLevel = slog.LevelInfo
 	}
 
-	handler := tint.NewHandler(os.Stderr, &tint.Options{
-		Level:      level,
-		TimeFormat: "15:04:05",
-	})
+	var handler slog.Handler
+	if format == "json" {
+		handler = slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
+			Level: slogLevel,
+		})
+	} else {
+		handler = tint.NewHandler(os.Stderr, &tint.Options{
+			Level:      slogLevel,
+			TimeFormat: "15:04:05",
+		})
+	}
 
 	logger = slog.New(handler)
 	slog.SetDefault(logger)
@@ -28,7 +45,7 @@ func InitLogger(verbose bool) {
 // GetLogger returns the global logger
 func GetLogger() *slog.Logger {
 	if logger == nil {
-		InitLogger(false)
+		InitLogger("info", "text")
 	}
 	return logger
 }

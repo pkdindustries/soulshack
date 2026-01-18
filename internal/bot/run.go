@@ -18,7 +18,11 @@ import (
 
 // Run starts the IRC bot with the given configuration
 func Run(ctx context.Context, cfg *config.Configuration) error {
-	core.InitLogger(cfg.Bot.Verbose)
+	level := cfg.Bot.LogLevel
+	if cfg.Bot.Verbose {
+		level = "debug"
+	}
+	core.InitLogger(level, cfg.Bot.LogFormat)
 
 	sys := NewSystem(cfg)
 
