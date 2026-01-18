@@ -6,6 +6,7 @@ import (
 
 	"github.com/lrstanley/girc"
 
+	"pkdindustries/soulshack/internal/core"
 	"pkdindustries/soulshack/internal/irc"
 	"pkdindustries/soulshack/internal/llm"
 )
@@ -43,19 +44,21 @@ func (t *OpTrigger) Check(ctx irc.ChatContextInterface, event *girc.Event) bool 
 }
 
 func (t *OpTrigger) Execute(ctx irc.ChatContextInterface, event *girc.Event) {
-	cfg := ctx.GetConfig()
-	oppedBy := event.Source.Name
+	core.WithRequestLock(ctx, ctx.GetLockKey(), "op", func() {
+		cfg := ctx.GetConfig()
+		oppedBy := event.Source.Name
 
-	prompt := fmt.Sprintf(cfg.Bot.OpWatcherTemplate, oppedBy)
-	outch, err := llm.Complete(ctx, prompt)
+		prompt := fmt.Sprintf(cfg.Bot.OpWatcherTemplate, oppedBy)
+		outch, err := llm.Complete(ctx, prompt)
 
-	if err != nil {
-		ctx.GetLogger().Errorw("op_trigger_error", "error", err)
-		ctx.Reply(err.Error())
-		return
-	}
+		if err != nil {
+			ctx.GetLogger().Errorw("op_trigger_error", "error", err)
+			ctx.Reply(err.Error())
+			return
+		}
 
-	for res := range outch {
-		ctx.Reply(res)
-	}
+		for res := range outch {
+			ctx.Reply(res)
+		}
+	}, nil)
 }

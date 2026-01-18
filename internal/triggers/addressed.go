@@ -4,6 +4,7 @@ import (
 	"github.com/lrstanley/girc"
 
 	"pkdindustries/soulshack/internal/commands"
+	"pkdindustries/soulshack/internal/core"
 	"pkdindustries/soulshack/internal/irc"
 )
 
@@ -25,5 +26,9 @@ func (t *AddressedTrigger) Check(ctx irc.ChatContextInterface, event *girc.Event
 }
 
 func (t *AddressedTrigger) Execute(ctx irc.ChatContextInterface, event *girc.Event) {
-	t.CmdRegistry.Dispatch(ctx)
+	core.WithRequestLock(ctx, ctx.GetLockKey(), "addressed", func() {
+		t.CmdRegistry.Dispatch(ctx)
+	}, func() {
+		ctx.Reply("Request timed out waiting for previous operation to complete")
+	})
 }

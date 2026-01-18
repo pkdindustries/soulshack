@@ -6,6 +6,7 @@ import (
 
 	"github.com/lrstanley/girc"
 
+	"pkdindustries/soulshack/internal/core"
 	"pkdindustries/soulshack/internal/irc"
 	"pkdindustries/soulshack/internal/llm"
 )
@@ -39,21 +40,23 @@ func (t *URLTrigger) Check(ctx irc.ChatContextInterface, event *girc.Event) bool
 }
 
 func (t *URLTrigger) Execute(ctx irc.ChatContextInterface, event *girc.Event) {
-	cfg := ctx.GetConfig()
-	msg := event.Last()
+	core.WithRequestLock(ctx, ctx.GetLockKey(), "url", func() {
+		cfg := ctx.GetConfig()
+		msg := event.Last()
 
-	if cfg.Bot.URLWatcherTemplate != "" {
-		msg = fmt.Sprintf(cfg.Bot.URLWatcherTemplate, msg)
-	}
+		if cfg.Bot.URLWatcherTemplate != "" {
+			msg = fmt.Sprintf(cfg.Bot.URLWatcherTemplate, msg)
+		}
 
-	outch, err := llm.Complete(ctx, fmt.Sprintf("(nick:%s) %s", ctx.GetSource(), msg))
-	if err != nil {
-		ctx.GetLogger().Errorw("url_trigger_error", "error", err)
-		ctx.Reply(err.Error())
-		return
-	}
+		outch, err := llm.Complete(ctx, fmt.Sprintf("(nick:%s) %s", ctx.GetSource(), msg))
+		if err != nil {
+			ctx.GetLogger().Errorw("url_trigger_error", "error", err)
+			ctx.Reply(err.Error())
+			return
+		}
 
-	for res := range outch {
-		ctx.Reply(res)
-	}
+		for res := range outch {
+			ctx.Reply(res)
+		}
+	}, nil)
 }

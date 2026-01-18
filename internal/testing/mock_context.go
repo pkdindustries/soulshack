@@ -294,6 +294,13 @@ func (m *MockChatContext) GetBotNick() string {
 	return m.BotNick
 }
 
+func (m *MockChatContext) GetLockKey() string {
+	if m.cfg != nil {
+		return m.cfg.Server.Channel
+	}
+	return "#test"
+}
+
 // Runtime methods
 
 func (m *MockChatContext) GetSession() sessions.Session {

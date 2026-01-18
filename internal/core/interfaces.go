@@ -47,6 +47,7 @@ type ChatContextInterface interface {
 	GetChannel(name string) *ChannelInfo
 	GetChannelUsers(channel string) []ChannelUser
 	GetBotNick() string
+	GetLockKey() string
 
 	// Runtime methods
 	GetSession() sessions.Session

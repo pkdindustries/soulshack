@@ -258,6 +258,16 @@ func (c ChatContext) GetChannelUsers(channel string) []core.ChannelUser {
 	return result
 }
 
+func (c ChatContext) GetLockKey() string {
+	if len(c.event.Params) > 0 && girc.IsValidChannel(c.event.Params[0]) {
+		return c.Config.Server.Channel
+	}
+	if c.event.Source != nil {
+		return c.event.Source.Name
+	}
+	return c.Config.Server.Channel
+}
+
 // checks if the message is valid for processing
 func (c ChatContext) Valid() bool {
 	return CheckValid(c.IsAddressed(), c.Config.Bot.Addressed, c.IsPrivate(), len(c.args))

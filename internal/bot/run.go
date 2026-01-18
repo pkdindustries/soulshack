@@ -81,17 +81,7 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 	ircClient.Handlers.AddBg(girc.ALL_EVENTS, func(client *girc.Client, e girc.Event) {
 		chatCtx, cancel := irc.NewChatContext(ctx, cfg, sys, client, &e, fatalErr)
 		defer cancel()
-
-		key := getLockKey(&e, cfg.Server.Channel)
-		var onTimeout func()
-		if e.Command == girc.PRIVMSG {
-			onTimeout = func() {
-				chatCtx.Reply("Request timed out waiting for previous operation to complete")
-			}
-		}
-		core.WithRequestLock(chatCtx, key, e.Command, func() {
-			triggerRegistry.Process(chatCtx, &e)
-		}, onTimeout)
+		triggerRegistry.Process(chatCtx, &e)
 	})
 
 	// Reconnect loop
@@ -142,15 +132,4 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 	}
 
 	return fmt.Errorf("failed to connect after %d attempts", maxRetries)
-}
-
-// getLockKey returns the lock key for serializing event processing per conversation
-func getLockKey(e *girc.Event, channel string) string {
-	if len(e.Params) > 0 && girc.IsValidChannel(e.Params[0]) {
-		return channel
-	}
-	if e.Source != nil {
-		return e.Source.Name
-	}
-	return channel
 }
