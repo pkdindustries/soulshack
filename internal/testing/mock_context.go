@@ -26,10 +26,12 @@ type MockChatContext struct {
 	Args      []string
 
 	// Recorded calls (for assertions)
-	Replies         []string
-	Actions         []string
-	JoinCalls       []string
-	NickCalls       []string
+	Replies          []string
+	Actions          []string
+	JoinCalls        []string
+	JoinWithKeyCalls []JoinWithKeyCall
+	NickCalls        []string
+	FatalErrors      []error
 	KickCalls       []KickCall
 	SetModeCalls    []ModeCall
 	TopicCalls      []TopicCall
@@ -56,6 +58,11 @@ type MockChatContext struct {
 type InviteCall struct {
 	Channel string
 	Nick    string
+}
+
+type JoinWithKeyCall struct {
+	Channel string
+	Key     string
 }
 
 type ActionCall struct {
@@ -220,6 +227,15 @@ func (m *MockChatContext) SendAction(target, msg string) {
 func (m *MockChatContext) Join(channel string) bool {
 	m.JoinCalls = append(m.JoinCalls, channel)
 	return true
+}
+
+func (m *MockChatContext) JoinWithKey(channel, key string) bool {
+	m.JoinWithKeyCalls = append(m.JoinWithKeyCalls, JoinWithKeyCall{Channel: channel, Key: key})
+	return true
+}
+
+func (m *MockChatContext) FatalError(err error) {
+	m.FatalErrors = append(m.FatalErrors, err)
 }
 
 func (m *MockChatContext) Nick(nickname string) bool {

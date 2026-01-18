@@ -37,6 +37,11 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 
 	// Initialize trigger registry (order matters: passive watchers first, addressed last as fallback)
 	triggerRegistry := triggers.NewRegistry()
+	// Lifecycle triggers
+	triggerRegistry.Register(&triggers.ConnectedTrigger{})
+	triggerRegistry.Register(&triggers.NickErrorTrigger{})
+	triggerRegistry.Register(&triggers.ChannelErrorTrigger{})
+	// Behavior triggers
 	triggerRegistry.Register(&triggers.URLTrigger{})
 	triggerRegistry.Register(&triggers.OpTrigger{BotNick: cfg.Server.Nick})
 	triggerRegistry.Register(&triggers.JoinTrigger{BotNick: cfg.Server.Nick})
@@ -72,82 +77,21 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 		zap.S().Infow("irc_client_closed")
 	}()
 
-	// Handle nick already in use - exit with error
-	ircClient.Handlers.AddBg(girc.ERR_NICKNAMEINUSE, func(client *girc.Client, e girc.Event) {
-		zap.S().Errorw("nick_in_use", "nick", cfg.Server.Nick)
-		select {
-		case fatalErr <- fmt.Errorf("nick %q is already in use", cfg.Server.Nick):
-		default:
-		}
-		client.Close()
-	})
+	// Single global handler routes all events through the trigger registry
+	ircClient.Handlers.AddBg(girc.ALL_EVENTS, func(client *girc.Client, e girc.Event) {
+		chatCtx, cancel := irc.NewChatContext(ctx, cfg, sys, client, &e, fatalErr)
+		defer cancel()
 
-	// Handle channel join failures - exit with error
-	channelErrors := map[string]string{
-		girc.ERR_NOSUCHCHANNEL:  "channel does not exist",
-		girc.ERR_CHANNELISFULL:  "channel is full",
-		girc.ERR_INVITEONLYCHAN: "channel is invite-only",
-		girc.ERR_BANNEDFROMCHAN: "banned from channel",
-		girc.ERR_BADCHANNELKEY:  "bad channel key",
-	}
-	for code, reason := range channelErrors {
-		ircClient.Handlers.AddBg(code, func(client *girc.Client, e girc.Event) {
-			channel := cfg.Server.Channel
-			if len(e.Params) > 1 {
-				channel = e.Params[1]
+		key := getLockKey(&e, cfg.Server.Channel)
+		var onTimeout func()
+		if e.Command == girc.PRIVMSG {
+			onTimeout = func() {
+				chatCtx.Reply("Request timed out waiting for previous operation to complete")
 			}
-			zap.S().Errorw("channel_join_failed", "channel", channel, "reason", reason)
-			select {
-			case fatalErr <- fmt.Errorf("cannot join %s: %s", channel, reason):
-			default:
-			}
-			client.Close()
-		})
-	}
-
-	ircClient.Handlers.AddBg(girc.CONNECTED, func(client *girc.Client, e girc.Event) {
-		zap.S().Infow("channel_joining", "channel", cfg.Server.Channel)
-		if cfg.Server.ChannelKey != "" {
-			client.Cmd.Join(cfg.Server.Channel, cfg.Server.ChannelKey)
-		} else {
-			client.Cmd.Join(cfg.Server.Channel)
 		}
-	})
-
-	ircClient.Handlers.AddBg(girc.JOIN, func(client *girc.Client, e girc.Event) {
-		ctx, cancel := irc.NewChatContext(ctx, cfg, sys, client, &e)
-		defer cancel()
-
-		channelKey := e.Params[0]
-		core.WithRequestLock(ctx, channelKey, "join", func() {
-			triggerRegistry.Process(ctx, &e)
-		}, nil)
-	})
-
-	ircClient.Handlers.AddBg(girc.MODE, func(client *girc.Client, e girc.Event) {
-		ctx, cancel := irc.NewChatContext(ctx, cfg, sys, client, &e)
-		defer cancel()
-
-		channel := e.Params[0]
-		core.WithRequestLock(ctx, channel, "mode", func() {
-			triggerRegistry.Process(ctx, &e)
-		}, nil)
-	})
-
-	ircClient.Handlers.AddBg(girc.PRIVMSG, func(client *girc.Client, e girc.Event) {
-		ctx, cancel := irc.NewChatContext(ctx, cfg, sys, client, &e)
-		defer cancel()
-
-		channelKey := e.Params[0]
-		if !girc.IsValidChannel(channelKey) {
-			channelKey = e.Source.Name
-		}
-
-		core.WithRequestLock(ctx, channelKey, "privmsg", func() {
-			triggerRegistry.Process(ctx, &e)
-		}, func() {
-			ctx.Reply("Request timed out waiting for previous operation to complete")
-		})
+		core.WithRequestLock(chatCtx, key, e.Command, func() {
+			triggerRegistry.Process(chatCtx, &e)
+		}, onTimeout)
 	})
 
 	// Reconnect loop
@@ -198,4 +142,15 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 	}
 
 	return fmt.Errorf("failed to connect after %d attempts", maxRetries)
+}
+
+// getLockKey returns the lock key for serializing event processing per conversation
+func getLockKey(e *girc.Event, channel string) string {
+	if len(e.Params) > 0 && girc.IsValidChannel(e.Params[0]) {
+		return channel
+	}
+	if e.Source != nil {
+		return e.Source.Name
+	}
+	return channel
 }

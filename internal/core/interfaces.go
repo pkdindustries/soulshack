@@ -31,7 +31,9 @@ type ChatContextInterface interface {
 
 	// Controller methods
 	Join(string) bool
+	JoinWithKey(channel, key string) bool
 	Nick(string) bool
+	FatalError(err error)
 	SetMode(target, flags string, args ...string) bool
 	Kick(channel, nick, reason string) bool
 	Ban(channel, target string) bool

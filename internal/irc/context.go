@@ -28,11 +28,12 @@ type ChatContext struct {
 	args      []string
 	logger    *zap.SugaredLogger
 	requestID string
+	fatalCh   chan<- error
 }
 
 var _ ChatContextInterface = (*ChatContext)(nil)
 
-func NewChatContext(parentctx context.Context, config *config.Configuration, system core.System, ircclient *girc.Client, e *girc.Event) (ChatContextInterface, context.CancelFunc) {
+func NewChatContext(parentctx context.Context, config *config.Configuration, system core.System, ircclient *girc.Client, e *girc.Event, fatalCh chan<- error) (ChatContextInterface, context.CancelFunc) {
 	timedctx, cancel := context.WithTimeout(parentctx, config.API.Timeout)
 
 	// Generate a unique request ID for correlation
@@ -46,6 +47,7 @@ func NewChatContext(parentctx context.Context, config *config.Configuration, sys
 		event:     e,
 		args:      strings.Fields(e.Last()),
 		requestID: requestID,
+		fatalCh:   fatalCh,
 		logger: zap.S().With(
 			"request_id", requestID,
 			"channel", e.Params[0],
@@ -115,6 +117,19 @@ func (c ChatContext) Nick(nickname string) bool {
 func (c ChatContext) Join(channel string) bool {
 	c.client.Cmd.Join(channel)
 	return true
+}
+
+func (c ChatContext) JoinWithKey(channel, key string) bool {
+	c.client.Cmd.Join(channel, key)
+	return true
+}
+
+func (c ChatContext) FatalError(err error) {
+	select {
+	case c.fatalCh <- err:
+	default:
+	}
+	c.client.Close()
 }
 
 func (c ChatContext) GetArgs() []string {
