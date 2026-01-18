@@ -11,7 +11,7 @@ import (
 	"pkdindustries/soulshack/internal/llm"
 )
 
-var urlPattern = regexp.MustCompile(`https?://[^\s]+`)
+var urlPattern = regexp.MustCompile(`^https?://[^\s]+`)
 
 // URLTrigger responds to messages containing URLs
 type URLTrigger struct{}

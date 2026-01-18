@@ -20,7 +20,7 @@ func TestURLTrigger_Check_BasicURL(t *testing.T) {
 		{"https URL", "https://example.com/path", true},
 		{"https with query", "https://example.com?foo=bar", true},
 		{"https with fragment", "https://example.com#section", true},
-		{"URL mid-message", "check out https://example.com please", true},
+		{"URL mid-message", "check out https://example.com please", false},
 	}
 
 	for _, tt := range tests {
