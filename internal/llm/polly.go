@@ -62,7 +62,7 @@ func (p *PollyLLM) ChatCompletionStream(chatCtx core.ChatContextInterface, req *
 		chunker.Flush()
 
 		if err != nil {
-			chatCtx.GetLogger().Errorw("agent_error", "error", err.Error())
+			chatCtx.GetLogger().Error("agent_error", "error", err.Error())
 			return
 		}
 
@@ -117,11 +117,11 @@ func (h *callbackHandler) onComplete(response *messages.ChatMessage) {
 	if h.toolCount > 0 {
 		fields = append(fields, "tool_count", h.toolCount)
 	}
-	h.chatCtx.GetLogger().Infow("request_complete", fields...)
+	h.chatCtx.GetLogger().Info("request_complete", fields...)
 }
 
 func (h *callbackHandler) onReasoning(content string) {
-	h.chatCtx.GetLogger().Debugw("reasoning_chunk", "content", content)
+	h.chatCtx.GetLogger().Debug("reasoning_chunk", "content", content)
 
 	if !h.cfg.Bot.ShowThinkingAction {
 		return
@@ -138,7 +138,7 @@ func (h *callbackHandler) onReasoning(content string) {
 }
 
 func (h *callbackHandler) onContent(content string) {
-	h.chatCtx.GetLogger().Debugw("oncontent_callback",
+	h.chatCtx.GetLogger().Debug("oncontent_callback",
 		"content", content,
 		"content_len", len(content),
 	)
@@ -156,7 +156,7 @@ func (h *callbackHandler) onToolStart(calls []messages.ChatMessageToolCall) {
 
 	// Log each tool
 	for _, tc := range calls {
-		h.chatCtx.GetLogger().Infow("tool_started", "tool", tc.Name)
+		h.chatCtx.GetLogger().Info("tool_started", "tool", tc.Name)
 	}
 
 	if !h.cfg.Bot.ShowToolActions || len(calls) == 0 {
@@ -183,7 +183,7 @@ func (h *callbackHandler) onToolStart(calls []messages.ChatMessageToolCall) {
 
 func (h *callbackHandler) onToolEnd(tc messages.ChatMessageToolCall, result string, duration time.Duration, toolErr error) {
 	if toolErr != nil {
-		h.chatCtx.GetLogger().Errorw("tool_failed",
+		h.chatCtx.GetLogger().Error("tool_failed",
 			"tool", tc.Name,
 			"duration_ms", duration.Milliseconds(),
 			"error", toolErr.Error(),
@@ -195,7 +195,7 @@ func (h *callbackHandler) onToolEnd(tc messages.ChatMessageToolCall, result stri
 	if len(preview) > 60 && !h.cfg.Bot.Verbose {
 		preview = preview[:60] + "..."
 	}
-	h.chatCtx.GetLogger().Infow("tool_completed",
+	h.chatCtx.GetLogger().Info("tool_completed",
 		"tool", tc.Name,
 		"duration_ms", duration.Milliseconds(),
 		"result_size", len(result),
@@ -204,7 +204,7 @@ func (h *callbackHandler) onToolEnd(tc messages.ChatMessageToolCall, result stri
 }
 
 func (h *callbackHandler) onError(err error) {
-	h.chatCtx.GetLogger().Errorw("stream_error", "error", err.Error())
+	h.chatCtx.GetLogger().Error("stream_error", "error", err.Error())
 	h.chunker.Write(fmt.Sprintf("Error: %v", err))
 }
 

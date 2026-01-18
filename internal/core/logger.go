@@ -1,70 +1,56 @@
 package core
 
 import (
+	"log/slog"
+	"os"
 	"time"
 
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
+	"github.com/lmittmann/tint"
 )
 
-var logger *zap.SugaredLogger
+var logger *slog.Logger
 
 func InitLogger(verbose bool) {
-	var config zap.Config
-
+	level := slog.LevelInfo
 	if verbose {
-		config = zap.NewDevelopmentConfig()
-		config.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
-		config.EncoderConfig.EncodeTime = zapcore.TimeEncoderOfLayout("15:04:05.000")
-	} else {
-		config = zap.NewProductionConfig()
-		config.Level = zap.NewAtomicLevelAt(zap.InfoLevel)
-		config.Encoding = "console" // Use console encoding for readability in IRC bot context
-		// Enable colors for production logs too
-		config.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
-		// Simplified time format
-		config.EncoderConfig.EncodeTime = zapcore.TimeEncoderOfLayout("15:04:05.000")
+		level = slog.LevelDebug
 	}
 
-	// Disable stacktrace for normal logs to keep output clean
-	config.DisableStacktrace = !verbose
+	handler := tint.NewHandler(os.Stderr, &tint.Options{
+		Level:      level,
+		TimeFormat: "15:04:05",
+	})
 
-	l, err := config.Build()
-	if err != nil {
-		panic(err)
-	}
-
-	// Replace global logger
-	zap.ReplaceGlobals(l)
-	zap.RedirectStdLog(l)
-	logger = l.Sugar()
+	logger = slog.New(handler)
+	slog.SetDefault(logger)
 }
 
-// GetLogger returns the global sugared logger
-func GetLogger() *zap.SugaredLogger {
+// GetLogger returns the global logger
+func GetLogger() *slog.Logger {
 	if logger == nil {
-		InitLogger(false) // Default to non-verbose if not initialized
+		InitLogger(false)
 	}
 	return logger
 }
 
 // WithFields creates a logger with the given structured fields
-func WithFields(fields ...interface{}) *zap.SugaredLogger {
-	return GetLogger().With(fields...)
+func WithFields(args ...any) *slog.Logger {
+	return GetLogger().With(args...)
 }
 
 // LogDuration logs the duration of an operation
 // Usage: defer LogDuration(logger, "operation_name", time.Now())
-func LogDuration(logger *zap.SugaredLogger, operation string, start time.Time) {
+func LogDuration(logger *slog.Logger, operation string, start time.Time) {
 	duration := time.Since(start)
-	logger.With(
+	logger.Debug("operation completed",
 		"operation", operation,
 		"duration_ms", duration.Milliseconds(),
-	).Debugf("Completed %s in %v", operation, duration)
+		"duration", duration.String(),
+	)
 }
 
 // WithTool creates a logger with tool execution context
-func WithTool(logger *zap.SugaredLogger, toolName string, args map[string]any) *zap.SugaredLogger {
+func WithTool(logger *slog.Logger, toolName string, args map[string]any) *slog.Logger {
 	return logger.With(
 		"tool", toolName,
 		"tool_args", args,

@@ -44,7 +44,7 @@ func (r *Registry) Process(ctx irc.ChatContextInterface, event *girc.Event) bool
 	executed := false
 	for _, b := range behaviors {
 		if b.Check(ctx, event) {
-			ctx.GetLogger().Infow("behavior_executing", "behavior", b.Name())
+			ctx.GetLogger().Info("behavior_executing", "behavior", b.Name())
 			b.Execute(ctx, event)
 			executed = true
 		}

@@ -2,11 +2,11 @@ package testing
 
 import (
 	"context"
+	"log/slog"
 	"strings"
 
 	"github.com/alexschlessinger/pollytool/sessions"
 	"github.com/lrstanley/girc"
-	"go.uber.org/zap"
 
 	"pkdindustries/soulshack/internal/config"
 	"pkdindustries/soulshack/internal/core"
@@ -45,7 +45,7 @@ type MockChatContext struct {
 	session sessions.Session
 	cfg     *config.Configuration
 	sys     core.System
-	logger  *zap.SugaredLogger
+	logger  *slog.Logger
 	client  *girc.Client
 
 	// Mock data for lookups
@@ -86,7 +86,7 @@ func NewMockContext() *MockChatContext {
 		Replies:      []string{},
 		Actions:      []string{},
 		cfg:          DefaultTestConfig(),
-		logger:       zap.NewNop().Sugar(),
+		logger:       slog.New(discardHandler{}),
 		client:       NewMockIRCClient(),
 		Users:        make(map[string]*core.UserInfo),
 		Channels:     make(map[string]*core.ChannelInfo),
@@ -94,6 +94,14 @@ func NewMockContext() *MockChatContext {
 		BotNick:      "soulshack",
 	}
 }
+
+// discardHandler is a slog.Handler that discards all log records
+type discardHandler struct{}
+
+func (discardHandler) Enabled(context.Context, slog.Level) bool  { return false }
+func (discardHandler) Handle(context.Context, slog.Record) error { return nil }
+func (d discardHandler) WithAttrs([]slog.Attr) slog.Handler      { return d }
+func (d discardHandler) WithGroup(string) slog.Handler           { return d }
 
 // Builder methods for fluent test setup
 
@@ -161,7 +169,7 @@ func (m *MockChatContext) WithSession(session sessions.Session) *MockChatContext
 }
 
 // WithLogger sets the logger
-func (m *MockChatContext) WithLogger(logger *zap.SugaredLogger) *MockChatContext {
+func (m *MockChatContext) WithLogger(logger *slog.Logger) *MockChatContext {
 	m.logger = logger
 	return m
 }
@@ -327,7 +335,7 @@ func (m *MockChatContext) GetSystem() core.System {
 	return m.sys
 }
 
-func (m *MockChatContext) GetLogger() *zap.SugaredLogger {
+func (m *MockChatContext) GetLogger() *slog.Logger {
 	return m.logger
 }
 

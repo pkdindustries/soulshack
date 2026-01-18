@@ -2,12 +2,12 @@ package config
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/urfave/cli/v3"
-	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
 )
 
@@ -247,7 +247,7 @@ func (c *Configuration) PrintConfig() {
 
 func NewConfiguration(c *cli.Command) *Configuration {
 	if c.IsSet("config") {
-		zap.S().Infow("config_loaded", "path", c.String("config"))
+		slog.Info("config_loaded", "path", c.String("config"))
 	}
 
 	config := &Configuration{

@@ -33,7 +33,7 @@ func (b *URLBehavior) Check(ctx irc.ChatContextInterface, event *girc.Event) boo
 		return false
 	}
 	if urlPattern.MatchString(event.Last()) {
-		ctx.GetLogger().Infow("url_detected")
+		ctx.GetLogger().Info("url_detected")
 		return true
 	}
 	return false
@@ -50,7 +50,7 @@ func (b *URLBehavior) Execute(ctx irc.ChatContextInterface, event *girc.Event) {
 
 		outch, err := llm.Complete(ctx, fmt.Sprintf("(nick:%s) %s", ctx.GetSource(), msg))
 		if err != nil {
-			ctx.GetLogger().Errorw("url_behavior_error", "error", err)
+			ctx.GetLogger().Error("url_behavior_error", "error", err)
 			ctx.Reply(err.Error())
 			return
 		}
