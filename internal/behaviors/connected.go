@@ -1,8 +1,9 @@
 package behaviors
 
 import (
+	"log/slog"
+
 	"github.com/lrstanley/girc"
-	"go.uber.org/zap"
 
 	"pkdindustries/soulshack/internal/irc"
 )
@@ -24,7 +25,7 @@ func (b *ConnectedBehavior) Check(ctx irc.ChatContextInterface, event *girc.Even
 
 func (b *ConnectedBehavior) Execute(ctx irc.ChatContextInterface, event *girc.Event) {
 	cfg := ctx.GetConfig()
-	zap.S().Infow("channel_joining", "channel", cfg.Server.Channel)
+	slog.Info("channel_joining", "channel", cfg.Server.Channel)
 	if cfg.Server.ChannelKey != "" {
 		ctx.JoinWithKey(cfg.Server.Channel, cfg.Server.ChannelKey)
 	} else {

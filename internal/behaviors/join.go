@@ -31,7 +31,7 @@ func (b *JoinBehavior) Execute(ctx irc.ChatContextInterface, event *girc.Event) 
 		cfg := ctx.GetConfig()
 		outch, err := llm.Complete(ctx, cfg.Bot.Greeting)
 		if err != nil {
-			ctx.GetLogger().Errorw("join_behavior_error", "error", err)
+			ctx.GetLogger().Error("join_behavior_error", "error", err)
 			ctx.Reply(err.Error())
 			return
 		}

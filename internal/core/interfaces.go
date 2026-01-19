@@ -2,11 +2,11 @@ package core
 
 import (
 	"context"
+	"log/slog"
 
 	"github.com/alexschlessinger/pollytool/llm"
 	"github.com/alexschlessinger/pollytool/sessions"
 	"github.com/alexschlessinger/pollytool/tools"
-	"go.uber.org/zap"
 
 	"pkdindustries/soulshack/internal/config"
 )
@@ -53,7 +53,7 @@ type ChatContextInterface interface {
 	GetSession() sessions.Session
 	GetConfig() *config.Configuration
 	GetSystem() System
-	GetLogger() *zap.SugaredLogger
+	GetLogger() *slog.Logger
 }
 
 // LLM defines the interface for the language model client

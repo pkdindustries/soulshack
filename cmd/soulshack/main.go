@@ -15,7 +15,6 @@ import (
 	"syscall"
 
 	"github.com/urfave/cli/v3"
-	"go.uber.org/zap"
 
 	"pkdindustries/soulshack/internal/bot"
 	"pkdindustries/soulshack/internal/config"
@@ -44,6 +43,6 @@ func main() {
 
 	if err := cmd.Run(ctx, os.Args); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		zap.S().Fatal(err)
+		os.Exit(1)
 	}
 }

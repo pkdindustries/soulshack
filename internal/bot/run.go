@@ -3,12 +3,11 @@ package bot
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
+	"log/slog"
 	"time"
 
-	"fmt"
-
 	"github.com/lrstanley/girc"
-	"go.uber.org/zap"
 
 	"pkdindustries/soulshack/internal/behaviors"
 	"pkdindustries/soulshack/internal/commands"
@@ -19,8 +18,11 @@ import (
 
 // Run starts the IRC bot with the given configuration
 func Run(ctx context.Context, cfg *config.Configuration) error {
-	core.InitLogger(cfg.Bot.Verbose)
-	defer zap.L().Sync()
+	level := cfg.Bot.LogLevel
+	if cfg.Bot.Verbose {
+		level = "debug"
+	}
+	core.InitLogger(level, cfg.Bot.LogFormat)
 
 	sys := NewSystem(cfg)
 
@@ -74,7 +76,7 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 	go func() {
 		<-ctx.Done()
 		ircClient.Quit("Shutting down...")
-		zap.S().Infow("irc_client_closed")
+		slog.Info("irc_client_closed")
 	}()
 
 	// Single global handler routes all events through the behavior registry
@@ -91,7 +93,7 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 			return nil
 		}
 
-		zap.S().Infow("server_connecting",
+		slog.Info("server_connecting",
 			"server", ircClient.Config.Server,
 			"port", ircClient.Config.Port,
 			"tls", ircClient.Config.SSL,
@@ -110,8 +112,8 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 			default:
 			}
 
-			zap.S().Errorw("connection_failed", "error", err)
-			zap.S().Infow("connection_retry", "delay_sec", 5, "attempt", i+1, "max_attempts", maxRetries)
+			slog.Error("connection_failed", "error", err)
+			slog.Info("connection_retry", "delay_sec", 5, "attempt", i+1, "max_attempts", maxRetries)
 
 			select {
 			case <-time.After(5 * time.Second):

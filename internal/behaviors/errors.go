@@ -2,9 +2,9 @@ package behaviors
 
 import (
 	"fmt"
+	"log/slog"
 
 	"github.com/lrstanley/girc"
-	"go.uber.org/zap"
 
 	"pkdindustries/soulshack/internal/irc"
 )
@@ -26,7 +26,7 @@ func (b *NickErrorBehavior) Check(ctx irc.ChatContextInterface, event *girc.Even
 
 func (b *NickErrorBehavior) Execute(ctx irc.ChatContextInterface, event *girc.Event) {
 	cfg := ctx.GetConfig()
-	zap.S().Errorw("nick_in_use", "nick", cfg.Server.Nick)
+	slog.Error("nick_in_use", "nick", cfg.Server.Nick)
 	ctx.FatalError(fmt.Errorf("nick %q is already in use", cfg.Server.Nick))
 }
 
@@ -66,6 +66,6 @@ func (b *ChannelErrorBehavior) Execute(ctx irc.ChatContextInterface, event *girc
 		channel = event.Params[1]
 	}
 	reason := channelErrorReasons[event.Command]
-	zap.S().Errorw("channel_join_failed", "channel", channel, "reason", reason)
+	slog.Error("channel_join_failed", "channel", channel, "reason", reason)
 	ctx.FatalError(fmt.Errorf("cannot join %s: %s", channel, reason))
 }

@@ -89,7 +89,7 @@ func Complete(ctx irc.ChatContextInterface, msg string) (<-chan string, error) {
 	if len(truncated) > 100 {
 		truncated = truncated[:100] + "..."
 	}
-	ctx.GetLogger().Infow("message_received", "message", truncated)
+	ctx.GetLogger().Info("message_received", "message", truncated)
 	ctx.GetSession().AddMessage(cmsg)
 
 	// Build completion request

@@ -1,11 +1,11 @@
 package bot
 
 import (
+	"log/slog"
 	"sync/atomic"
 
 	"github.com/alexschlessinger/pollytool/sessions"
 	"github.com/alexschlessinger/pollytool/tools"
-	"go.uber.org/zap"
 
 	"pkdindustries/soulshack/internal/config"
 	"pkdindustries/soulshack/internal/core"
@@ -32,7 +32,7 @@ func (s *SystemImpl) GetLLM() core.LLM {
 }
 
 func (s *SystemImpl) UpdateLLM(cfg config.APIConfig) error {
-	zap.S().Infow("llm_updating")
+	slog.Info("llm_updating")
 	s.llm.Store(llm.NewPollyLLM(cfg))
 	return nil
 }
@@ -50,7 +50,7 @@ func NewSystem(c *config.Configuration) core.System {
 	if len(c.Bot.Tools) > 0 {
 		for _, toolSpec := range c.Bot.Tools {
 			if _, err := s.Tools.LoadToolAuto(toolSpec); err != nil {
-				zap.S().Warnw("tool_load_failed", "tool", toolSpec, "error", err)
+				slog.Warn("tool_load_failed", "tool", toolSpec, "error", err)
 				toolErrors++
 				continue
 			}
@@ -76,7 +76,7 @@ func NewSystem(c *config.Configuration) core.System {
 	if toolErrors > 0 {
 		fields = append(fields, "tool_errors", toolErrors)
 	}
-	zap.S().Infow("system_initialized", fields...)
+	slog.Info("system_initialized", fields...)
 
 	return s
 }

@@ -61,7 +61,7 @@ func (b *OpBehavior) Execute(ctx irc.ChatContextInterface, event *girc.Event) {
 		outch, err := llm.Complete(ctx, prompt)
 
 		if err != nil {
-			ctx.GetLogger().Errorw("op_behavior_error", "error", err)
+			ctx.GetLogger().Error("op_behavior_error", "error", err)
 			ctx.Reply(err.Error())
 			return
 		}

@@ -4,9 +4,9 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"log/slog"
+	"os"
 	"strings"
-
-	"go.uber.org/zap"
 
 	"github.com/alexschlessinger/pollytool/sessions"
 	"github.com/lrstanley/girc"
@@ -26,7 +26,7 @@ type ChatContext struct {
 	client    *girc.Client
 	event     *girc.Event
 	args      []string
-	logger    *zap.SugaredLogger
+	logger    *slog.Logger
 	requestID string
 	fatalCh   chan<- error
 }
@@ -61,7 +61,7 @@ func NewChatContext(parentctx context.Context, config *config.Configuration, sys
 		args:      strings.Fields(e.Last()),
 		requestID: requestID,
 		fatalCh:   fatalCh,
-		logger: zap.S().With(
+		logger: slog.Default().With(
 			"request_id", requestID,
 			"channel", channel,
 			"source", e.Source.Name,
@@ -79,7 +79,8 @@ func NewChatContext(parentctx context.Context, config *config.Configuration, sys
 
 	session, err := ctx.Sys.GetSessionStore().Get(key)
 	if err != nil {
-		zap.S().Fatalw("Failed to get session for key", "key", key, "error", err)
+		slog.Error("failed to get session for key", "key", key, "error", err)
+		os.Exit(1)
 	}
 	ctx.Session = session
 	return &ctx, cancel
@@ -93,7 +94,7 @@ func (c ChatContext) GetConfig() *config.Configuration {
 	return c.Config
 }
 
-func (c ChatContext) GetLogger() *zap.SugaredLogger {
+func (c ChatContext) GetLogger() *slog.Logger {
 	return c.logger
 }
 
@@ -157,12 +158,12 @@ func (c ChatContext) GetSource() string {
 
 func (c ChatContext) IsAdmin() bool {
 	hostmask := c.event.Source.String()
-	c.logger.Debugw("admin_check", "hostmask", hostmask)
+	c.logger.Debug("admin_check", "hostmask", hostmask)
 	isAdmin := CheckAdmin(hostmask, c.Config.Bot.Admins)
 	if isAdmin && len(c.Config.Bot.Admins) == 0 {
-		c.logger.Debugw("admin_check_warning")
+		c.logger.Debug("admin_check_warning")
 	} else if isAdmin {
-		c.logger.Debugw("admin_verified", "hostmask", hostmask)
+		c.logger.Debug("admin_verified", "hostmask", hostmask)
 	}
 	return isAdmin
 }
