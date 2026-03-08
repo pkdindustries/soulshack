@@ -83,12 +83,12 @@ jobs:
       - name: Package examples directory
         run: tar czf examples.tar.gz examples/
       - name: Upload examples tarball
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: examples.tar.gz
           path: examples.tar.gz
       - name: Upload Artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: binaries
           path: |
