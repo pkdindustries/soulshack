@@ -20,12 +20,12 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: GitHubSecurityLab/actions-permissions/monitor@babd69bc8d78e6cdece903dfdcfb72d4e1a4f00d
+      - uses: GitHubSecurityLab/actions-permissions/monitor@bf82d13b9b10051d224345ab9184f5ede0a94289
         with:
           config: ${{ vars.PERMISSIONS_CONFIG }}
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version: stable
       - name: Build
@@ -46,12 +46,12 @@ jobs:
       contents: write
       attestations: write
     steps:
-      - uses: GitHubSecurityLab/actions-permissions/monitor@babd69bc8d78e6cdece903dfdcfb72d4e1a4f00d
+      - uses: GitHubSecurityLab/actions-permissions/monitor@bf82d13b9b10051d224345ab9184f5ede0a94289
         with:
           config: ${{ vars.PERMISSIONS_CONFIG }}
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version: stable
       - name: Build release - Linux amd64
@@ -83,12 +83,12 @@ jobs:
       - name: Package examples directory
         run: tar czf examples.tar.gz examples/
       - name: Upload examples tarball
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: examples.tar.gz
           path: examples.tar.gz
       - name: Upload Artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: binaries
           path: |
@@ -97,7 +97,7 @@ jobs:
             ${{ github.event.repository.name }}-darwin-arm64
             ${{ github.event.repository.name }}-windows-amd64.exe
       - name: Attestations
-        uses: actions/attest@v1
+        uses: actions/attest@v4
         with:
           predicate-type: 'https://in-toto.io/attestation/release/v0.1'
           predicate:
