@@ -285,12 +285,10 @@ func (c ChatContext) IsOp(channel, nick string) bool {
 	return ok && perms.IsAdmin()
 }
 
-// checks if the message is valid for processing
-func (c ChatContext) Valid() bool {
-	return CheckValid(c.IsAddressed(), c.Config.Bot.Addressed, c.IsPrivate(), len(c.args))
-}
-
 func (c ChatContext) IsPrivate() bool {
+	if len(c.event.Params) == 0 {
+		return false
+	}
 	return CheckPrivate(c.event.Params[0])
 }
 
