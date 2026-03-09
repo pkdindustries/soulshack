@@ -36,6 +36,7 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 	cmdRegistry.Register(&commands.ToolsCommand{})
 	cmdRegistry.Register(&commands.AdminCommand{})
 	cmdRegistry.Register(&commands.StatsCommand{})
+	cmdRegistry.Register(&commands.SkillsCommand{})
 
 	// Initialize behavior registry (order matters: passive watchers first, addressed last as fallback)
 	behaviorRegistry := behaviors.NewRegistry()

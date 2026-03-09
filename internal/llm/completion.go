@@ -6,6 +6,7 @@ import (
 	"github.com/alexschlessinger/pollytool/llm"
 	"github.com/alexschlessinger/pollytool/messages"
 	"github.com/alexschlessinger/pollytool/sessions"
+	"github.com/alexschlessinger/pollytool/skills"
 	"github.com/alexschlessinger/pollytool/tools"
 
 	"pkdindustries/soulshack/internal/config"
@@ -51,7 +52,7 @@ func checkSessionCapacity(ctx irc.ChatContextInterface) {
 	}
 }
 
-func NewCompletionRequest(config *config.Configuration, session sessions.Session, tools []tools.Tool) *CompletionRequest {
+func NewCompletionRequest(config *config.Configuration, session sessions.Session, tools []tools.Tool, catalog *skills.Catalog) *CompletionRequest {
 	// Parse thinking effort - validated at config load time
 	thinkingEffort, _ := llm.ParseThinkingEffort(config.Model.ThinkingEffort)
 
@@ -63,6 +64,7 @@ func NewCompletionRequest(config *config.Configuration, session sessions.Session
 		Messages:       session.GetHistory(),
 		Temperature:    config.Model.Temperature,
 		Tools:          tools,
+		Skills:         catalog,
 		ThinkingEffort: thinkingEffort,
 	}
 
@@ -102,7 +104,7 @@ func Complete(ctx irc.ChatContextInterface, msg string) (<-chan string, error) {
 		allTools = sys.GetToolRegistry().All()
 	}
 
-	req := NewCompletionRequest(cfg, session, allTools)
+	req := NewCompletionRequest(cfg, session, allTools, sys.GetSkillCatalog())
 
 	// Get response stream from LLM
 	stream := sys.GetLLM().ChatCompletionStream(ctx, req)

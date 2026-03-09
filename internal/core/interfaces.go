@@ -6,6 +6,7 @@ import (
 
 	"github.com/alexschlessinger/pollytool/llm"
 	"github.com/alexschlessinger/pollytool/sessions"
+	"github.com/alexschlessinger/pollytool/skills"
 	"github.com/alexschlessinger/pollytool/tools"
 
 	"pkdindustries/soulshack/internal/config"
@@ -65,6 +66,7 @@ type LLM interface {
 type System interface {
 	GetToolRegistry() *tools.ToolRegistry
 	GetSessionStore() sessions.SessionStore
+	GetSkillCatalog() *skills.Catalog
 	GetLLM() LLM
 	UpdateLLM(config.APIConfig) error
 }

@@ -5,6 +5,7 @@ import (
 
 	"github.com/alexschlessinger/pollytool/llm"
 	"github.com/alexschlessinger/pollytool/sessions"
+	"github.com/alexschlessinger/pollytool/skills"
 	"github.com/alexschlessinger/pollytool/tools"
 
 	"pkdindustries/soulshack/internal/config"
@@ -82,6 +83,11 @@ func (m *MockSystem) GetSessionStore() sessions.SessionStore {
 // GetLLM implements core.System
 func (m *MockSystem) GetLLM() core.LLM {
 	return m.LLM
+}
+
+// GetSkillCatalog implements core.System
+func (m *MockSystem) GetSkillCatalog() *skills.Catalog {
+	return nil
 }
 
 // UpdateLLM implements core.System

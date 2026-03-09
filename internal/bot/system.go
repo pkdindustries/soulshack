@@ -5,6 +5,7 @@ import (
 	"sync/atomic"
 
 	"github.com/alexschlessinger/pollytool/sessions"
+	"github.com/alexschlessinger/pollytool/skills"
 	"github.com/alexschlessinger/pollytool/tools"
 
 	"pkdindustries/soulshack/internal/config"
@@ -14,9 +15,10 @@ import (
 )
 
 type SystemImpl struct {
-	Store sessions.SessionStore
-	Tools *tools.ToolRegistry
-	llm   atomic.Value // stores core.LLM
+	Store        sessions.SessionStore
+	Tools        *tools.ToolRegistry
+	SkillCatalog *skills.Catalog
+	llm          atomic.Value // stores core.LLM
 }
 
 func (s *SystemImpl) GetToolRegistry() *tools.ToolRegistry {
@@ -25,6 +27,10 @@ func (s *SystemImpl) GetToolRegistry() *tools.ToolRegistry {
 
 func (s *SystemImpl) GetSessionStore() sessions.SessionStore {
 	return s.Store
+}
+
+func (s *SystemImpl) GetSkillCatalog() *skills.Catalog {
+	return s.SkillCatalog
 }
 
 func (s *SystemImpl) GetLLM() core.LLM {
@@ -57,6 +63,39 @@ func NewSystem(c *config.Configuration) core.System {
 		}
 	}
 
+	// Discover and initialize skills
+	if !c.Bot.NoSkills {
+		dirs := append([]string{}, c.Bot.SkillDirs...)
+		var autoActivate []string
+		for _, source := range c.Bot.Skills {
+			resolved, err := skills.ResolveSkill(source)
+			if err != nil {
+				slog.Warn("skill_resolve_failed", "source", source, "error", err)
+				continue
+			}
+			dirs = append(dirs, resolved.Dir)
+			autoActivate = append(autoActivate, resolved.Name)
+		}
+
+		catalog, err := skills.LoadCatalog(dirs)
+		if err != nil {
+			slog.Warn("skill_load_failed", "error", err)
+		}
+		if catalog != nil {
+			s.SkillCatalog = catalog
+			runtime, err := tools.NewSkillRuntime(catalog, s.Tools)
+			if err != nil {
+				slog.Warn("skill_runtime_failed", "error", err)
+			} else {
+				for _, name := range autoActivate {
+					if _, err := runtime.Activate(name); err != nil {
+						slog.Warn("skill_activate_failed", "skill", name, "error", err)
+					}
+				}
+			}
+		}
+	}
+
 	// initialize sessions with pollytool's SyncMapSessionStore
 	s.Store = sessions.NewSyncMapSessionStore(&sessions.Metadata{
 		MaxHistoryTokens: c.Session.MaxContext,
@@ -75,6 +114,9 @@ func NewSystem(c *config.Configuration) core.System {
 	}
 	if toolErrors > 0 {
 		fields = append(fields, "tool_errors", toolErrors)
+	}
+	if s.SkillCatalog != nil {
+		fields = append(fields, "skills_loaded", len(s.SkillCatalog.List()))
 	}
 	slog.Info("system_initialized", fields...)
 

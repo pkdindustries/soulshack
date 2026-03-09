@@ -42,6 +42,9 @@ type BotConfig struct {
 	OpWatcher          bool
 	OpWatcherTemplate  string
 	Tools              []string
+	SkillDirs          []string
+	Skills             []string
+	NoSkills           bool
 	ShowThinkingAction bool
 	ShowToolActions    bool
 	URLWatcher         bool
@@ -158,6 +161,9 @@ func GetFlags() []cli.Flag {
 		&cli.StringFlag{Name: "thinkingeffort", Value: "off", Usage: "thinking effort level: off, low, medium, high", Sources: src("thinkingeffort", "SOULSHACK_THINKINGEFFORT")},
 		&cli.BoolFlag{Name: "stream", Value: true, Usage: "enable streaming responses", Sources: src("stream", "SOULSHACK_STREAM")},
 		&cli.StringSliceFlag{Name: "tool", Usage: "tools to load (shell scripts, MCP server JSON files, or native tools like irc__op)", Sources: src("tool", "SOULSHACK_TOOL")},
+		&cli.StringSliceFlag{Name: "skilldir", Usage: "directories to search for skills", Sources: src("skilldir", "SOULSHACK_SKILLDIR")},
+		&cli.StringSliceFlag{Name: "skill", Usage: "skills to resolve and auto-activate (local paths, git URLs, or archives)", Sources: src("skill", "SOULSHACK_SKILL")},
+		&cli.BoolFlag{Name: "noskills", Usage: "disable skill discovery", Sources: src("noskills", "SOULSHACK_NOSKILLS")},
 		&cli.BoolFlag{Name: "showthinkingaction", Value: true, Usage: "show '[thinking]' IRC action when bot is reasoning", Sources: src("showthinkingaction", "SOULSHACK_SHOWTHINKINGACTION")},
 		&cli.BoolFlag{Name: "showtoolactions", Value: true, Usage: "show '[calling toolname]' IRC actions when executing tools", Sources: src("showtoolactions", "SOULSHACK_SHOWTOOLACTIONS")},
 		&cli.BoolFlag{Name: "urlwatcher", Usage: "enable passive URL watching and analysis", Sources: src("urlwatcher", "SOULSHACK_URLWATCHER")},
@@ -223,6 +229,9 @@ func (c *Configuration) PrintConfig() {
 		{"maxcontext", fmt.Sprintf("%d", c.Session.MaxContext)},
 		{"maxtokens", fmt.Sprintf("%d", c.Model.MaxTokens)},
 		{"tool", fmt.Sprintf("%v", c.Bot.Tools)},
+		{"skilldir", fmt.Sprintf("%v", c.Bot.SkillDirs)},
+		{"skill", fmt.Sprintf("%v", c.Bot.Skills)},
+		{"noskills", fmt.Sprintf("%t", c.Bot.NoSkills)},
 		{"showthinkingaction", fmt.Sprintf("%t", c.Bot.ShowThinkingAction)},
 		{"showtoolactions", fmt.Sprintf("%t", c.Bot.ShowToolActions)},
 		{"urlwatcher", fmt.Sprintf("%t", c.Bot.URLWatcher)},
@@ -277,6 +286,9 @@ func NewConfiguration(c *cli.Command) *Configuration {
 			OpWatcher:          c.Bool("opwatcher"),
 			OpWatcherTemplate:  c.String("opwatchertemplate"),
 			Tools:              c.StringSlice("tool"),
+			SkillDirs:          c.StringSlice("skilldir"),
+			Skills:             c.StringSlice("skill"),
+			NoSkills:           c.Bool("noskills"),
 			ShowThinkingAction: c.Bool("showthinkingaction"),
 			ShowToolActions:    c.Bool("showtoolactions"),
 			URLWatcher:         c.Bool("urlwatcher"),
