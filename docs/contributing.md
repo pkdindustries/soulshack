@@ -5,7 +5,8 @@ This guide provides an overview of the codebase and instructions for common modi
 ## Project Structure
 
 -   **`cmd/soulshack/`**: Application entry point (`main.go`).
--   **`internal/bot/`**: Core bot runtime, system initialization, and event loop.
+-   **`internal/behaviors/`**: Event-driven behaviors (URL watcher, op watcher, addressed/non-addressed chat).
+-   **`internal/bot/`**: Core bot runtime, system initialization, and behavior registration.
 -   **`internal/commands/`**: Implementation of IRC commands (e.g., `/help`, `/tools`).
 -   **`internal/config/`**: Configuration loading and validation.
 -   **`internal/core/`**: Core interfaces (`ChatContextInterface`, `System`, `LLM`) and types.

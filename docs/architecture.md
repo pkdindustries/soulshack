@@ -12,15 +12,24 @@ A key feature is its **Unified Tool System**, which abstracts differences betwee
 
 ## Request Lifecycle
 
-1.  **Event Reception**: `girc` receives a `PRIVMSG` or `JOIN` event.
-2.  **Context Creation**: A `ChatContext` is created, wrapping the event, configuration, and session.
-3.  **Locking**: A `RequestLock` ensures only one request is processed per channel at a time.
-4.  **Dispatch**:
-    -   If the message is a command (e.g., `/help`), it's dispatched to the `CommandRegistry`.
-    -   If it's a chat message (and the bot is addressed), it's sent to the `PollyLLM`.
+1.  **Event Reception**: A single `ALL_EVENTS` handler receives every IRC event from `girc`.
+2.  **Early Exit**: The handler checks `Registry.Handles()` and drops events with no registered behaviors.
+3.  **Context Creation**: A `ChatContext` is created, wrapping the event, configuration, and session.
+4.  **Behavior Dispatch**: The `Registry.Process()` method iterates registered behaviors for the event type. The first behavior whose `Check()` returns true wins — its `Execute()` runs and no further behaviors are evaluated.
 5.  **Execution**:
-    -   **Commands** execute immediately and reply via `ChatContext`.
-    -   **LLM** streams the request to the provider, potentially executing tools, and streams the response back to IRC.
+    -   **Commands** (via `AddressedBehavior` / `NonAddressedBehavior`) are dispatched to the `CommandRegistry` or sent to the LLM.
+    -   **Passive behaviors** (URL watcher, op watcher) call the LLM directly.
+    -   **Lifecycle behaviors** (connected, nick/channel errors) handle join, retry, or fatal exit.
+
+### Behavior Priority
+
+Registration order in `run.go` determines priority (first-match-wins):
+
+1.  Lifecycle: `Connected`, `NickError`, `ChannelError`
+2.  Passive: `URL`, `Op`, `Join`
+3.  Chat: `Addressed`, `NonAddressed`
+
+For example, a non-addressed message containing a URL is handled by the URL behavior, not the non-addressed chat behavior.
 
 ## Key Interfaces
 
