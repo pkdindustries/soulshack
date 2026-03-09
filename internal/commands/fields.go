@@ -188,6 +188,21 @@ var configFields = map[string]configField{
 		setter: func(c *config.Configuration, v string) error { c.Bot.URLWatcherTemplate = v; return nil },
 		getter: func(c *config.Configuration) string { return c.Bot.URLWatcherTemplate },
 	},
+	"opwatcher": {
+		setter: func(c *config.Configuration, v string) error {
+			b, err := strconv.ParseBool(v)
+			if err != nil {
+				return fmt.Errorf("invalid value for opwatcher. Please provide 'true' or 'false'")
+			}
+			c.Bot.OpWatcher = b
+			return nil
+		},
+		getter: func(c *config.Configuration) string { return fmt.Sprintf("%t", c.Bot.OpWatcher) },
+	},
+	"opwatchertemplate": {
+		setter: func(c *config.Configuration, v string) error { c.Bot.OpWatcherTemplate = v; return nil },
+		getter: func(c *config.Configuration) string { return c.Bot.OpWatcherTemplate },
+	},
 }
 
 // getConfigKeys returns all available config keys

@@ -4,9 +4,9 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"log/slog"
+	"os"
 	"strings"
-
-	"go.uber.org/zap"
 
 	"github.com/alexschlessinger/pollytool/sessions"
 	"github.com/lrstanley/girc"
@@ -20,24 +20,37 @@ type ChatContextInterface = core.ChatContextInterface
 
 type ChatContext struct {
 	context.Context
-	Sys          core.System
-	Session      sessions.Session
-	Config       *config.Configuration
-	client       *girc.Client
-	event        *girc.Event
-	args         []string
-	logger       *zap.SugaredLogger
-	requestID    string
-	urlTriggered bool
+	Sys       core.System
+	Session   sessions.Session
+	Config    *config.Configuration
+	client    *girc.Client
+	event     *girc.Event
+	args      []string
+	logger    *slog.Logger
+	requestID string
+	fatalCh   chan<- error
 }
 
 var _ ChatContextInterface = (*ChatContext)(nil)
 
-func NewChatContext(parentctx context.Context, config *config.Configuration, system core.System, ircclient *girc.Client, e *girc.Event) (ChatContextInterface, context.CancelFunc) {
+func NewChatContext(parentctx context.Context, config *config.Configuration, system core.System, ircclient *girc.Client, e *girc.Event, fatalCh chan<- error) (ChatContextInterface, context.CancelFunc) {
 	timedctx, cancel := context.WithTimeout(parentctx, config.API.Timeout)
 
 	// Generate a unique request ID for correlation
 	requestID := generateRequestID()
+
+	// Ensure Source is not nil for events like CONNECTED
+	if e.Source == nil {
+		e.Source = &girc.Source{
+			Name: config.Server.Channel,
+		}
+	}
+
+	// Get channel safely
+	channel := config.Server.Channel
+	if len(e.Params) > 0 {
+		channel = e.Params[0]
+	}
 
 	ctx := ChatContext{
 		Context:   timedctx,
@@ -47,9 +60,10 @@ func NewChatContext(parentctx context.Context, config *config.Configuration, sys
 		event:     e,
 		args:      strings.Fields(e.Last()),
 		requestID: requestID,
-		logger: zap.S().With(
+		fatalCh:   fatalCh,
+		logger: slog.Default().With(
 			"request_id", requestID,
-			"channel", e.Params[0],
+			"channel", channel,
 			"source", e.Source.Name,
 		),
 	}
@@ -58,20 +72,15 @@ func NewChatContext(parentctx context.Context, config *config.Configuration, sys
 		ctx.args = ctx.args[1:]
 	}
 
-	if e.Source == nil {
-		e.Source = &girc.Source{
-			Name: config.Server.Channel,
-		}
-	}
-
-	key := e.Params[0]
+	key := channel
 	if !girc.IsValidChannel(key) {
 		key = e.Source.Name
 	}
 
 	session, err := ctx.Sys.GetSessionStore().Get(key)
 	if err != nil {
-		zap.S().Fatalw("Failed to get session for key", "key", key, "error", err)
+		slog.Error("failed to get session for key", "key", key, "error", err)
+		os.Exit(1)
 	}
 	ctx.Session = session
 	return &ctx, cancel
@@ -85,7 +94,7 @@ func (c ChatContext) GetConfig() *config.Configuration {
 	return c.Config
 }
 
-func (c ChatContext) GetLogger() *zap.SugaredLogger {
+func (c ChatContext) GetLogger() *slog.Logger {
 	return c.logger
 }
 
@@ -118,6 +127,19 @@ func (c ChatContext) Join(channel string) bool {
 	return true
 }
 
+func (c ChatContext) JoinWithKey(channel, key string) bool {
+	c.client.Cmd.Join(channel, key)
+	return true
+}
+
+func (c ChatContext) FatalError(err error) {
+	select {
+	case c.fatalCh <- err:
+	default:
+	}
+	c.client.Close()
+}
+
 func (c ChatContext) GetArgs() []string {
 	return c.args
 }
@@ -136,12 +158,12 @@ func (c ChatContext) GetSource() string {
 
 func (c ChatContext) IsAdmin() bool {
 	hostmask := c.event.Source.String()
-	c.logger.Debugw("admin_check", "hostmask", hostmask)
+	c.logger.Debug("admin_check", "hostmask", hostmask)
 	isAdmin := CheckAdmin(hostmask, c.Config.Bot.Admins)
 	if isAdmin && len(c.Config.Bot.Admins) == 0 {
-		c.logger.Debugw("admin_check_warning")
+		c.logger.Debug("admin_check_warning")
 	} else if isAdmin {
-		c.logger.Debugw("admin_verified", "hostmask", hostmask)
+		c.logger.Debug("admin_verified", "hostmask", hostmask)
 	}
 	return isAdmin
 }
@@ -244,21 +266,30 @@ func (c ChatContext) GetChannelUsers(channel string) []core.ChannelUser {
 	return result
 }
 
-// checks if the message is valid for processing
-func (c ChatContext) Valid() bool {
-	return CheckValid(c.IsAddressed(), c.Config.Bot.Addressed, c.IsPrivate(), len(c.args))
+func (c ChatContext) GetLockKey() string {
+	if len(c.event.Params) > 0 && girc.IsValidChannel(c.event.Params[0]) {
+		return c.Config.Server.Channel
+	}
+	if c.event.Source != nil {
+		return c.event.Source.Name
+	}
+	return c.Config.Server.Channel
+}
+
+func (c ChatContext) IsOp(channel, nick string) bool {
+	user := c.client.LookupUser(nick)
+	if user == nil {
+		return false
+	}
+	perms, ok := user.Perms.Lookup(channel)
+	return ok && perms.IsAdmin()
 }
 
 func (c ChatContext) IsPrivate() bool {
+	if len(c.event.Params) == 0 {
+		return false
+	}
 	return CheckPrivate(c.event.Params[0])
-}
-
-func (c *ChatContext) SetURLTriggered(triggered bool) {
-	c.urlTriggered = triggered
-}
-
-func (c ChatContext) IsURLTriggered() bool {
-	return c.urlTriggered
 }
 
 func (c ChatContext) GetCommand() string {

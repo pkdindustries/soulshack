@@ -38,16 +38,6 @@ func CheckAdmin(hostmask string, adminList []string) bool {
 	return false
 }
 
-// CheckValid determines if a message should be processed.
-// Returns true if:
-// - Bot was addressed directly, OR
-// - Addressed mode is disabled (respond to all), OR
-// - Message is private (DM)
-// AND there's at least one argument.
-func CheckValid(isAddressed, addressedMode, isPrivate bool, argCount int) bool {
-	return (isAddressed || !addressedMode || isPrivate) && argCount > 0
-}
-
 // CheckPrivate returns true if target is not a channel (doesn't start with #).
 func CheckPrivate(target string) bool {
 	return !strings.HasPrefix(target, "#")

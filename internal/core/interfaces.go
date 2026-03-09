@@ -2,11 +2,11 @@ package core
 
 import (
 	"context"
+	"log/slog"
 
 	"github.com/alexschlessinger/pollytool/llm"
 	"github.com/alexschlessinger/pollytool/sessions"
 	"github.com/alexschlessinger/pollytool/tools"
-	"go.uber.org/zap"
 
 	"pkdindustries/soulshack/internal/config"
 )
@@ -18,10 +18,7 @@ type ChatContextInterface interface {
 	// Event methods
 	IsAddressed() bool
 	IsAdmin() bool
-	Valid() bool
 	IsPrivate() bool
-	IsURLTriggered() bool
-	SetURLTriggered(bool)
 	GetCommand() string
 	GetSource() string
 	GetArgs() []string
@@ -33,7 +30,9 @@ type ChatContextInterface interface {
 
 	// Controller methods
 	Join(string) bool
+	JoinWithKey(channel, key string) bool
 	Nick(string) bool
+	FatalError(err error)
 	SetMode(target, flags string, args ...string) bool
 	Kick(channel, nick, reason string) bool
 	Ban(channel, target string) bool
@@ -47,12 +46,14 @@ type ChatContextInterface interface {
 	GetChannel(name string) *ChannelInfo
 	GetChannelUsers(channel string) []ChannelUser
 	GetBotNick() string
+	GetLockKey() string
+	IsOp(channel, nick string) bool
 
 	// Runtime methods
 	GetSession() sessions.Session
 	GetConfig() *config.Configuration
 	GetSystem() System
-	GetLogger() *zap.SugaredLogger
+	GetLogger() *slog.Logger
 }
 
 // LLM defines the interface for the language model client

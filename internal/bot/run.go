@@ -3,14 +3,13 @@ package bot
 import (
 	"context"
 	"crypto/tls"
-	"strings"
+	"fmt"
+	"log/slog"
 	"time"
 
-	"fmt"
-
 	"github.com/lrstanley/girc"
-	"go.uber.org/zap"
 
+	"pkdindustries/soulshack/internal/behaviors"
 	"pkdindustries/soulshack/internal/commands"
 	"pkdindustries/soulshack/internal/config"
 	"pkdindustries/soulshack/internal/core"
@@ -19,8 +18,11 @@ import (
 
 // Run starts the IRC bot with the given configuration
 func Run(ctx context.Context, cfg *config.Configuration) error {
-	core.InitLogger(cfg.Bot.Verbose)
-	defer zap.L().Sync()
+	level := cfg.Bot.LogLevel
+	if cfg.Bot.Verbose {
+		level = "debug"
+	}
+	core.InitLogger(level, cfg.Bot.LogFormat)
 
 	sys := NewSystem(cfg)
 
@@ -34,6 +36,19 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 	cmdRegistry.Register(&commands.ToolsCommand{})
 	cmdRegistry.Register(&commands.AdminCommand{})
 	cmdRegistry.Register(&commands.StatsCommand{})
+
+	// Initialize behavior registry (order matters: passive watchers first, addressed last as fallback)
+	behaviorRegistry := behaviors.NewRegistry()
+	// Lifecycle behaviors
+	behaviorRegistry.Register(&behaviors.ConnectedBehavior{})
+	behaviorRegistry.Register(&behaviors.NickErrorBehavior{})
+	behaviorRegistry.Register(&behaviors.ChannelErrorBehavior{})
+	// Reactive behaviors
+	behaviorRegistry.Register(&behaviors.URLBehavior{})
+	behaviorRegistry.Register(&behaviors.OpBehavior{BotNick: cfg.Server.Nick})
+	behaviorRegistry.Register(&behaviors.JoinBehavior{BotNick: cfg.Server.Nick})
+	behaviorRegistry.Register(&behaviors.AddressedBehavior{CmdRegistry: cmdRegistry})
+	behaviorRegistry.Register(&behaviors.NonAddressedBehavior{CmdRegistry: cmdRegistry})
 
 	// Channel for fatal IRC errors (nick taken, channel join failures)
 	fatalErr := make(chan error, 1)
@@ -61,83 +76,17 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 	go func() {
 		<-ctx.Done()
 		ircClient.Quit("Shutting down...")
-		zap.S().Infow("irc_client_closed")
+		slog.Info("irc_client_closed")
 	}()
 
-	// Handle nick already in use - exit with error
-	ircClient.Handlers.AddBg(girc.ERR_NICKNAMEINUSE, func(client *girc.Client, e girc.Event) {
-		zap.S().Errorw("nick_in_use", "nick", cfg.Server.Nick)
-		select {
-		case fatalErr <- fmt.Errorf("nick %q is already in use", cfg.Server.Nick):
-		default:
+	// Single global handler routes all events through the behavior registry
+	ircClient.Handlers.AddBg(girc.ALL_EVENTS, func(client *girc.Client, e girc.Event) {
+		if !behaviorRegistry.Handles(e.Command) {
+			return
 		}
-		client.Close()
-	})
-
-	// Handle channel join failures - exit with error
-	channelErrors := map[string]string{
-		girc.ERR_NOSUCHCHANNEL:  "channel does not exist",
-		girc.ERR_CHANNELISFULL:  "channel is full",
-		girc.ERR_INVITEONLYCHAN: "channel is invite-only",
-		girc.ERR_BANNEDFROMCHAN: "banned from channel",
-		girc.ERR_BADCHANNELKEY:  "bad channel key",
-	}
-	for code, reason := range channelErrors {
-		ircClient.Handlers.AddBg(code, func(client *girc.Client, e girc.Event) {
-			channel := cfg.Server.Channel
-			if len(e.Params) > 1 {
-				channel = e.Params[1]
-			}
-			zap.S().Errorw("channel_join_failed", "channel", channel, "reason", reason)
-			select {
-			case fatalErr <- fmt.Errorf("cannot join %s: %s", channel, reason):
-			default:
-			}
-			client.Close()
-		})
-	}
-
-	ircClient.Handlers.AddBg(girc.CONNECTED, func(client *girc.Client, e girc.Event) {
-		zap.S().Infow("channel_joining", "channel", cfg.Server.Channel)
-		if cfg.Server.ChannelKey != "" {
-			client.Cmd.Join(cfg.Server.Channel, cfg.Server.ChannelKey)
-		} else {
-			client.Cmd.Join(cfg.Server.Channel)
-		}
-	})
-
-	ircClient.Handlers.AddBg(girc.JOIN, func(client *girc.Client, e girc.Event) {
-		if e.Source.Name == cfg.Server.Nick {
-			ctx, cancel := irc.NewChatContext(ctx, cfg, sys, client, &e)
-			defer cancel()
-
-			channelKey := e.Params[0]
-			core.WithRequestLock(ctx, channelKey, "join", func() {
-				Greeting(ctx)
-			}, nil)
-		}
-	})
-
-	ircClient.Handlers.AddBg(girc.PRIVMSG, func(client *girc.Client, e girc.Event) {
-		ctx, cancel := irc.NewChatContext(ctx, cfg, sys, client, &e)
+		chatCtx, cancel := irc.NewChatContext(ctx, cfg, sys, client, &e, fatalErr)
 		defer cancel()
-
-		urlTriggered := CheckURLTrigger(ctx, e.Last())
-		ctx.SetURLTriggered(urlTriggered)
-
-		if ctx.Valid() || urlTriggered {
-			channelKey := e.Params[0]
-			if !girc.IsValidChannel(channelKey) {
-				channelKey = e.Source.Name
-			}
-
-			core.WithRequestLock(ctx, channelKey, "privmsg", func() {
-				ctx.GetLogger().Infow("privmsg_received", "text", strings.Join(e.Params[1:], " "))
-				cmdRegistry.Dispatch(ctx)
-			}, func() {
-				ctx.Reply("Request timed out waiting for previous operation to complete")
-			})
-		}
+		behaviorRegistry.Process(chatCtx, &e)
 	})
 
 	// Reconnect loop
@@ -147,7 +96,7 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 			return nil
 		}
 
-		zap.S().Infow("server_connecting",
+		slog.Info("server_connecting",
 			"server", ircClient.Config.Server,
 			"port", ircClient.Config.Port,
 			"tls", ircClient.Config.SSL,
@@ -166,8 +115,8 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 			default:
 			}
 
-			zap.S().Errorw("connection_failed", "error", err)
-			zap.S().Infow("connection_retry", "delay_sec", 5, "attempt", i+1, "max_attempts", maxRetries)
+			slog.Error("connection_failed", "error", err)
+			slog.Info("connection_retry", "delay_sec", 5, "attempt", i+1, "max_attempts", maxRetries)
 
 			select {
 			case <-time.After(5 * time.Second):

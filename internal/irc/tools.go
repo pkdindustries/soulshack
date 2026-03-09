@@ -201,7 +201,7 @@ func (t *IrcOpTool) Execute(ctx context.Context, args map[string]any) (string, e
 	}
 
 	usersStr := strings.Join(users, ", ")
-	chatCtx.GetLogger().Infow("irc_op", "mode", mode, "users", usersStr, "channel", channel)
+	chatCtx.GetLogger().Info("irc_op", "mode", mode, "users", usersStr, "channel", channel)
 	return fmt.Sprintf("Set mode %s for %s", mode, usersStr), nil
 }
 
@@ -265,7 +265,7 @@ func (t *IrcKickTool) Execute(ctx context.Context, args map[string]any) (string,
 	}
 
 	usersStr := strings.Join(users, ", ")
-	chatCtx.GetLogger().Infow("irc_kick", "users", usersStr, "channel", channel, "reason", reason)
+	chatCtx.GetLogger().Info("irc_kick", "users", usersStr, "channel", channel, "reason", reason)
 	return fmt.Sprintf("Kicked %s: %s", usersStr, reason), nil
 }
 
@@ -329,11 +329,11 @@ func (t *IrcBanTool) Execute(ctx context.Context, args map[string]any) (string, 
 			// Create a ban mask that bans *!ident@host
 			// This is more specific than *!*@host and prevents banning other users on the same host
 			banMask = fmt.Sprintf("*!%s@%s", user.Ident, user.Host)
-			chatCtx.GetLogger().Infow("irc_ban_lookup", "target", target, "ident", user.Ident, "host", user.Host, "ban_mask", banMask, "found", true)
+			chatCtx.GetLogger().Info("irc_ban_lookup", "target", target, "ident", user.Ident, "host", user.Host, "ban_mask", banMask, "found", true)
 		} else {
 			// User not found in channel, use simple pattern
 			banMask = target + "!*@*"
-			chatCtx.GetLogger().Infow("irc_ban_lookup", "target", target, "ban_mask", banMask, "found", false)
+			chatCtx.GetLogger().Info("irc_ban_lookup", "target", target, "ban_mask", banMask, "found", false)
 		}
 	}
 
@@ -345,7 +345,7 @@ func (t *IrcBanTool) Execute(ctx context.Context, args map[string]any) (string, 
 		chatCtx.Unban(channel, banMask)
 	}
 
-	chatCtx.GetLogger().Infow("irc_ban", "action", action, "ban_mask", banMask, "channel", channel)
+	chatCtx.GetLogger().Info("irc_ban", "action", action, "ban_mask", banMask, "channel", channel)
 	return fmt.Sprintf("%s %s", action, banMask), nil
 }
 
@@ -391,7 +391,7 @@ func (t *IrcTopicTool) Execute(ctx context.Context, args map[string]any) (string
 	channel := chatCtx.GetConfig().Server.Channel
 	chatCtx.Topic(channel, topic)
 
-	chatCtx.GetLogger().Infow("irc_topic", "channel", channel, "topic", topic)
+	chatCtx.GetLogger().Info("irc_topic", "channel", channel, "topic", topic)
 	return fmt.Sprintf("Set topic: %s", topic), nil
 }
 
@@ -434,7 +434,7 @@ func (t *IrcActionTool) Execute(ctx context.Context, args map[string]any) (strin
 	channel := chatCtx.GetConfig().Server.Channel
 	chatCtx.SendAction(channel, message)
 
-	chatCtx.GetLogger().Infow("irc_action", "message", message)
+	chatCtx.GetLogger().Info("irc_action", "message", message)
 	return fmt.Sprintf("* %s", message), nil
 }
 
@@ -493,7 +493,7 @@ func (t *IrcModeSetTool) Execute(ctx context.Context, args map[string]any) (stri
 		chatCtx.SetMode(channel, modeFlags)
 	}
 
-	chatCtx.GetLogger().Infow("irc_mode_set", "modes", modes, "channel", channel)
+	chatCtx.GetLogger().Info("irc_mode_set", "modes", modes, "channel", channel)
 	return fmt.Sprintf("Set channel mode %s on %s", modes, channel), nil
 }
 
@@ -536,7 +536,7 @@ func (t *IrcModeQueryTool) Execute(ctx context.Context, args map[string]any) (st
 		return fmt.Sprintf("Channel %s has no modes set", channel), nil
 	}
 
-	chatCtx.GetLogger().Infow("irc_mode_query", "channel", channel, "modes", modeStr)
+	chatCtx.GetLogger().Info("irc_mode_query", "channel", channel, "modes", modeStr)
 	return fmt.Sprintf("Channel %s modes: %s", channel, modeStr), nil
 }
 
@@ -591,7 +591,7 @@ func (t *IrcInviteTool) Execute(ctx context.Context, args map[string]any) (strin
 	}
 
 	usersStr := strings.Join(users, ", ")
-	chatCtx.GetLogger().Infow("irc_invite", "users", usersStr, "channel", channel)
+	chatCtx.GetLogger().Info("irc_invite", "users", usersStr, "channel", channel)
 	return fmt.Sprintf("Invited %s to %s", usersStr, channel), nil
 }
 
@@ -644,7 +644,7 @@ func (t *IrcNamesTool) Execute(ctx context.Context, args map[string]any) (string
 	}
 
 	nicksStr := strings.Join(nicks, ", ")
-	chatCtx.GetLogger().Infow("irc_names", "channel", channel, "count", len(users), "nicks", nicksStr)
+	chatCtx.GetLogger().Info("irc_names", "channel", channel, "count", len(users), "nicks", nicksStr)
 	return fmt.Sprintf("Users in %s (%d): %s", channel, len(users), nicksStr), nil
 }
 
@@ -711,6 +711,6 @@ func (t *IrcWhoisTool) Execute(ctx context.Context, args map[string]any) (string
 		info.WriteString(fmt.Sprintf("Channels (%d): %s\n", len(channels), strings.Join(channels, ", ")))
 	}
 
-	chatCtx.GetLogger().Infow("irc_whois", "nick", nick)
+	chatCtx.GetLogger().Info("irc_whois", "nick", nick)
 	return strings.TrimSpace(info.String()), nil
 }

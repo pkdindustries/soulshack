@@ -2,12 +2,12 @@ package config
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/urfave/cli/v3"
-	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
 )
 
@@ -34,9 +34,13 @@ type ServerConfig struct {
 type BotConfig struct {
 	Admins             []string
 	Verbose            bool
+	LogLevel           string // debug, info, warn, error
+	LogFormat          string // text, json
 	Addressed          bool
 	Prompt             string
 	Greeting           string
+	OpWatcher          bool
+	OpWatcherTemplate  string
 	Tools              []string
 	ShowThinkingAction bool
 	ShowToolActions    bool
@@ -135,7 +139,9 @@ func GetFlags() []cli.Flag {
 
 		// Bot Configuration
 		&cli.StringSliceFlag{Name: "admins", Aliases: []string{"A"}, Usage: "comma-separated list of allowed hostmasks to administrate the bot", Sources: src("admins", "SOULSHACK_ADMINS")},
-		&cli.BoolFlag{Name: "verbose", Aliases: []string{"V"}, Usage: "enable verbose logging of sessions and configuration", Sources: src("verbose", "SOULSHACK_VERBOSE")},
+		&cli.BoolFlag{Name: "verbose", Aliases: []string{"V"}, Usage: "enable verbose logging (shortcut for --loglevel=debug)", Sources: src("verbose", "SOULSHACK_VERBOSE")},
+		&cli.StringFlag{Name: "loglevel", Value: "info", Usage: "log level: debug, info, warn, error", Sources: src("loglevel", "SOULSHACK_LOGLEVEL")},
+		&cli.StringFlag{Name: "logformat", Value: "text", Usage: "log format: text (colorized), json", Sources: src("logformat", "SOULSHACK_LOGFORMAT")},
 
 		// API Configuration
 		&cli.StringFlag{Name: "openaikey", Usage: "OpenAI API key", Sources: src("openaikey", "SOULSHACK_OPENAIKEY")},
@@ -165,6 +171,8 @@ func GetFlags() []cli.Flag {
 
 		// Personality / Prompting
 		&cli.StringFlag{Name: "greeting", Value: "hello.", Usage: "prompt to be used when the bot joins the channel", Sources: src("greeting", "SOULSHACK_GREETING")},
+		&cli.BoolFlag{Name: "opwatcher", Usage: "enable +o watcher to trigger LLM on being opped", Sources: src("opwatcher", "SOULSHACK_OPWATCHER")},
+		&cli.StringFlag{Name: "opwatchertemplate", Value: "you were just %s by %s", Usage: "prompt template: first %s=action (opped/deopped), second %s=nick", Sources: src("opwatchertemplate", "SOULSHACK_OPWATCHERTEMPLATE")},
 		&cli.StringFlag{Name: "prompt", Value: "you are a helpful chatbot. do not use caps. do not use emoji.", Usage: "initial system prompt", Sources: src("prompt", "SOULSHACK_PROMPT")},
 	}
 }
@@ -232,6 +240,8 @@ func (c *Configuration) PrintConfig() {
 		{"stream", fmt.Sprintf("%t", c.Model.Stream)},
 		{"prompt", c.Bot.Prompt},
 		{"greeting", c.Bot.Greeting},
+		{"opwatcher", fmt.Sprintf("%t", c.Bot.OpWatcher)},
+		{"opwatchertemplate", c.Bot.OpWatcherTemplate},
 	}
 
 	for _, f := range fields {
@@ -241,7 +251,7 @@ func (c *Configuration) PrintConfig() {
 
 func NewConfiguration(c *cli.Command) *Configuration {
 	if c.IsSet("config") {
-		zap.S().Infow("config_loaded", "path", c.String("config"))
+		slog.Info("config_loaded", "path", c.String("config"))
 	}
 
 	config := &Configuration{
@@ -259,9 +269,13 @@ func NewConfiguration(c *cli.Command) *Configuration {
 		Bot: &BotConfig{
 			Admins:             c.StringSlice("admins"),
 			Verbose:            c.Bool("verbose"),
+			LogLevel:           c.String("loglevel"),
+			LogFormat:          c.String("logformat"),
 			Addressed:          c.Bool("addressed"),
 			Prompt:             c.String("prompt"),
 			Greeting:           c.String("greeting"),
+			OpWatcher:          c.Bool("opwatcher"),
+			OpWatcherTemplate:  c.String("opwatchertemplate"),
 			Tools:              c.StringSlice("tool"),
 			ShowThinkingAction: c.Bool("showthinkingaction"),
 			ShowToolActions:    c.Bool("showtoolactions"),
