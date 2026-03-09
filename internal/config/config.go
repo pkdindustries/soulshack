@@ -172,7 +172,7 @@ func GetFlags() []cli.Flag {
 		// Personality / Prompting
 		&cli.StringFlag{Name: "greeting", Value: "hello.", Usage: "prompt to be used when the bot joins the channel", Sources: src("greeting", "SOULSHACK_GREETING")},
 		&cli.BoolFlag{Name: "opwatcher", Usage: "enable +o watcher to trigger LLM on being opped", Sources: src("opwatcher", "SOULSHACK_OPWATCHER")},
-		&cli.StringFlag{Name: "opwatchertemplate", Value: "you were just %s by %s", Usage: "prompt when bot receives +o (%s = who opped)", Sources: src("opwatchertemplate", "SOULSHACK_OPWATCHERTEMPLATE")},
+		&cli.StringFlag{Name: "opwatchertemplate", Value: "you were just %s by %s", Usage: "prompt template: first %s=action (opped/deopped), second %s=nick", Sources: src("opwatchertemplate", "SOULSHACK_OPWATCHERTEMPLATE")},
 		&cli.StringFlag{Name: "prompt", Value: "you are a helpful chatbot. do not use caps. do not use emoji.", Usage: "initial system prompt", Sources: src("prompt", "SOULSHACK_PROMPT")},
 	}
 }

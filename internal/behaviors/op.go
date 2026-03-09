@@ -56,8 +56,7 @@ func (b *OpBehavior) Execute(ctx irc.ChatContextInterface, event *girc.Event) {
 			action = "opped"
 		}
 
-		// Template takes: nick, action (e.g., "%s %s you")
-		prompt := fmt.Sprintf(cfg.Bot.OpWatcherTemplate, changedBy, action)
+		prompt := fmt.Sprintf(cfg.Bot.OpWatcherTemplate, action, changedBy)
 		outch, err := llm.Complete(ctx, prompt)
 
 		if err != nil {
