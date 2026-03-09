@@ -2,6 +2,7 @@ package behaviors
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/lrstanley/girc"
 
@@ -9,6 +10,8 @@ import (
 	"pkdindustries/soulshack/internal/irc"
 	"pkdindustries/soulshack/internal/llm"
 )
+
+const opWatcherPrefixes = "(qaohv)~&%@+"
 
 // OpBehavior responds when the bot receives +o or -o (operator status change)
 type OpBehavior struct {
@@ -29,31 +32,18 @@ func (b *OpBehavior) Check(ctx irc.ChatContextInterface, event *girc.Event) bool
 		return false
 	}
 
-	// MODE format: [channel, modes, target...]
-	if len(event.Params) < 3 {
-		return false
-	}
-
-	targets := event.Params[2:]
-
-	// Check if bot is in targets
-	for _, target := range targets {
-		if target == b.BotNick {
-			return true
-		}
-	}
-	return false
+	_, ok := opActionForNick(event, b.BotNick)
+	return ok
 }
 
 func (b *OpBehavior) Execute(ctx irc.ChatContextInterface, event *girc.Event) {
 	core.WithRequestLock(ctx, ctx.GetLockKey(), "op", func() {
 		cfg := ctx.GetConfig()
 		changedBy := event.Source.Name
-		channel := event.Params[0]
 
-		action := "deopped"
-		if ctx.IsOp(channel, b.BotNick) {
-			action = "opped"
+		action, ok := opActionForNick(event, b.BotNick)
+		if !ok {
+			return
 		}
 
 		prompt := fmt.Sprintf(cfg.Bot.OpWatcherTemplate, action, changedBy)
@@ -69,4 +59,35 @@ func (b *OpBehavior) Execute(ctx irc.ChatContextInterface, event *girc.Event) {
 			ctx.Reply(res)
 		}
 	}, nil)
+}
+
+func opActionForNick(event *girc.Event, nick string) (string, bool) {
+	if len(event.Params) < 3 {
+		return "", false
+	}
+
+	channelModes := girc.NewCModes(girc.ModeDefaults, opWatcherPrefixes)
+	modes := channelModes.Parse(event.Params[1], event.Params[2:])
+	for _, mode := range modes {
+		switch mode.Short() {
+		case "+o":
+			if modeTarget(mode) == nick {
+				return "opped", true
+			}
+		case "-o":
+			if modeTarget(mode) == nick {
+				return "deopped", true
+			}
+		}
+	}
+
+	return "", false
+}
+
+func modeTarget(mode girc.CMode) string {
+	parts := strings.SplitN(mode.String(), " ", 2)
+	if len(parts) != 2 {
+		return ""
+	}
+	return parts[1]
 }
