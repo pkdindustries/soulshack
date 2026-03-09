@@ -81,6 +81,9 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 
 	// Single global handler routes all events through the behavior registry
 	ircClient.Handlers.AddBg(girc.ALL_EVENTS, func(client *girc.Client, e girc.Event) {
+		if !behaviorRegistry.Handles(e.Command) {
+			return
+		}
 		chatCtx, cancel := irc.NewChatContext(ctx, cfg, sys, client, &e, fatalErr)
 		defer cancel()
 		behaviorRegistry.Process(chatCtx, &e)

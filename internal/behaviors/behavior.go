@@ -33,21 +33,26 @@ func (r *Registry) Register(b Behavior) {
 	}
 }
 
+// Handles returns true if any behaviors are registered for the given event type
+func (r *Registry) Handles(event string) bool {
+	_, ok := r.behaviors[event]
+	return ok
+}
+
 // Process routes an event to registered behaviors, runs Check, and if true runs Execute
-// Returns true if any behavior executed
+// Returns true after the first matching behavior executes (first-match-wins)
 func (r *Registry) Process(ctx irc.ChatContextInterface, event *girc.Event) bool {
 	behaviors, ok := r.behaviors[event.Command]
 	if !ok {
 		return false
 	}
 
-	executed := false
 	for _, b := range behaviors {
 		if b.Check(ctx, event) {
 			ctx.GetLogger().Info("behavior_executing", "behavior", b.Name())
 			b.Execute(ctx, event)
-			executed = true
+			return true
 		}
 	}
-	return executed
+	return false
 }
