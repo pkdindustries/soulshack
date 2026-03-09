@@ -93,43 +93,6 @@ func TestCheckAdmin_MultipleAdmins(t *testing.T) {
 	}
 }
 
-func TestCheckValid(t *testing.T) {
-	// Truth table for all combinations
-	tests := []struct {
-		name          string
-		isAddressed   bool
-		addressedMode bool
-		isPrivate     bool
-		argCount      int
-		want          bool
-	}{
-		// With args (argCount > 0)
-		{"addressed, mode on, channel", true, true, false, 1, true},
-		{"addressed, mode off, channel", true, false, false, 1, true},
-		{"addressed, mode on, private", true, true, true, 1, true},
-		{"addressed, mode off, private", true, false, true, 1, true},
-		{"not addressed, mode on, channel", false, true, false, 1, false},  // Key: ignored in channel when mode on
-		{"not addressed, mode off, channel", false, false, false, 1, true}, // Mode off = respond to all
-		{"not addressed, mode on, private", false, true, true, 1, true},    // Private always works
-		{"not addressed, mode off, private", false, false, true, 1, true},
-
-		// Without args (argCount == 0) - all should be false
-		{"addressed but no args", true, true, false, 0, false},
-		{"private but no args", false, true, true, 0, false},
-		{"mode off but no args", false, false, false, 0, false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := CheckValid(tt.isAddressed, tt.addressedMode, tt.isPrivate, tt.argCount)
-			if got != tt.want {
-				t.Errorf("CheckValid(addressed=%v, mode=%v, private=%v, args=%d) = %v, want %v",
-					tt.isAddressed, tt.addressedMode, tt.isPrivate, tt.argCount, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestCheckPrivate(t *testing.T) {
 	tests := []struct {
 		target string

@@ -20,8 +20,7 @@ type MockChatContext struct {
 	Addressed bool
 	Admin     bool
 	Private   bool
-	ValidFlag bool
-	Command   string
+Command   string
 	Source    string
 	Args      []string
 
@@ -77,8 +76,7 @@ var _ core.ChatContextInterface = (*MockChatContext)(nil)
 func NewMockContext() *MockChatContext {
 	return &MockChatContext{
 		Context:      context.Background(),
-		ValidFlag:    true,
-		Addressed:    true,
+Addressed:    true,
 		Admin:        false,
 		Private:      false,
 		Source:       "testuser",
@@ -126,12 +124,6 @@ func (m *MockChatContext) WithAddressed(addressed bool) *MockChatContext {
 // WithPrivate sets whether this is a private message
 func (m *MockChatContext) WithPrivate(private bool) *MockChatContext {
 	m.Private = private
-	return m
-}
-
-// WithValid sets whether the context is valid for processing
-func (m *MockChatContext) WithValid(valid bool) *MockChatContext {
-	m.ValidFlag = valid
 	return m
 }
 
@@ -194,10 +186,6 @@ func (m *MockChatContext) IsAddressed() bool {
 
 func (m *MockChatContext) IsAdmin() bool {
 	return m.Admin
-}
-
-func (m *MockChatContext) Valid() bool {
-	return m.ValidFlag
 }
 
 func (m *MockChatContext) IsPrivate() bool {
