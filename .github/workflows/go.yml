@@ -16,15 +16,12 @@ concurrency:
     ${{ github.workflow }} @
     ${{ github.event.pull_request.head.label || github.head_ref || github.ref }}
   cancel-in-progress: true
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - uses: GitHubSecurityLab/actions-permissions/monitor@bf82d13b9b10051d224345ab9184f5ede0a94289
-        with:
-          config: ${{ vars.PERMISSIONS_CONFIG }}
       - uses: actions/checkout@v6
       - name: Set up Go
         uses: actions/setup-go@v6
@@ -49,8 +46,6 @@ jobs:
       attestations: write
     steps:
       - uses: GitHubSecurityLab/actions-permissions/monitor@bf82d13b9b10051d224345ab9184f5ede0a94289
-        with:
-          config: ${{ vars.PERMISSIONS_CONFIG }}
       - uses: actions/checkout@v6
       - name: Set up Go
         uses: actions/setup-go@v6
