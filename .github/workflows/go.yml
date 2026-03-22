@@ -16,11 +16,11 @@ concurrency:
     ${{ github.workflow }} @
     ${{ github.event.pull_request.head.label || github.head_ref || github.ref }}
   cancel-in-progress: true
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
       - uses: GitHubSecurityLab/actions-permissions/monitor@bf82d13b9b10051d224345ab9184f5ede0a94289
         with:
