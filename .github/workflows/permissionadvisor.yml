@@ -1,0 +1,30 @@
+---
+# Sample workflow to run the action
+name: Permissions Advisor
+
+on:  # yamllint disable-line rule:truthy
+  workflow_dispatch:
+    inputs:
+      name:
+        description: 'The name of the workflow file to analyze'
+        required: true
+        type: string
+      count:
+        description: 'How many last runs to analyze'
+        required: false
+        type: string
+        default: "10"
+
+permissions:
+  actions: read
+
+jobs:
+  advisor:
+    runs-on: ubuntu-slim
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    steps:
+      - uses: GitHubSecurityLab/actions-permissions/advisor@v1
+        with:
+          name: ${{ inputs.name }}
+          count: ${{ fromJSON(inputs.count) }}
