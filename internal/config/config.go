@@ -44,8 +44,8 @@ type BotConfig struct {
 	Tools              []string
 	ShowThinkingAction bool
 	ShowToolActions    bool
-	URLWatcher         bool
-	URLWatcherTemplate string
+	URLWatcher       bool
+	URLWatcherSilent bool
 }
 
 type ModelConfig struct {
@@ -161,7 +161,7 @@ func GetFlags() []cli.Flag {
 		&cli.BoolFlag{Name: "showthinkingaction", Value: true, Usage: "show '[thinking]' IRC action when bot is reasoning", Sources: src("showthinkingaction", "SOULSHACK_SHOWTHINKINGACTION")},
 		&cli.BoolFlag{Name: "showtoolactions", Value: true, Usage: "show '[calling toolname]' IRC actions when executing tools", Sources: src("showtoolactions", "SOULSHACK_SHOWTOOLACTIONS")},
 		&cli.BoolFlag{Name: "urlwatcher", Usage: "enable passive URL watching and analysis", Sources: src("urlwatcher", "SOULSHACK_URLWATCHER")},
-		&cli.StringFlag{Name: "urlwatchertemplate", Value: "summarize this url briefly: %s", Usage: "template for URL watcher messages (%s is replaced with the URL)", Sources: src("urlwatchertemplate", "SOULSHACK_URLWATCHERTEMPLATE")},
+		&cli.BoolFlag{Name: "urlwatchersilent", Usage: "run URL watcher without sending a reply in chat; response is discarded", Sources: src("urlwatchersilent", "SOULSHACK_URLWATCHERSILENT")},
 
 		// Timeouts and Behavior
 		&cli.BoolFlag{Name: "addressed", Aliases: []string{"a"}, Value: true, Usage: "require bot be addressed by nick for response", Sources: src("addressed", "SOULSHACK_ADDRESSED")},
@@ -226,7 +226,7 @@ func (c *Configuration) PrintConfig() {
 		{"showthinkingaction", fmt.Sprintf("%t", c.Bot.ShowThinkingAction)},
 		{"showtoolactions", fmt.Sprintf("%t", c.Bot.ShowToolActions)},
 		{"urlwatcher", fmt.Sprintf("%t", c.Bot.URLWatcher)},
-		{"urlwatchertemplate", c.Bot.URLWatcherTemplate},
+		{"urlwatchersilent", fmt.Sprintf("%t", c.Bot.URLWatcherSilent)},
 		{"sessionduration", c.Session.TTL.String()},
 		{"openaikey", mask(c.API.OpenAIKey)},
 		{"anthropickey", mask(c.API.AnthropicKey)},
@@ -279,8 +279,8 @@ func NewConfiguration(c *cli.Command) *Configuration {
 			Tools:              c.StringSlice("tool"),
 			ShowThinkingAction: c.Bool("showthinkingaction"),
 			ShowToolActions:    c.Bool("showtoolactions"),
-			URLWatcher:         c.Bool("urlwatcher"),
-			URLWatcherTemplate: c.String("urlwatchertemplate"),
+			URLWatcher:       c.Bool("urlwatcher"),
+			URLWatcherSilent: c.Bool("urlwatchersilent"),
 		},
 		Model: &ModelConfig{
 			Model:          c.String("model"),

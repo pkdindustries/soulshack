@@ -184,9 +184,16 @@ var configFields = map[string]configField{
 		},
 		getter: func(c *config.Configuration) string { return fmt.Sprintf("%t", c.Bot.URLWatcher) },
 	},
-	"urlwatchertemplate": {
-		setter: func(c *config.Configuration, v string) error { c.Bot.URLWatcherTemplate = v; return nil },
-		getter: func(c *config.Configuration) string { return c.Bot.URLWatcherTemplate },
+	"urlwatchersilent": {
+		setter: func(c *config.Configuration, v string) error {
+			b, err := strconv.ParseBool(v)
+			if err != nil {
+				return fmt.Errorf("invalid value for urlwatchersilent. Please provide 'true' or 'false'")
+			}
+			c.Bot.URLWatcherSilent = b
+			return nil
+		},
+		getter: func(c *config.Configuration) string { return fmt.Sprintf("%t", c.Bot.URLWatcherSilent) },
 	},
 	"opwatcher": {
 		setter: func(c *config.Configuration, v string) error {
