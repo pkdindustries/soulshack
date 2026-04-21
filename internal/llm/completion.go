@@ -61,7 +61,7 @@ func NewCompletionRequest(config *config.Configuration, session sessions.Session
 		Model:          config.Model.Model,
 		MaxTokens:      config.Model.MaxTokens,
 		Messages:       session.GetHistory(),
-		Temperature:    config.Model.Temperature,
+		Temperature:    llm.Float32Ptr(config.Model.Temperature),
 		Tools:          tools,
 		ThinkingEffort: thinkingEffort,
 	}

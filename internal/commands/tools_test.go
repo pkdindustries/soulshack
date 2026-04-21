@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/alexschlessinger/pollytool/schema"
 	"github.com/alexschlessinger/pollytool/tools"
-	"github.com/google/jsonschema-go/jsonschema"
 
 	mocktest "pkdindustries/soulshack/internal/testing"
 )
@@ -99,10 +99,10 @@ type mockTool struct {
 	name string
 }
 
-func (t *mockTool) GetName() string                                              { return t.name }
-func (t *mockTool) GetSchema() *jsonschema.Schema                                { return nil }
-func (t *mockTool) GetType() string                                              { return "native" }
-func (t *mockTool) GetSource() string                                            { return "test" }
-func (t *mockTool) Execute(_ context.Context, _ map[string]any) (string, error)  { return "", nil }
+func (t *mockTool) GetName() string                                             { return t.name }
+func (t *mockTool) GetSchema() *schema.ToolSchema                               { return nil }
+func (t *mockTool) GetType() string                                             { return "native" }
+func (t *mockTool) GetSource() string                                           { return "test" }
+func (t *mockTool) Execute(_ context.Context, _ map[string]any) (string, error) { return "", nil }
 
 var _ tools.Tool = (*mockTool)(nil)
