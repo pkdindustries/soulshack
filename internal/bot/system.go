@@ -6,6 +6,7 @@ import (
 
 	"github.com/alexschlessinger/pollytool/sessions"
 	"github.com/alexschlessinger/pollytool/tools"
+	"github.com/alexschlessinger/pollytool/tools/sandbox"
 
 	"pkdindustries/soulshack/internal/config"
 	"pkdindustries/soulshack/internal/core"
@@ -39,8 +40,19 @@ func (s *SystemImpl) UpdateLLM(cfg config.APIConfig) error {
 
 func NewSystem(c *config.Configuration) core.System {
 	s := &SystemImpl{}
-	// Initialize empty tool registry
-	s.Tools = tools.NewToolRegistry([]tools.Tool{})
+
+	// Optionally enable platform sandboxing for shell/bash/MCP tools.
+	var regOpts []tools.RegistryOption
+	if c.Bot.Sandbox {
+		baseCfg := sandbox.DefaultConfig()
+		if _, err := sandbox.New(baseCfg); err != nil {
+			slog.Warn("sandbox_unavailable", "error", err)
+		} else {
+			regOpts = append(regOpts, tools.WithSandboxFactory(sandbox.New, baseCfg))
+			slog.Info("sandbox_enabled")
+		}
+	}
+	s.Tools = tools.NewToolRegistry([]tools.Tool{}, regOpts...)
 
 	// Register native IRC tools with polly's registry
 	irc.RegisterIRCTools(s.Tools)

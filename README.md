@@ -164,6 +164,7 @@ docker build . -t soulshack:dev
 | `--tool` | | Path to tool definition (repeatable) |
 | `--thinkingeffort` | off | Reasoning effort level: off, low, medium, high |
 | `--urlwatcher` | false | Enable passive URL watching |
+| `--sandbox` | false | Sandbox shell, bash, and MCP tools (see below) |
 
 ### YAML Configuration
 
@@ -210,6 +211,34 @@ Soulshack comes with native IRC management tools (permissions apply):
 -   `irc_invite`: Invite users to channel.
 -   `irc_mode_set`, `irc_mode_query`: Manage channel modes.
 -   `irc_names`, `irc_whois`: User information.
+
+## Sandboxing
+
+With `--sandbox` (or `sandbox: true` in YAML, env `SOULSHACK_SANDBOX`), all shell scripts, the built-in `bash` tool, and MCP servers launched via `--tool` run inside a platform sandbox. Disabled by default.
+
+**Requirements**: `sandbox-exec` on macOS, `bwrap` (bubblewrap) on Linux. If the backend isn't available the flag is ignored with a `sandbox_unavailable` warning and tools run as before.
+
+**Default policy** (applied to every sandboxed tool):
+
+-   Writes allowed only under the OS temp directory.
+-   Outbound network blocked.
+-   Sensitive paths blocked from reads: `~/.ssh`, `~/.gnupg`, `~/.aws`, `~/.azure`, `~/.config/gcloud`, `~/.kube`, `~/.docker/config.json`, `~/.npmrc`, `~/.config/gh`, `~/.netrc`, `~/.git-credentials`, macOS keychains, and other credential stores.
+-   Each sandboxed tool's description gets a `[sandboxed]` suffix so the model knows it's restricted.
+
+**Per-tool overrides** — shell scripts declare a `sandbox` field in their `--schema` output; MCP server JSON files add it alongside `command`/`args`:
+
+```json
+"sandbox": true
+"sandbox": { "allowNetwork": true, "writablePaths": ["/tmp/data"] }
+"sandbox": { "denyWrite": true }
+"sandbox": { "allowEnv": ["HOME", "PATH"] }
+```
+
+`false` opts the tool out entirely (runs unsandboxed even when `--sandbox` is enabled). Absence of the field uses the default policy above. `POLLYTOOL_*` env vars are always stripped from sandboxed processes unless listed in `allowEnv`.
+
+Native IRC tools (`irc_op`, `irc_kick`, etc.) run in-process and are unaffected.
+
+The sandbox itself lives in pollytool — for the full config schema, merge semantics, and per-platform backend details see [pollytool's Sandboxing section](https://github.com/alexschlessinger/pollytool#sandboxing) and [API.md](https://github.com/alexschlessinger/pollytool/blob/main/API.md).
 
 ## Documentation
 

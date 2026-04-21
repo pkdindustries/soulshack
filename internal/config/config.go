@@ -46,6 +46,7 @@ type BotConfig struct {
 	ShowToolActions    bool
 	URLWatcher       bool
 	URLWatcherSilent bool
+	Sandbox          bool
 }
 
 type ModelConfig struct {
@@ -162,6 +163,7 @@ func GetFlags() []cli.Flag {
 		&cli.BoolFlag{Name: "showtoolactions", Value: true, Usage: "show '[calling toolname]' IRC actions when executing tools", Sources: src("showtoolactions", "SOULSHACK_SHOWTOOLACTIONS")},
 		&cli.BoolFlag{Name: "urlwatcher", Usage: "enable passive URL watching and analysis", Sources: src("urlwatcher", "SOULSHACK_URLWATCHER")},
 		&cli.BoolFlag{Name: "urlwatchersilent", Usage: "run URL watcher without sending a reply in chat; response is discarded", Sources: src("urlwatchersilent", "SOULSHACK_URLWATCHERSILENT")},
+		&cli.BoolFlag{Name: "sandbox", Usage: "run shell/bash/MCP tools inside a platform sandbox (macOS sandbox-exec, Linux bubblewrap)", Sources: src("sandbox", "SOULSHACK_SANDBOX")},
 
 		// Timeouts and Behavior
 		&cli.BoolFlag{Name: "addressed", Aliases: []string{"a"}, Value: true, Usage: "require bot be addressed by nick for response", Sources: src("addressed", "SOULSHACK_ADDRESSED")},
@@ -227,6 +229,7 @@ func (c *Configuration) PrintConfig() {
 		{"showtoolactions", fmt.Sprintf("%t", c.Bot.ShowToolActions)},
 		{"urlwatcher", fmt.Sprintf("%t", c.Bot.URLWatcher)},
 		{"urlwatchersilent", fmt.Sprintf("%t", c.Bot.URLWatcherSilent)},
+		{"sandbox", fmt.Sprintf("%t", c.Bot.Sandbox)},
 		{"sessionduration", c.Session.TTL.String()},
 		{"openaikey", mask(c.API.OpenAIKey)},
 		{"anthropickey", mask(c.API.AnthropicKey)},
@@ -281,6 +284,7 @@ func NewConfiguration(c *cli.Command) *Configuration {
 			ShowToolActions:    c.Bool("showtoolactions"),
 			URLWatcher:       c.Bool("urlwatcher"),
 			URLWatcherSilent: c.Bool("urlwatchersilent"),
+			Sandbox:          c.Bool("sandbox"),
 		},
 		Model: &ModelConfig{
 			Model:          c.String("model"),
