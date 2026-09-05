@@ -20,6 +20,9 @@ func NewRequestLock() *RequestLock {
 
 // LockWithContext attempts to acquire the lock, respecting context cancellation
 func (c *RequestLock) LockWithContext(ctx context.Context) bool {
+	if ctx.Err() != nil {
+		return false
+	}
 	select {
 	case c.sem <- struct{}{}:
 		return true

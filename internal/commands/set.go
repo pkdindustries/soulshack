@@ -47,12 +47,20 @@ func (c *SetCommand) Execute(ctx irc.ChatContextInterface) {
 	}
 
 	ctx.Reply(fmt.Sprintf("%s set to: %s", param, field.getter(cfg)))
-	ctx.GetSession().Clear()
+	if err := ctx.GetSession().Clear(ctx); err != nil {
+		ctx.GetLogger().Error("session_clear_failed", "error", err)
+	}
 
 	// Update session store defaults if maxcontext was changed
 	if param == "maxcontext" {
-		metadata := ctx.GetSession().GetMetadata()
+		metadata, err := ctx.GetSession().GetMetadata(ctx)
+		if err != nil {
+			ctx.GetLogger().Error("session_metadata_failed", "error", err)
+			return
+		}
 		metadata.MaxHistoryTokens = cfg.Session.MaxContext
-		ctx.GetSession().SetMetadata(metadata)
+		if err := ctx.GetSession().SetMetadata(ctx, metadata); err != nil {
+			ctx.GetLogger().Error("session_metadata_failed", "error", err)
+		}
 	}
 }

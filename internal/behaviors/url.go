@@ -40,23 +40,14 @@ func (b *URLBehavior) Check(ctx irc.ChatContextInterface, event *girc.Event) boo
 }
 
 func (b *URLBehavior) Execute(ctx irc.ChatContextInterface, event *girc.Event) {
-	core.WithRequestLock(ctx, ctx.GetLockKey(), "url", func() {
-		cfg := ctx.GetConfig()
+	silent := ctx.GetConfig().Bot.URLWatcherSilent
+	withConversation := core.WithConversation
+	if silent {
+		withConversation = core.WithDetachedConversation
+	}
+	withConversation(ctx, "url", func(ctx irc.ChatContextInterface) {
 		prompt := fmt.Sprintf("(nick:%s) %s", ctx.GetSource(), event.Last())
-
-		silent := cfg.Bot.URLWatcherSilent
-		execCtx := irc.ChatContextInterface(ctx)
-		if silent {
-			dctx, cleanup, err := newDetachedContext(ctx)
-			if err != nil {
-				ctx.GetLogger().Error("url_behavior_error", "error", err)
-				return
-			}
-			defer cleanup()
-			execCtx = dctx
-		}
-
-		outch, err := llm.Complete(execCtx, prompt)
+		outch, err := llm.Complete(ctx, prompt)
 		if err != nil {
 			ctx.GetLogger().Error("url_behavior_error", "error", err)
 			if !silent {

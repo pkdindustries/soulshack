@@ -44,9 +44,9 @@ type BotConfig struct {
 	Tools              []string
 	ShowThinkingAction bool
 	ShowToolActions    bool
-	URLWatcher       bool
-	URLWatcherSilent bool
-	Sandbox          bool
+	URLWatcher         bool
+	URLWatcherSilent   bool
+	Sandbox            bool
 }
 
 type ModelConfig struct {
@@ -156,7 +156,7 @@ func GetFlags() []cli.Flag {
 		&cli.DurationFlag{Name: "apitimeout", Aliases: []string{"t"}, Value: time.Minute * 5, Usage: "timeout for each completion request", Sources: src("apitimeout", "SOULSHACK_APITIMEOUT")},
 		&cli.FloatFlag{Name: "temperature", Value: 0.7, Usage: "temperature for the completion", Sources: src("temperature", "SOULSHACK_TEMPERATURE")},
 		&cli.FloatFlag{Name: "top_p", Value: 1.0, Usage: "top P value for the completion", Sources: src("top_p", "SOULSHACK_TOP_P")},
-		&cli.StringFlag{Name: "thinkingeffort", Value: "off", Usage: "thinking effort level: off, low, medium, high", Sources: src("thinkingeffort", "SOULSHACK_THINKINGEFFORT")},
+		&cli.StringFlag{Name: "thinkingeffort", Value: "off", Usage: "thinking effort: off, dynamic, minimal, low, medium, high, xhigh, max, or a token budget", Sources: src("thinkingeffort", "SOULSHACK_THINKINGEFFORT")},
 		&cli.BoolFlag{Name: "stream", Value: true, Usage: "enable streaming responses", Sources: src("stream", "SOULSHACK_STREAM")},
 		&cli.StringSliceFlag{Name: "tool", Usage: "tools to load (shell scripts, MCP server JSON files, or native tools like irc__op)", Sources: src("tool", "SOULSHACK_TOOL")},
 		&cli.BoolFlag{Name: "showthinkingaction", Value: true, Usage: "show '[thinking]' IRC action when bot is reasoning", Sources: src("showthinkingaction", "SOULSHACK_SHOWTHINKINGACTION")},
@@ -167,8 +167,8 @@ func GetFlags() []cli.Flag {
 
 		// Timeouts and Behavior
 		&cli.BoolFlag{Name: "addressed", Aliases: []string{"a"}, Value: true, Usage: "require bot be addressed by nick for response", Sources: src("addressed", "SOULSHACK_ADDRESSED")},
-		&cli.DurationFlag{Name: "sessionduration", Aliases: []string{"S"}, Value: time.Minute * 10, Usage: "message context will be cleared after it is unused for this duration", Sources: src("sessionduration", "SOULSHACK_SESSIONDURATION")},
-		&cli.IntFlag{Name: "maxcontext", Value: 0, Usage: "maximum token count for session history (0 = unlimited)", Sources: src("maxcontext", "SOULSHACK_MAXCONTEXT")},
+		&cli.DurationFlag{Name: "sessionduration", Aliases: []string{"S"}, Value: time.Minute * 10, Usage: "stored conversation expires after this duration of inactivity (0 = no expiry)", Sources: src("sessionduration", "SOULSHACK_SESSIONDURATION")},
+		&cli.IntFlag{Name: "maxcontext", Value: 0, Usage: "maximum token budget for model input; stored history is retained (0 = unlimited)", Sources: src("maxcontext", "SOULSHACK_MAXCONTEXT")},
 		&cli.IntFlag{Name: "chunkmax", Aliases: []string{"m"}, Value: 350, Usage: "maximum number of characters to send as a single message", Sources: src("chunkmax", "SOULSHACK_CHUNKMAX")},
 
 		// Personality / Prompting
@@ -282,9 +282,9 @@ func NewConfiguration(c *cli.Command) *Configuration {
 			Tools:              c.StringSlice("tool"),
 			ShowThinkingAction: c.Bool("showthinkingaction"),
 			ShowToolActions:    c.Bool("showtoolactions"),
-			URLWatcher:       c.Bool("urlwatcher"),
-			URLWatcherSilent: c.Bool("urlwatchersilent"),
-			Sandbox:          c.Bool("sandbox"),
+			URLWatcher:         c.Bool("urlwatcher"),
+			URLWatcherSilent:   c.Bool("urlwatchersilent"),
+			Sandbox:            c.Bool("sandbox"),
 		},
 		Model: &ModelConfig{
 			Model:          c.String("model"),

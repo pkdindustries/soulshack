@@ -12,11 +12,12 @@ import (
 )
 
 func TestToolsCommand_ListEmpty(t *testing.T) {
-	mockSys := mocktest.NewMockSystem()
+	mockSys := mocktest.NewMockSystem(t)
 	// Registry is empty by default
 
 	ctx := mocktest.NewMockContext().
 		WithSystem(mockSys).
+		WithSession(mockSys.AcquireSession(t, "test")).
 		WithArgs("/tools", "list")
 
 	cmd := &ToolsCommand{}
@@ -31,7 +32,7 @@ func TestToolsCommand_ListEmpty(t *testing.T) {
 }
 
 func TestToolsCommand_ListTools(t *testing.T) {
-	mockSys := mocktest.NewMockSystem()
+	mockSys := mocktest.NewMockSystem(t)
 
 	// Register and load a mock tool with full namespaced name
 	mockSys.ToolRegistry.RegisterNative("native__test_tool", func() tools.Tool {
@@ -42,6 +43,7 @@ func TestToolsCommand_ListTools(t *testing.T) {
 
 	ctx := mocktest.NewMockContext().
 		WithSystem(mockSys).
+		WithSession(mockSys.AcquireSession(t, "test")).
 		WithArgs("/tools", "list")
 
 	cmd := &ToolsCommand{}
@@ -57,11 +59,12 @@ func TestToolsCommand_ListTools(t *testing.T) {
 }
 
 func TestToolsCommand_AddRequiresAdmin(t *testing.T) {
-	mockSys := mocktest.NewMockSystem()
+	mockSys := mocktest.NewMockSystem(t)
 
 	ctx := mocktest.NewMockContext().
 		WithAdmin(false).
 		WithSystem(mockSys).
+		WithSession(mockSys.AcquireSession(t, "test")).
 		WithArgs("/tools", "add", "/some/path")
 
 	cmd := &ToolsCommand{}
@@ -76,11 +79,12 @@ func TestToolsCommand_AddRequiresAdmin(t *testing.T) {
 }
 
 func TestToolsCommand_RemoveRequiresAdmin(t *testing.T) {
-	mockSys := mocktest.NewMockSystem()
+	mockSys := mocktest.NewMockSystem(t)
 
 	ctx := mocktest.NewMockContext().
 		WithAdmin(false).
 		WithSystem(mockSys).
+		WithSession(mockSys.AcquireSession(t, "test")).
 		WithArgs("/tools", "remove", "some_tool")
 
 	cmd := &ToolsCommand{}

@@ -1,6 +1,7 @@
 package bot
 
 import (
+	"fmt"
 	"log/slog"
 	"sync/atomic"
 
@@ -15,17 +16,17 @@ import (
 )
 
 type SystemImpl struct {
-	Store sessions.SessionStore
-	Tools *tools.ToolRegistry
-	llm   atomic.Value // stores core.LLM
+	Sessions sessions.SessionStore
+	Tools    *tools.ToolRegistry
+	llm      atomic.Value // stores core.LLM
 }
 
 func (s *SystemImpl) GetToolRegistry() *tools.ToolRegistry {
 	return s.Tools
 }
 
-func (s *SystemImpl) GetSessionStore() sessions.SessionStore {
-	return s.Store
+func (s *SystemImpl) GetSessions() sessions.SessionStore {
+	return s.Sessions
 }
 
 func (s *SystemImpl) GetLLM() core.LLM {
@@ -38,7 +39,7 @@ func (s *SystemImpl) UpdateLLM(cfg config.APIConfig) error {
 	return nil
 }
 
-func NewSystem(c *config.Configuration) core.System {
+func NewSystem(c *config.Configuration) (core.System, error) {
 	s := &SystemImpl{}
 
 	// Optionally enable platform sandboxing for shell/bash/MCP tools.
@@ -47,10 +48,13 @@ func NewSystem(c *config.Configuration) core.System {
 		baseCfg := sandbox.DefaultConfig()
 		if _, err := sandbox.New(baseCfg); err != nil {
 			slog.Warn("sandbox_unavailable", "error", err)
+			regOpts = append(regOpts, tools.WithUnsafeNoSandbox())
 		} else {
 			regOpts = append(regOpts, tools.WithSandboxFactory(sandbox.New, baseCfg))
 			slog.Info("sandbox_enabled")
 		}
+	} else {
+		regOpts = append(regOpts, tools.WithUnsafeNoSandbox())
 	}
 	s.Tools = tools.NewToolRegistry([]tools.Tool{}, regOpts...)
 
@@ -69,12 +73,19 @@ func NewSystem(c *config.Configuration) core.System {
 		}
 	}
 
-	// initialize sessions with pollytool's SyncMapSessionStore
-	s.Store = sessions.NewSyncMapSessionStore(&sessions.Metadata{
-		MaxHistoryTokens: c.Session.MaxContext,
-		TTL:              c.Session.TTL,
-		SystemPrompt:     c.Bot.Prompt,
+	// initialize sessions with pollytool's in-memory SQLite store
+	store, err := sessions.OpenStore(sessions.StoreConfig{
+		Mode: sessions.ModeMemory,
+		DefaultMetadata: &sessions.Metadata{
+			MaxHistoryTokens: c.Session.MaxContext,
+			TTL:              c.Session.TTL,
+			SystemPrompt:     c.Bot.Prompt,
+		},
 	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to open session store: %w", err)
+	}
+	s.Sessions = store
 
 	// Initialize LLM
 	s.UpdateLLM(*c.API)
@@ -90,5 +101,5 @@ func NewSystem(c *config.Configuration) core.System {
 	}
 	slog.Info("system_initialized", fields...)
 
-	return s
+	return s, nil
 }

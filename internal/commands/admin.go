@@ -73,7 +73,9 @@ func (c *AdminCommand) addAdmin(ctx irc.ChatContextInterface, hostmask string) {
 
 	cfg.Bot.Admins = append(cfg.Bot.Admins, hostmask)
 	ctx.Reply(fmt.Sprintf("Added admin: %s", hostmask))
-	ctx.GetSession().Clear()
+	if err := ctx.GetSession().Clear(ctx); err != nil {
+		ctx.GetLogger().Error("session_clear_failed", "error", err)
+	}
 }
 
 func (c *AdminCommand) removeAdmin(ctx irc.ChatContextInterface, hostmask string) {
@@ -93,5 +95,7 @@ func (c *AdminCommand) removeAdmin(ctx irc.ChatContextInterface, hostmask string
 
 	cfg.Bot.Admins = slices.Delete(cfg.Bot.Admins, idx, idx+1)
 	ctx.Reply(fmt.Sprintf("Removed admin: %s", hostmask))
-	ctx.GetSession().Clear()
+	if err := ctx.GetSession().Clear(ctx); err != nil {
+		ctx.GetLogger().Error("session_clear_failed", "error", err)
+	}
 }

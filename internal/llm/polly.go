@@ -17,7 +17,7 @@ import (
 
 // PollyLLM wraps pollytool's MultiPass and Agent to implement soulshack's LLM interface
 type PollyLLM struct {
-	client *llm.MultiPass
+	client llm.LLM
 }
 
 // NewPollyLLM creates a new pollytool-based LLM client
@@ -49,10 +49,8 @@ func (p *PollyLLM) ChatCompletionStream(chatCtx core.ChatContextInterface, req *
 	go func() {
 		defer close(output)
 
-		agent := llm.NewAgent(p.client, chatCtx.GetSystem().GetToolRegistry(), llm.AgentConfig{
-			MaxIterations: 10,
-			ToolTimeout:   cfg.API.Timeout,
-		})
+		agent := CreateAgentForRegistry(p.client, chatCtx.GetSystem().GetToolRegistry(), cfg.API.Timeout)
+		defer agent.Close()
 
 		chunker := irc.NewChunker(output, maxChunkSize)
 		cb := newCallbackHandler(chatCtx, chunker, cfg)
@@ -65,10 +63,21 @@ func (p *PollyLLM) ChatCompletionStream(chatCtx core.ChatContextInterface, req *
 			chatCtx.GetLogger().Error("agent_error", "error", err.Error())
 			return
 		}
-
-		for _, msg := range resp.AllMessages {
-			chatCtx.GetSession().AddMessage(msg)
+		usage := core.ContextUsage{
+			EstimatedTokens:  resp.Projection.RequestEstimatedTokens,
+			Budget:           req.MaxContextTokens,
+			OmittedExchanges: resp.Projection.OmittedExchanges,
 		}
+		core.RecordContextUsage(resp.AllMessages, usage)
+
+		// Save history even if the request context expired during the final chunk
+		saveCtx, cancel := context.WithTimeout(context.WithoutCancel(chatCtx), 30*time.Second)
+		defer cancel()
+		if err := chatCtx.GetSession().AddMessages(saveCtx, resp.AllMessages); err != nil {
+			chatCtx.GetLogger().Error("session_append_failed", "error", err)
+			return
+		}
+		checkContextUsage(chatCtx, usage, req.Messages)
 	}()
 
 	return output
@@ -208,10 +217,8 @@ func (h *callbackHandler) onError(err error) {
 	h.chunker.Write(fmt.Sprintf("Error: %v", err))
 }
 
-// CreateAgentForRegistry creates an agent with the given registry for external use
-func CreateAgentForRegistry(client *llm.MultiPass, registry *tools.ToolRegistry, timeout time.Duration) *llm.Agent {
-	return llm.NewAgent(client, registry, llm.AgentConfig{
-		MaxIterations: 10,
-		ToolTimeout:   timeout,
-	})
+// CreateAgentForRegistry uses Polly's private per-agent built-ins while sharing
+// the caller-owned configured tools, sandbox policy, and MCP connections.
+func CreateAgentForRegistry(client llm.LLM, registry *tools.ToolRegistry, timeout time.Duration) *llm.Agent {
+	return llm.NewAgent(client, registry, llm.AgentConfig{MaxIterations: 10, ToolTimeout: timeout})
 }
