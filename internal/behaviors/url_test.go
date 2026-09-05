@@ -1,6 +1,9 @@
 package behaviors
 
 import (
+	"context"
+	"github.com/alexschlessinger/pollytool/messages"
+	"pkdindustries/soulshack/internal/core"
 	"testing"
 
 	"github.com/lrstanley/girc"
@@ -125,4 +128,40 @@ func TestURLBehavior_Name(t *testing.T) {
 	if behavior.Name() != "url" {
 		t.Errorf("URLBehavior.Name() = %q, want %q", behavior.Name(), "url")
 	}
+}
+
+func TestSilentURLUsesTemporarySession(t *testing.T) {
+	sys := mocktest.NewMockSystem(t)
+	model := &mocktest.MockLLM{Responses: []string{"silent result"}}
+	sys.LLM = model
+	ctx := mocktest.NewMockContext().WithSystem(sys).WithAddressed(false)
+	ctx.GetConfig().Bot.URLWatcherSilent = true
+	core.WithConversation(ctx, "seed", func(turn core.ChatContextInterface) {
+		if err := turn.GetSession().AddMessage(turn, messages.ChatMessage{Role: messages.MessageRoleUser, Content: "channel history"}); err != nil {
+			t.Fatal(err)
+		}
+	}, nil)
+	behavior := &URLBehavior{}
+	behavior.Execute(ctx, &girc.Event{Command: girc.PRIVMSG, Params: []string{"#test", "https://example.com"}})
+	if model.LastRequest == nil {
+		t.Fatal("silent URL did not run")
+	}
+	for _, msg := range model.LastRequest.Messages {
+		if msg.Content == "channel history" {
+			t.Fatal("silent URL received channel history")
+		}
+	}
+	if ctx.ReplyCount() != 0 {
+		t.Fatalf("silent URL replied: %v", ctx.Replies)
+	}
+	keys, err := sys.Sessions.List(context.Background())
+	if err != nil || len(keys) != 1 || keys[0] != ctx.GetLockKey() {
+		t.Fatalf("temporary session leaked: %v, %v", keys, err)
+	}
+	core.WithConversation(ctx, "verify", func(turn core.ChatContextInterface) {
+		history, err := turn.GetSession().GetHistory(turn)
+		if err != nil || history[len(history)-1].Content != "channel history" {
+			t.Fatalf("silent URL changed channel history: %v, %v", history, err)
+		}
+	}, nil)
 }

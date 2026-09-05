@@ -26,7 +26,7 @@ func (b *AddressedBehavior) Check(ctx irc.ChatContextInterface, event *girc.Even
 }
 
 func (b *AddressedBehavior) Execute(ctx irc.ChatContextInterface, event *girc.Event) {
-	core.WithRequestLock(ctx, ctx.GetLockKey(), "addressed", func() {
+	core.WithConversation(ctx, "addressed", func(ctx irc.ChatContextInterface) {
 		b.CmdRegistry.Dispatch(ctx)
 	}, func() {
 		ctx.Reply("Request timed out waiting for previous operation to complete")

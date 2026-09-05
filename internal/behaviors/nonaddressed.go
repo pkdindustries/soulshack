@@ -27,7 +27,7 @@ func (b *NonAddressedBehavior) Check(ctx irc.ChatContextInterface, event *girc.E
 }
 
 func (b *NonAddressedBehavior) Execute(ctx irc.ChatContextInterface, event *girc.Event) {
-	core.WithRequestLock(ctx, ctx.GetLockKey(), "nonaddressed", func() {
+	core.WithConversation(ctx, "nonaddressed", func(ctx irc.ChatContextInterface) {
 		b.CmdRegistry.Dispatch(ctx)
 	}, func() {
 		ctx.Reply("Request timed out waiting for previous operation to complete")

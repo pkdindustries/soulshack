@@ -70,10 +70,11 @@ func TestSetCommand_UnknownKey(t *testing.T) {
 }
 
 func TestSetCommand_SetModel(t *testing.T) {
-	mockSys := mocktest.NewMockSystem()
+	mockSys := mocktest.NewMockSystem(t)
 	ctx := mocktest.NewMockContext().
 		WithAdmin(true).
 		WithSystem(mockSys).
+		WithSession(mockSys.AcquireSession(t, "test")).
 		WithArgs("/set", "model", "gpt-4")
 
 	cmd := &SetCommand{}
@@ -91,10 +92,11 @@ func TestSetCommand_SetModel(t *testing.T) {
 }
 
 func TestSetCommand_SetPrompt(t *testing.T) {
-	mockSys := mocktest.NewMockSystem()
+	mockSys := mocktest.NewMockSystem(t)
 	ctx := mocktest.NewMockContext().
 		WithAdmin(true).
 		WithSystem(mockSys).
+		WithSession(mockSys.AcquireSession(t, "test")).
 		WithArgs("/set", "prompt", "You", "are", "helpful")
 
 	cmd := &SetCommand{}
@@ -111,10 +113,11 @@ func TestSetCommand_SetPrompt(t *testing.T) {
 }
 
 func TestSetCommand_SetAddressed(t *testing.T) {
-	mockSys := mocktest.NewMockSystem()
+	mockSys := mocktest.NewMockSystem(t)
 	ctx := mocktest.NewMockContext().
 		WithAdmin(true).
 		WithSystem(mockSys).
+		WithSession(mockSys.AcquireSession(t, "test")).
 		WithArgs("/set", "addressed", "false")
 
 	cmd := &SetCommand{}
@@ -129,10 +132,11 @@ func TestSetCommand_SetAddressed(t *testing.T) {
 }
 
 func TestSetCommand_InvalidBoolValue(t *testing.T) {
-	mockSys := mocktest.NewMockSystem()
+	mockSys := mocktest.NewMockSystem(t)
 	ctx := mocktest.NewMockContext().
 		WithAdmin(true).
 		WithSystem(mockSys).
+		WithSession(mockSys.AcquireSession(t, "test")).
 		WithArgs("/set", "addressed", "notabool")
 
 	cmd := &SetCommand{}
@@ -147,10 +151,11 @@ func TestSetCommand_InvalidBoolValue(t *testing.T) {
 }
 
 func TestSetCommand_SetMaxTokens(t *testing.T) {
-	mockSys := mocktest.NewMockSystem()
+	mockSys := mocktest.NewMockSystem(t)
 	ctx := mocktest.NewMockContext().
 		WithAdmin(true).
 		WithSystem(mockSys).
+		WithSession(mockSys.AcquireSession(t, "test")).
 		WithArgs("/set", "maxtokens", "2048")
 
 	cmd := &SetCommand{}
@@ -165,10 +170,11 @@ func TestSetCommand_SetMaxTokens(t *testing.T) {
 }
 
 func TestSetCommand_InvalidIntValue(t *testing.T) {
-	mockSys := mocktest.NewMockSystem()
+	mockSys := mocktest.NewMockSystem(t)
 	ctx := mocktest.NewMockContext().
 		WithAdmin(true).
 		WithSystem(mockSys).
+		WithSession(mockSys.AcquireSession(t, "test")).
 		WithArgs("/set", "maxtokens", "notanint")
 
 	cmd := &SetCommand{}
@@ -194,10 +200,11 @@ func TestSetCommand_InvalidDuration(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockSys := mocktest.NewMockSystem()
+			mockSys := mocktest.NewMockSystem(t)
 			ctx := mocktest.NewMockContext().
 				WithAdmin(true).
 				WithSystem(mockSys).
+				WithSession(mockSys.AcquireSession(t, "test")).
 				WithArgs("/set", "sessionduration", tt.value)
 
 			cmd := &SetCommand{}
@@ -229,10 +236,11 @@ func TestSetCommand_TopPBounds(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockSys := mocktest.NewMockSystem()
+			mockSys := mocktest.NewMockSystem(t)
 			ctx := mocktest.NewMockContext().
 				WithAdmin(true).
 				WithSystem(mockSys).
+				WithSession(mockSys.AcquireSession(t, "test")).
 				WithArgs("/set", "top_p", tt.value)
 
 			cmd := &SetCommand{}
@@ -265,10 +273,11 @@ func TestSetCommand_ChunkMaxEdgeCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockSys := mocktest.NewMockSystem()
+			mockSys := mocktest.NewMockSystem(t)
 			ctx := mocktest.NewMockContext().
 				WithAdmin(true).
 				WithSystem(mockSys).
+				WithSession(mockSys.AcquireSession(t, "test")).
 				WithArgs("/set", "chunkmax", tt.value)
 
 			cmd := &SetCommand{}

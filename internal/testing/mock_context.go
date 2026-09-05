@@ -20,7 +20,7 @@ type MockChatContext struct {
 	Addressed bool
 	Admin     bool
 	Private   bool
-Command   string
+	Command   string
 	Source    string
 	Args      []string
 
@@ -31,14 +31,14 @@ Command   string
 	JoinWithKeyCalls []JoinWithKeyCall
 	NickCalls        []string
 	FatalErrors      []error
-	KickCalls       []KickCall
-	SetModeCalls    []ModeCall
-	TopicCalls      []TopicCall
-	OperCalls       []OperCall
-	BanCalls        []string
-	UnbanCalls      []string
-	InviteCalls     []InviteCall
-	SendActionCalls []ActionCall
+	KickCalls        []KickCall
+	SetModeCalls     []ModeCall
+	TopicCalls       []TopicCall
+	OperCalls        []OperCall
+	BanCalls         []string
+	UnbanCalls       []string
+	InviteCalls      []InviteCall
+	SendActionCalls  []ActionCall
 
 	// Injected dependencies
 	session sessions.Session
@@ -76,7 +76,7 @@ var _ core.ChatContextInterface = (*MockChatContext)(nil)
 func NewMockContext() *MockChatContext {
 	return &MockChatContext{
 		Context:      context.Background(),
-Addressed:    true,
+		Addressed:    true,
 		Admin:        false,
 		Private:      false,
 		Source:       "testuser",
@@ -304,15 +304,7 @@ func (m *MockChatContext) IsOp(channel, nick string) bool {
 // Runtime methods
 
 func (m *MockChatContext) GetSession() sessions.Session {
-	if m.session != nil {
-		return m.session
-	}
-	// Create a default session if none set
-	if m.sys != nil {
-		sess, _ := m.sys.GetSessionStore().Get("test")
-		return sess
-	}
-	return nil
+	return m.session
 }
 
 func (m *MockChatContext) GetConfig() *config.Configuration {

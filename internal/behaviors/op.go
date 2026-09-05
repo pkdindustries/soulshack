@@ -37,7 +37,7 @@ func (b *OpBehavior) Check(ctx irc.ChatContextInterface, event *girc.Event) bool
 }
 
 func (b *OpBehavior) Execute(ctx irc.ChatContextInterface, event *girc.Event) {
-	core.WithRequestLock(ctx, ctx.GetLockKey(), "op", func() {
+	core.WithConversation(ctx, "op", func(ctx irc.ChatContextInterface) {
 		cfg := ctx.GetConfig()
 		changedBy := event.Source.Name
 
