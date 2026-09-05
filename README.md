@@ -155,6 +155,8 @@ docker build . -t soulshack:dev
 | `-V, --verbose` | false | Enable debug logging |
 | `--model` | ollama/llama3.2 | LLM model (`provider/name`) |
 | `--maxtokens` | 4096 | Max tokens per response |
+| `--maxcontext` | 0 | Token budget for model input; older exchanges may be omitted from requests while stored history is retained (0 = unlimited) |
+| `-S, --sessionduration` | 10m | Stored conversation expires after inactivity (0 = no expiry) |
 | `--temperature` | 0.7 | Sampling temperature |
 | `-t, --apitimeout` | 5m | API request timeout |
 | `--openaikey` | | OpenAI API key |
@@ -165,6 +167,8 @@ docker build . -t soulshack:dev
 | `--thinkingeffort` | off | Reasoning effort level: off, low, medium, high |
 | `--urlwatcher` | false | Enable passive URL watching |
 | `--sandbox` | false | Sandbox shell, bash, and MCP tools (see below) |
+
+`/stats` shows the last completed model input separately from stored message counts and total provider token usage. `maxcontext` does not prune the transcript. `/clear`, `/reset`, idle expiry, and changing settings with `/set` clear the current transcript.
 
 ### YAML Configuration
 

@@ -1,6 +1,8 @@
 package testing
 
 import (
+	"context"
+	"testing"
 	"time"
 
 	"github.com/alexschlessinger/pollytool/llm"
@@ -13,13 +15,15 @@ import (
 
 // MockLLM implements core.LLM for testing
 type MockLLM struct {
-	Responses []string      // Chunks to send
-	Delay     time.Duration // Delay between chunks (0 = immediate)
-	Error     error         // Error to return (sent as final chunk)
+	Responses   []string               // Chunks to send
+	Delay       time.Duration          // Delay between chunks (0 = immediate)
+	Error       error                  // Error to return (sent as final chunk)
+	LastRequest *llm.CompletionRequest // Captured by ChatCompletionStream
 }
 
 // ChatCompletionStream implements core.LLM
 func (m *MockLLM) ChatCompletionStream(ctx core.ChatContextInterface, req *llm.CompletionRequest) <-chan string {
+	m.LastRequest = req
 	ch := make(chan string, len(m.Responses)+1)
 	go func() {
 		defer close(ch)
@@ -50,19 +54,27 @@ var _ core.LLM = (*MockLLM)(nil)
 // MockSystem implements core.System for testing
 type MockSystem struct {
 	ToolRegistry *tools.ToolRegistry
-	SessionStore sessions.SessionStore
+	Sessions     sessions.SessionStore
 	LLM          core.LLM
 }
 
 // NewMockSystem creates a MockSystem with sensible defaults
-func NewMockSystem() *MockSystem {
-	return &MockSystem{
-		ToolRegistry: tools.NewToolRegistry([]tools.Tool{}),
-		SessionStore: sessions.NewSyncMapSessionStore(&sessions.Metadata{
+func NewMockSystem(t testing.TB) *MockSystem {
+	store, err := sessions.OpenStore(sessions.StoreConfig{
+		Mode: sessions.ModeMemory,
+		DefaultMetadata: &sessions.Metadata{
 			MaxHistoryTokens: 100000,
 			TTL:              time.Minute * 10,
 			SystemPrompt:     "You are a test bot.",
-		}),
+		},
+	})
+	if err != nil {
+		t.Fatal("failed to open test session store: " + err.Error())
+	}
+	t.Cleanup(func() { store.Close() })
+	return &MockSystem{
+		ToolRegistry: tools.NewToolRegistry([]tools.Tool{}),
+		Sessions:     store,
 		LLM: &MockLLM{
 			Responses: []string{"Hello from mock LLM"},
 		},
@@ -74,9 +86,9 @@ func (m *MockSystem) GetToolRegistry() *tools.ToolRegistry {
 	return m.ToolRegistry
 }
 
-// GetSessionStore implements core.System
-func (m *MockSystem) GetSessionStore() sessions.SessionStore {
-	return m.SessionStore
+// GetSessions implements core.System
+func (m *MockSystem) GetSessions() sessions.SessionStore {
+	return m.Sessions
 }
 
 // GetLLM implements core.System
@@ -92,3 +104,14 @@ func (m *MockSystem) UpdateLLM(cfg config.APIConfig) error {
 
 // Verify MockSystem implements core.System
 var _ core.System = (*MockSystem)(nil)
+
+// AcquireSession supplies an explicitly scoped lease for command-level tests.
+func (m *MockSystem) AcquireSession(t testing.TB, key string) sessions.Session {
+	t.Helper()
+	session, err := m.Sessions.Acquire(context.Background(), key, sessions.AcquireOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { session.Close() })
+	return session
+}

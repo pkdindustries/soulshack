@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"log/slog"
-	"os"
 	"strings"
 
 	"github.com/alexschlessinger/pollytool/sessions"
@@ -21,7 +20,7 @@ type ChatContextInterface = core.ChatContextInterface
 type ChatContext struct {
 	context.Context
 	Sys       core.System
-	Session   sessions.Session
+	key       string
 	Config    *config.Configuration
 	client    *girc.Client
 	event     *girc.Event
@@ -77,13 +76,14 @@ func NewChatContext(parentctx context.Context, config *config.Configuration, sys
 		key = e.Source.Name
 	}
 
-	session, err := ctx.Sys.GetSessionStore().Get(key)
-	if err != nil {
-		slog.Error("failed to get session for key", "key", key, "error", err)
-		os.Exit(1)
-	}
-	ctx.Session = session
+	ctx.key = sessionKey(key)
 	return &ctx, cancel
+}
+
+// sessionKey preserves distinct IRC identities while avoiding characters the
+// session store rejects. The prefix separates IRC sessions from detached ones.
+func sessionKey(key string) string {
+	return "irc_" + hex.EncodeToString([]byte(key))
 }
 
 func (c ChatContext) GetSystem() core.System {
@@ -145,7 +145,8 @@ func (c ChatContext) GetArgs() []string {
 }
 
 func (c ChatContext) GetSession() sessions.Session {
-	return c.Session
+	// A session is attached only inside core.WithConversation.
+	return nil
 }
 
 func (c ChatContext) GetBotNick() string {
@@ -267,13 +268,7 @@ func (c ChatContext) GetChannelUsers(channel string) []core.ChannelUser {
 }
 
 func (c ChatContext) GetLockKey() string {
-	if len(c.event.Params) > 0 && girc.IsValidChannel(c.event.Params[0]) {
-		return c.Config.Server.Channel
-	}
-	if c.event.Source != nil {
-		return c.event.Source.Name
-	}
-	return c.Config.Server.Channel
+	return c.key
 }
 
 func (c ChatContext) IsOp(channel, nick string) bool {

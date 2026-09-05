@@ -58,13 +58,13 @@ type ChatContextInterface interface {
 
 // LLM defines the interface for the language model client
 type LLM interface {
-	// ChatCompletionStream returns a channel of string chunks for IRC output
+	// ChatCompletionStream returns IRC output and closes after history saving finishes.
 	ChatCompletionStream(ChatContextInterface, *llm.CompletionRequest) <-chan string
 }
 
 type System interface {
 	GetToolRegistry() *tools.ToolRegistry
-	GetSessionStore() sessions.SessionStore
+	GetSessions() sessions.SessionStore
 	GetLLM() LLM
 	UpdateLLM(config.APIConfig) error
 }

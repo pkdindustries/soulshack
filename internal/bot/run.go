@@ -24,7 +24,11 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 	}
 	core.InitLogger(level, cfg.Bot.LogFormat)
 
-	sys := NewSystem(cfg)
+	sys, err := NewSystem(cfg)
+	if err != nil {
+		return err
+	}
+	defer sys.GetSessions().Close()
 
 	// Initialize command registry
 	cmdRegistry := commands.NewRegistry()

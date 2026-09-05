@@ -1,7 +1,7 @@
 package llm
 
 import (
-	"sync"
+	"fmt"
 
 	"github.com/alexschlessinger/pollytool/llm"
 	"github.com/alexschlessinger/pollytool/messages"
@@ -9,61 +9,55 @@ import (
 	"github.com/alexschlessinger/pollytool/tools"
 
 	"pkdindustries/soulshack/internal/config"
+	"pkdindustries/soulshack/internal/core"
 	"pkdindustries/soulshack/internal/irc"
 )
 
 type CompletionRequest = llm.CompletionRequest
 
-// Track warned sessions to avoid repeated warnings
-var (
-	warnedSessions = make(map[string]int) // session_name -> last_warning_percentage
-	warningMutex   sync.RWMutex
-)
-
-// checkSessionCapacity checks if the session is approaching token limits and sends warnings
-func checkSessionCapacity(ctx irc.ChatContextInterface) {
-	session := ctx.GetSession()
-
-	// Use polly's capacity calculation
-	percentage := session.GetCapacityPercentage()
-	if percentage == 0 {
-		return // No limit set
+// Warn from the request Polly actually projected, independently of retained
+// history size and cumulative provider billing. The previous turn supplies the
+// warning state without a second session cache.
+func checkContextUsage(ctx irc.ChatContextInterface, usage core.ContextUsage, history []messages.ChatMessage) {
+	previous, _ := core.LastContextUsage(history)
+	if usage.OmittedExchanges > 0 && previous.OmittedExchanges == 0 {
+		ctx.ReplyAction(fmt.Sprintf("Model input omitted %d older exchanges; stored history is retained", usage.OmittedExchanges))
+		return
 	}
-
-	// Get session identifier and check last warning level
-	sessionName := session.GetName()
-
-	warningMutex.Lock()
-	defer warningMutex.Unlock()
-
-	lastWarning := warnedSessions[sessionName]
-
-	// Send warnings at thresholds, avoiding repeats
-	if percentage >= 90 && lastWarning < 90 {
-		ctx.ReplyAction("Session at 90% capacity - conversation history will be trimmed soon")
-		warnedSessions[sessionName] = 90
-	} else if percentage >= 75 && lastWarning < 75 {
-		ctx.ReplyAction("Session at 75% capacity")
-		warnedSessions[sessionName] = 75
-	} else if percentage < 75 && lastWarning > 0 {
-		// Reset warning state if capacity drops below thresholds
-		delete(warnedSessions, sessionName)
+	level := func(u core.ContextUsage) int {
+		if u.Budget <= 0 {
+			return 0
+		}
+		percentage := float64(u.EstimatedTokens) / float64(u.Budget) * 100
+		if percentage >= 90 {
+			return 90
+		}
+		if percentage >= 75 {
+			return 75
+		}
+		return 0
+	}
+	if current := level(usage); current > level(previous) {
+		ctx.ReplyAction(fmt.Sprintf("Model input reached %d%% of its context budget; stored history is retained", current))
 	}
 }
 
-func NewCompletionRequest(config *config.Configuration, session sessions.Session, tools []tools.Tool) *CompletionRequest {
+func NewCompletionRequest(config *config.Configuration, history []messages.ChatMessage, metadata *sessions.Metadata, tools []tools.Tool) *CompletionRequest {
 	// Parse thinking effort - validated at config load time
 	thinkingEffort, _ := llm.ParseThinkingEffort(config.Model.ThinkingEffort)
 
 	req := &CompletionRequest{
-		BaseURL:        config.API.OpenAIURL,
-		Timeout:        config.API.Timeout,
-		Model:          config.Model.Model,
-		MaxTokens:      config.Model.MaxTokens,
-		Messages:       session.GetHistory(),
-		Temperature:    llm.Float32Ptr(config.Model.Temperature),
-		Tools:          tools,
-		ThinkingEffort: thinkingEffort,
+		BaseURL:   config.API.OpenAIURL,
+		Timeout:   config.API.Timeout,
+		Model:     config.Model.Model,
+		MaxTokens: config.Model.MaxTokens,
+		Messages:  history,
+		// The projection budget enforces maxcontext: polly omits the oldest
+		// exchanges when the history estimate exceeds it.
+		MaxContextTokens: metadata.MaxHistoryTokens,
+		Temperature:      llm.Float32Ptr(config.Model.Temperature),
+		Tools:            tools,
+		ThinkingEffort:   thinkingEffort,
 	}
 
 	// Set streaming mode (nil = streaming default, false = non-streaming)
@@ -77,8 +71,15 @@ func NewCompletionRequest(config *config.Configuration, session sessions.Session
 
 // Complete processes a user message and returns a channel of response chunks.
 func Complete(ctx irc.ChatContextInterface, msg string) (<-chan string, error) {
-	// Check session capacity and warn if approaching limits
-	checkSessionCapacity(ctx)
+	session := ctx.GetSession()
+	history, err := session.GetHistory(ctx)
+	if err != nil {
+		return nil, err
+	}
+	metadata, err := session.GetMetadata(ctx)
+	if err != nil {
+		return nil, err
+	}
 
 	// Add user message to session
 	cmsg := messages.ChatMessage{
@@ -90,10 +91,12 @@ func Complete(ctx irc.ChatContextInterface, msg string) (<-chan string, error) {
 		truncated = truncated[:100] + "..."
 	}
 	ctx.GetLogger().Info("message_received", "message", truncated)
-	ctx.GetSession().AddMessage(cmsg)
+	if err := session.AddMessage(ctx, cmsg); err != nil {
+		return nil, err
+	}
+	history = append(history, cmsg)
 
 	// Build completion request
-	session := ctx.GetSession()
 	cfg := ctx.GetConfig()
 	sys := ctx.GetSystem()
 
@@ -102,19 +105,9 @@ func Complete(ctx irc.ChatContextInterface, msg string) (<-chan string, error) {
 		allTools = sys.GetToolRegistry().All()
 	}
 
-	req := NewCompletionRequest(cfg, session, allTools)
+	req := NewCompletionRequest(cfg, history, metadata, allTools)
 
-	// Get response stream from LLM
-	stream := sys.GetLLM().ChatCompletionStream(ctx, req)
-
-	output := make(chan string, 10)
-
-	go func() {
-		defer close(output)
-		for chunk := range stream {
-			output <- chunk
-		}
-	}()
-
-	return output, nil
+	// Closing this stream also completes persistence; the conversation helper
+	// keeps the lease until the caller has drained it.
+	return sys.GetLLM().ChatCompletionStream(ctx, req), nil
 }

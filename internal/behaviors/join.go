@@ -27,7 +27,7 @@ func (b *JoinBehavior) Check(ctx irc.ChatContextInterface, event *girc.Event) bo
 }
 
 func (b *JoinBehavior) Execute(ctx irc.ChatContextInterface, event *girc.Event) {
-	core.WithRequestLock(ctx, ctx.GetLockKey(), "join", func() {
+	core.WithConversation(ctx, "join", func(ctx irc.ChatContextInterface) {
 		cfg := ctx.GetConfig()
 		outch, err := llm.Complete(ctx, cfg.Bot.Greeting)
 		if err != nil {

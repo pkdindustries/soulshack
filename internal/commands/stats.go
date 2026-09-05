@@ -5,10 +5,10 @@ import (
 	"strings"
 	"time"
 
+	"pkdindustries/soulshack/internal/core"
 	"pkdindustries/soulshack/internal/irc"
 
 	"github.com/alexschlessinger/pollytool/messages"
-	"github.com/alexschlessinger/pollytool/sessions"
 )
 
 // StatsCommand handles the /stats command for showing session statistics
@@ -19,16 +19,22 @@ func (c *StatsCommand) AdminOnly() bool { return false }
 
 func (c *StatsCommand) Execute(ctx irc.ChatContextInterface) {
 	session := ctx.GetSession()
-	history := session.GetHistory()
-	metadata := session.GetMetadata()
-
-	// Get capacity percentage using the interface method
-	percentage := session.GetCapacityPercentage()
+	history, err := session.GetHistory(ctx)
+	if err != nil {
+		ctx.GetLogger().Error("stats_failed", "error", err)
+		ctx.Reply("Failed to read session stats")
+		return
+	}
+	metadata, err := session.GetMetadata(ctx)
+	if err != nil {
+		ctx.GetLogger().Error("stats_failed", "error", err)
+		ctx.Reply("Failed to read session stats")
+		return
+	}
 
 	// Calculate token breakdown
 	totalInputTokens := 0
 	totalOutputTokens := 0
-	totalEstimated := 0
 
 	// Track participants (IRC-specific)
 	participants := make(map[string]bool)
@@ -41,10 +47,6 @@ func (c *StatsCommand) Execute(ctx irc.ChatContextInterface) {
 		if input > 0 || output > 0 {
 			totalInputTokens += input
 			totalOutputTokens += output
-		} else {
-			// Using estimation fallback
-			estimated := sessions.EstimateTokens(msg)
-			totalEstimated += estimated
 		}
 
 		// Track participants from user messages
@@ -65,37 +67,40 @@ func (c *StatsCommand) Execute(ctx irc.ChatContextInterface) {
 	}
 
 	// Get message counts and tool calls using new interface methods
-	messageCounts := session.GetMessageCounts()
-
-	// Calculate TTL information
-	ttlStr := "unlimited"
-	if metadata.TTL > 0 {
-		timeRemaining := session.GetTimeToExpiry()
-
-		if timeRemaining > 0 {
-			ttlStr = fmt.Sprintf("expires in %s", formatDuration(timeRemaining))
-		} else {
-			ttlStr = "expired"
-		}
+	messageCounts, err := session.GetMessageCounts(ctx)
+	if err != nil {
+		ctx.GetLogger().Error("stats_failed", "error", err)
+		ctx.Reply("Failed to read session stats")
+		return
 	}
 
-	// Format capacity
-	capacityStr := "unlimited"
-	if metadata.MaxHistoryTokens > 0 {
-		capacityStr = fmt.Sprintf("%.1f%% of %d", percentage, metadata.MaxHistoryTokens)
+	// The active lease keeps a session alive; expiry is an idle retention rule.
+	ttlStr := "disabled"
+	if metadata.TTL > 0 {
+		ttlStr = fmt.Sprintf("after %s idle", formatDuration(metadata.TTL))
+	}
+	contextStr := "no completed request"
+	if usage, ok := core.LastContextUsage(history); ok {
+		contextStr = fmt.Sprintf("~%d tokens (no configured limit)", usage.EstimatedTokens)
+		if usage.Budget > 0 {
+			contextStr = fmt.Sprintf("~%d/%d tokens", usage.EstimatedTokens, usage.Budget)
+		}
+		if usage.OmittedExchanges > 0 {
+			contextStr += fmt.Sprintf(" (%d older exchanges omitted)", usage.OmittedExchanges)
+		}
 	}
 
 	// Build response in simple format
 	response := fmt.Sprintf(
-		"token input: %d, "+
-			"token output: %d, "+
-			"context capacity: %s, "+
-			"messages: %d (user: %d, assistant: %d, tool: %d), "+
+		"total token input: %d, "+
+			"total token output: %d, "+
+			"last completed input: %s, "+
+			"stored messages: %d (user: %d, assistant: %d, tool: %d), "+
 			"participants: %d, "+
-			"ttl: %s",
+			"idle expiry: %s",
 		totalInputTokens,
 		totalOutputTokens,
-		capacityStr,
+		contextStr,
 		len(history),
 		messageCounts[string(messages.MessageRoleUser)],
 		messageCounts[string(messages.MessageRoleAssistant)],
