@@ -213,8 +213,16 @@ func (h *callbackHandler) onError(err error) {
 	h.framer.Write(fmt.Sprintf("Error: %v", err))
 }
 
-// CreateAgentForRegistry uses Polly's private per-agent built-ins while sharing
-// the caller-owned configured tools, sandbox policy, and MCP connections.
+// CreateAgentForRegistry shares the caller-owned configured tools, sandbox
+// policy, and MCP connections. Polly's private per-agent built-ins are dropped:
+// an IRC turn has nothing to do with artifacts or images, and its conversation
+// is short enough that paging a transcript only spends tokens. Removing them
+// from the agent's own registry leaves the caller's tools, which it inherits,
+// untouched.
 func CreateAgentForRegistry(client llm.LLM, registry *tools.ToolRegistry, timeout time.Duration) *llm.Agent {
-	return llm.NewAgent(client, registry, llm.AgentConfig{MaxIterations: 10, ToolTimeout: timeout})
+	agent := llm.NewAgent(client, registry, llm.AgentConfig{MaxIterations: 10, ToolTimeout: timeout})
+	for _, name := range llm.BuiltinToolNames() {
+		agent.ToolRegistry().Remove(name)
+	}
+	return agent
 }
