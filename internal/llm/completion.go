@@ -47,7 +47,7 @@ func NewCompletionRequest(config *config.Configuration, history []messages.ChatM
 	thinkingEffort, _ := llm.ParseThinkingEffort(config.Model.ThinkingEffort)
 
 	req := &CompletionRequest{
-		BaseURL:   config.API.OpenAIURL,
+		// BaseURL is resolved per provider when the request is dispatched.
 		Timeout:   config.API.Timeout,
 		Model:     config.Model.Model,
 		MaxTokens: config.Model.MaxTokens,
