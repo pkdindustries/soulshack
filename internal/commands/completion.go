@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"pkdindustries/soulshack/internal/irc"
+	"pkdindustries/soulshack/internal/core"
 	"pkdindustries/soulshack/internal/llm"
 )
 
@@ -14,18 +14,10 @@ type CompletionCommand struct{}
 func (c *CompletionCommand) Name() string    { return "" }
 func (c *CompletionCommand) AdminOnly() bool { return false }
 
-func (c *CompletionCommand) Execute(ctx irc.ChatContextInterface) {
-	msg := strings.Join(ctx.GetArgs(), " ")
+func (c *CompletionCommand) Execute(turn *core.Turn) {
+	msg := strings.Join(turn.GetArgs(), " ")
 
-	outch, err := llm.Complete(ctx, fmt.Sprintf("(nick:%s) %s", ctx.GetSource(), msg))
-
-	if err != nil {
-		ctx.GetLogger().Error("completion_error", "error", err)
-		ctx.Reply(err.Error())
-		return
-	}
-
-	for res := range outch {
-		ctx.Reply(res)
+	for res := range llm.Complete(turn, fmt.Sprintf("(nick:%s) %s", turn.GetSource(), msg)) {
+		turn.Reply(res)
 	}
 }

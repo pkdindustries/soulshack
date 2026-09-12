@@ -8,7 +8,6 @@ import (
 
 	"pkdindustries/soulshack/internal/core"
 	"pkdindustries/soulshack/internal/irc"
-	"pkdindustries/soulshack/internal/llm"
 )
 
 const opWatcherPrefixes = "(qaohv)~&%@+"
@@ -37,8 +36,8 @@ func (b *OpBehavior) Check(ctx irc.ChatContextInterface, event *girc.Event) bool
 }
 
 func (b *OpBehavior) Execute(ctx irc.ChatContextInterface, event *girc.Event) {
-	core.WithConversation(ctx, "op", func(ctx irc.ChatContextInterface) {
-		cfg := ctx.GetConfig()
+	core.WithConversation(ctx, "op", func(turn *core.Turn) {
+		cfg := turn.GetConfig()
 		changedBy := event.Source.Name
 
 		action, ok := opActionForNick(event, b.BotNick)
@@ -46,18 +45,7 @@ func (b *OpBehavior) Execute(ctx irc.ChatContextInterface, event *girc.Event) {
 			return
 		}
 
-		prompt := fmt.Sprintf(cfg.Bot.OpWatcherTemplate, action, changedBy)
-		outch, err := llm.Complete(ctx, prompt)
-
-		if err != nil {
-			ctx.GetLogger().Error("op_behavior_error", "error", err)
-			ctx.Reply(err.Error())
-			return
-		}
-
-		for res := range outch {
-			ctx.Reply(res)
-		}
+		complete(turn, fmt.Sprintf(cfg.Bot.OpWatcherTemplate, action, changedBy), false)
 	}, nil)
 }
 

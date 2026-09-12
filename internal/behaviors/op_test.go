@@ -45,8 +45,9 @@ func TestOpBehaviorCheck(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx := mocktest.NewMockContext().WithConfig(mocktest.DefaultTestConfig())
-			ctx.GetConfig().Bot.OpWatcher = true
+			cfg := mocktest.DefaultTestConfig()
+			cfg.Bot.OpWatcher = true
+			ctx := mocktest.NewMockContext().WithConfig(cfg)
 
 			event := &girc.Event{
 				Command: girc.MODE,

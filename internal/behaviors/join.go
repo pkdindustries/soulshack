@@ -5,7 +5,6 @@ import (
 
 	"pkdindustries/soulshack/internal/core"
 	"pkdindustries/soulshack/internal/irc"
-	"pkdindustries/soulshack/internal/llm"
 )
 
 // JoinBehavior sends a greeting when the bot joins a channel
@@ -27,17 +26,7 @@ func (b *JoinBehavior) Check(ctx irc.ChatContextInterface, event *girc.Event) bo
 }
 
 func (b *JoinBehavior) Execute(ctx irc.ChatContextInterface, event *girc.Event) {
-	core.WithConversation(ctx, "join", func(ctx irc.ChatContextInterface) {
-		cfg := ctx.GetConfig()
-		outch, err := llm.Complete(ctx, cfg.Bot.Greeting)
-		if err != nil {
-			ctx.GetLogger().Error("join_behavior_error", "error", err)
-			ctx.Reply(err.Error())
-			return
-		}
-
-		for res := range outch {
-			ctx.Reply(res)
-		}
+	core.WithConversation(ctx, "join", func(turn *core.Turn) {
+		complete(turn, turn.GetConfig().Bot.Greeting, false)
 	}, nil)
 }

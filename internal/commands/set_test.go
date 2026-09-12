@@ -2,7 +2,9 @@ package commands
 
 import (
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	mocktest "pkdindustries/soulshack/internal/testing"
 )
@@ -27,7 +29,7 @@ func TestSetCommand_MissingArgs(t *testing.T) {
 		WithArgs("/set")
 
 	cmd := &SetCommand{}
-	cmd.Execute(ctx)
+	cmd.Execute(ctx.Turn())
 
 	if ctx.ReplyCount() != 1 {
 		t.Fatalf("expected 1 reply, got %d", ctx.ReplyCount())
@@ -43,7 +45,7 @@ func TestSetCommand_MissingValue(t *testing.T) {
 		WithArgs("/set", "model")
 
 	cmd := &SetCommand{}
-	cmd.Execute(ctx)
+	cmd.Execute(ctx.Turn())
 
 	if ctx.ReplyCount() != 1 {
 		t.Fatalf("expected 1 reply, got %d", ctx.ReplyCount())
@@ -59,7 +61,7 @@ func TestSetCommand_UnknownKey(t *testing.T) {
 		WithArgs("/set", "unknownkey", "somevalue")
 
 	cmd := &SetCommand{}
-	cmd.Execute(ctx)
+	cmd.Execute(ctx.Turn())
 
 	if ctx.ReplyCount() != 1 {
 		t.Fatalf("expected 1 reply, got %d", ctx.ReplyCount())
@@ -71,14 +73,12 @@ func TestSetCommand_UnknownKey(t *testing.T) {
 
 func TestSetCommand_SetModel(t *testing.T) {
 	mockSys := mocktest.NewMockSystem(t)
-	ctx := mocktest.NewMockContext().
+	ctx := mocktest.NewTurnContext(t, mockSys, "test").
 		WithAdmin(true).
-		WithSystem(mockSys).
-		WithSession(mockSys.AcquireSession(t, "test")).
 		WithArgs("/set", "model", "gpt-4")
 
 	cmd := &SetCommand{}
-	cmd.Execute(ctx)
+	cmd.Execute(ctx.Turn())
 
 	if ctx.ReplyCount() != 1 {
 		t.Fatalf("expected 1 reply, got %d", ctx.ReplyCount())
@@ -93,14 +93,12 @@ func TestSetCommand_SetModel(t *testing.T) {
 
 func TestSetCommand_SetPrompt(t *testing.T) {
 	mockSys := mocktest.NewMockSystem(t)
-	ctx := mocktest.NewMockContext().
+	ctx := mocktest.NewTurnContext(t, mockSys, "test").
 		WithAdmin(true).
-		WithSystem(mockSys).
-		WithSession(mockSys.AcquireSession(t, "test")).
 		WithArgs("/set", "prompt", "You", "are", "helpful")
 
 	cmd := &SetCommand{}
-	cmd.Execute(ctx)
+	cmd.Execute(ctx.Turn())
 
 	if ctx.ReplyCount() != 1 {
 		t.Fatalf("expected 1 reply, got %d", ctx.ReplyCount())
@@ -114,14 +112,12 @@ func TestSetCommand_SetPrompt(t *testing.T) {
 
 func TestSetCommand_SetAddressed(t *testing.T) {
 	mockSys := mocktest.NewMockSystem(t)
-	ctx := mocktest.NewMockContext().
+	ctx := mocktest.NewTurnContext(t, mockSys, "test").
 		WithAdmin(true).
-		WithSystem(mockSys).
-		WithSession(mockSys.AcquireSession(t, "test")).
 		WithArgs("/set", "addressed", "false")
 
 	cmd := &SetCommand{}
-	cmd.Execute(ctx)
+	cmd.Execute(ctx.Turn())
 
 	if ctx.ReplyCount() != 1 {
 		t.Fatalf("expected 1 reply, got %d", ctx.ReplyCount())
@@ -133,14 +129,12 @@ func TestSetCommand_SetAddressed(t *testing.T) {
 
 func TestSetCommand_InvalidBoolValue(t *testing.T) {
 	mockSys := mocktest.NewMockSystem(t)
-	ctx := mocktest.NewMockContext().
+	ctx := mocktest.NewTurnContext(t, mockSys, "test").
 		WithAdmin(true).
-		WithSystem(mockSys).
-		WithSession(mockSys.AcquireSession(t, "test")).
 		WithArgs("/set", "addressed", "notabool")
 
 	cmd := &SetCommand{}
-	cmd.Execute(ctx)
+	cmd.Execute(ctx.Turn())
 
 	if ctx.ReplyCount() != 1 {
 		t.Fatalf("expected 1 reply, got %d", ctx.ReplyCount())
@@ -152,14 +146,12 @@ func TestSetCommand_InvalidBoolValue(t *testing.T) {
 
 func TestSetCommand_SetMaxTokens(t *testing.T) {
 	mockSys := mocktest.NewMockSystem(t)
-	ctx := mocktest.NewMockContext().
+	ctx := mocktest.NewTurnContext(t, mockSys, "test").
 		WithAdmin(true).
-		WithSystem(mockSys).
-		WithSession(mockSys.AcquireSession(t, "test")).
 		WithArgs("/set", "maxtokens", "2048")
 
 	cmd := &SetCommand{}
-	cmd.Execute(ctx)
+	cmd.Execute(ctx.Turn())
 
 	if ctx.ReplyCount() != 1 {
 		t.Fatalf("expected 1 reply, got %d", ctx.ReplyCount())
@@ -171,14 +163,12 @@ func TestSetCommand_SetMaxTokens(t *testing.T) {
 
 func TestSetCommand_InvalidIntValue(t *testing.T) {
 	mockSys := mocktest.NewMockSystem(t)
-	ctx := mocktest.NewMockContext().
+	ctx := mocktest.NewTurnContext(t, mockSys, "test").
 		WithAdmin(true).
-		WithSystem(mockSys).
-		WithSession(mockSys.AcquireSession(t, "test")).
 		WithArgs("/set", "maxtokens", "notanint")
 
 	cmd := &SetCommand{}
-	cmd.Execute(ctx)
+	cmd.Execute(ctx.Turn())
 
 	if ctx.ReplyCount() != 1 {
 		t.Fatalf("expected 1 reply, got %d", ctx.ReplyCount())
@@ -201,14 +191,12 @@ func TestSetCommand_InvalidDuration(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mockSys := mocktest.NewMockSystem(t)
-			ctx := mocktest.NewMockContext().
+			ctx := mocktest.NewTurnContext(t, mockSys, "test").
 				WithAdmin(true).
-				WithSystem(mockSys).
-				WithSession(mockSys.AcquireSession(t, "test")).
 				WithArgs("/set", "sessionduration", tt.value)
 
 			cmd := &SetCommand{}
-			cmd.Execute(ctx)
+			cmd.Execute(ctx.Turn())
 
 			if ctx.ReplyCount() != 1 {
 				t.Fatalf("expected 1 reply, got %d", ctx.ReplyCount())
@@ -237,14 +225,12 @@ func TestSetCommand_TopPBounds(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mockSys := mocktest.NewMockSystem(t)
-			ctx := mocktest.NewMockContext().
+			ctx := mocktest.NewTurnContext(t, mockSys, "test").
 				WithAdmin(true).
-				WithSystem(mockSys).
-				WithSession(mockSys.AcquireSession(t, "test")).
 				WithArgs("/set", "top_p", tt.value)
 
 			cmd := &SetCommand{}
-			cmd.Execute(ctx)
+			cmd.Execute(ctx.Turn())
 
 			if ctx.ReplyCount() != 1 {
 				t.Fatalf("expected 1 reply, got %d", ctx.ReplyCount())
@@ -273,15 +259,12 @@ func TestSetCommand_ChunkMaxEdgeCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockSys := mocktest.NewMockSystem(t)
-			ctx := mocktest.NewMockContext().
+			ctx := mocktest.NewTurnContext(t, mocktest.NewMockSystem(t), "test").
 				WithAdmin(true).
-				WithSystem(mockSys).
-				WithSession(mockSys.AcquireSession(t, "test")).
 				WithArgs("/set", "chunkmax", tt.value)
 
 			cmd := &SetCommand{}
-			cmd.Execute(ctx)
+			cmd.Execute(ctx.Turn())
 
 			if ctx.ReplyCount() != 1 {
 				t.Fatalf("expected 1 reply, got %d", ctx.ReplyCount())
@@ -293,4 +276,70 @@ func TestSetCommand_ChunkMaxEdgeCases(t *testing.T) {
 			}
 		})
 	}
+}
+
+// maxcontext and sessionduration take effect for conversations that already
+// exist, not only for ones created after the change.
+func TestSetCommand_ConversationLimitsApplyToTheMemory(t *testing.T) {
+	mockSys := mocktest.NewMockSystem(t)
+	ctx := mocktest.NewTurnContext(t, mockSys, "test").
+		WithAdmin(true).
+		WithArgs("/set", "maxcontext", "4096")
+
+	cmd := &SetCommand{}
+	cmd.Execute(ctx.Turn())
+	if got := mockSys.Memory.Budget(); got != 4096 {
+		t.Errorf("maxcontext did not reach the memory: %d", got)
+	}
+
+	ctx.WithArgs("/set", "sessionduration", "1h")
+	cmd.Execute(ctx.Turn())
+	if got := mockSys.Memory.TTL(); got != time.Hour {
+		t.Errorf("sessionduration did not reach the memory: %s", got)
+	}
+}
+
+// Changes made with /set are visible to turns reading the configuration at the
+// same time: both go through the store, not through a shared pointer.
+func TestSetCommand_ConcurrentReadersSeeChanges(t *testing.T) {
+	mockSys := mocktest.NewMockSystem(t)
+	ctx := mocktest.NewTurnContext(t, mockSys, "test").
+		WithAdmin(true)
+	turn := ctx.Turn()
+	cmd := &SetCommand{}
+
+	stop := make(chan struct{})
+	var readers sync.WaitGroup
+	sawChange := make(chan struct{})
+	for i := 0; i < 4; i++ {
+		readers.Add(1)
+		go func() {
+			defer readers.Done()
+			for {
+				select {
+				case <-stop:
+					return
+				default:
+				}
+				cfg := turn.GetConfig()
+				_ = cfg.Bot.Admins
+				if cfg.Model.MaxTokens == 4242 {
+					select {
+					case sawChange <- struct{}{}:
+					default:
+					}
+				}
+			}
+		}()
+	}
+
+	ctx.WithArgs("/set", "maxtokens", "4242")
+	cmd.Execute(turn)
+	select {
+	case <-sawChange:
+	case <-time.After(time.Second):
+		t.Fatal("a reader never saw the change")
+	}
+	close(stop)
+	readers.Wait()
 }

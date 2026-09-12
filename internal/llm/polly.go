@@ -1,7 +1,6 @@
 package llm
 
 import (
-	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -12,7 +11,7 @@ import (
 
 	"pkdindustries/soulshack/internal/config"
 	"pkdindustries/soulshack/internal/core"
-	"pkdindustries/soulshack/internal/irc"
+	"pkdindustries/soulshack/internal/memory"
 )
 
 // PollyLLM wraps pollytool's MultiPass and Agent to implement soulshack's LLM interface
@@ -32,16 +31,11 @@ func NewPollyLLM(config config.APIConfig) *PollyLLM {
 }
 
 // ChatCompletionStream returns a channel of string chunks for IRC output
-func (p *PollyLLM) ChatCompletionStream(chatCtx core.ChatContextInterface, req *CompletionRequest) <-chan string {
-	cfg := chatCtx.GetConfig()
+func (p *PollyLLM) ChatCompletionStream(turn *core.Turn, req *CompletionRequest) <-chan string {
+	cfg := turn.GetConfig()
 	// Only apply OllamaURL for ollama/ models
 	if strings.HasPrefix(req.Model, "ollama/") && cfg.API.OllamaURL != "" {
 		req.BaseURL = cfg.API.OllamaURL
-	}
-
-	maxChunkSize := 400
-	if cfg.Session.ChunkMax > 0 {
-		maxChunkSize = cfg.Session.ChunkMax
 	}
 
 	output := make(chan string, 10)
@@ -49,35 +43,28 @@ func (p *PollyLLM) ChatCompletionStream(chatCtx core.ChatContextInterface, req *
 	go func() {
 		defer close(output)
 
-		agent := CreateAgentForRegistry(p.client, chatCtx.GetSystem().GetToolRegistry(), cfg.API.Timeout)
+		agent := CreateAgentForRegistry(p.client, turn.GetSystem().GetToolRegistry(), cfg.API.Timeout)
 		defer agent.Close()
 
-		chunker := irc.NewChunker(output, maxChunkSize)
-		cb := newCallbackHandler(chatCtx, chunker, cfg)
+		framer := turn.NewChunkWriter(output)
+		cb := newCallbackHandler(turn, framer, cfg)
 
-		resp, err := agent.Run(chatCtx, req, cb.build())
+		resp, err := agent.Run(turn, req, cb.build())
 
-		chunker.Flush()
+		framer.Flush()
 
 		if err != nil {
-			chatCtx.GetLogger().Error("agent_error", "error", err.Error())
+			turn.GetLogger().Error("agent_error", "error", err.Error())
 			return
 		}
-		usage := core.ContextUsage{
+		usage := memory.ContextUsage{
 			EstimatedTokens:  resp.Projection.RequestEstimatedTokens,
 			Budget:           req.MaxContextTokens,
 			OmittedExchanges: resp.Projection.OmittedExchanges,
 		}
-		core.RecordContextUsage(resp.AllMessages, usage)
-
-		// Save history even if the request context expired during the final chunk
-		saveCtx, cancel := context.WithTimeout(context.WithoutCancel(chatCtx), 30*time.Second)
-		defer cancel()
-		if err := chatCtx.GetSession().AddMessages(saveCtx, resp.AllMessages); err != nil {
-			chatCtx.GetLogger().Error("session_append_failed", "error", err)
-			return
-		}
-		checkContextUsage(chatCtx, usage, req.Messages)
+		turn.Conversation.Append(resp.AllMessages)
+		turn.Conversation.SetUsage(usage)
+		checkContextUsage(turn, usage)
 	}()
 
 	return output
@@ -85,18 +72,18 @@ func (p *PollyLLM) ChatCompletionStream(chatCtx core.ChatContextInterface, req *
 
 // callbackHandler organizes callback construction
 type callbackHandler struct {
-	chatCtx          core.ChatContextInterface
-	chunker          *irc.Chunker
+	turn             *core.Turn
+	framer           core.ChunkWriter
 	cfg              *config.Configuration
 	startTime        time.Time
 	lastThinkingTime time.Time
 	toolCount        int
 }
 
-func newCallbackHandler(chatCtx core.ChatContextInterface, chunker *irc.Chunker, cfg *config.Configuration) *callbackHandler {
+func newCallbackHandler(turn *core.Turn, framer core.ChunkWriter, cfg *config.Configuration) *callbackHandler {
 	return &callbackHandler{
-		chatCtx:   chatCtx,
-		chunker:   chunker,
+		turn:      turn,
+		framer:    framer,
 		cfg:       cfg,
 		startTime: time.Now(),
 	}
@@ -104,13 +91,12 @@ func newCallbackHandler(chatCtx core.ChatContextInterface, chunker *irc.Chunker,
 
 func (h *callbackHandler) build() *llm.AgentCallbacks {
 	return &llm.AgentCallbacks{
-		OnReasoning:       h.onReasoning,
-		OnContent:         h.onContent,
-		BeforeToolExecute: h.beforeToolExecute,
-		OnToolStart:       h.onToolStart,
-		OnToolEnd:         h.onToolEnd,
-		OnComplete:        h.onComplete,
-		OnError:           h.onError,
+		OnReasoning: h.onReasoning,
+		OnContent:   h.onContent,
+		OnToolStart: h.onToolStart,
+		OnToolEnd:   h.onToolEnd,
+		OnComplete:  h.onComplete,
+		OnError:     h.onError,
 	}
 }
 
@@ -126,11 +112,11 @@ func (h *callbackHandler) onComplete(response *messages.ChatMessage) {
 	if h.toolCount > 0 {
 		fields = append(fields, "tool_count", h.toolCount)
 	}
-	h.chatCtx.GetLogger().Info("request_complete", fields...)
+	h.turn.GetLogger().Info("request_complete", fields...)
 }
 
 func (h *callbackHandler) onReasoning(content string) {
-	h.chatCtx.GetLogger().Debug("reasoning_chunk", "content", content)
+	h.turn.GetLogger().Debug("reasoning_chunk", "content", content)
 
 	if !h.cfg.Bot.ShowThinkingAction {
 		return
@@ -140,32 +126,28 @@ func (h *callbackHandler) onReasoning(content string) {
 	if now.Sub(h.startTime) > 30*time.Second {
 		if h.lastThinkingTime.IsZero() || now.Sub(h.lastThinkingTime) > 30*time.Second {
 			elapsed := now.Sub(h.startTime).Round(time.Second)
-			h.chatCtx.ReplyAction(fmt.Sprintf("is thinking... (%s)", elapsed))
+			h.turn.ReplyAction(fmt.Sprintf("is thinking... (%s)", elapsed))
 			h.lastThinkingTime = now
 		}
 	}
 }
 
 func (h *callbackHandler) onContent(content string) {
-	h.chatCtx.GetLogger().Debug("oncontent_callback",
+	h.turn.GetLogger().Debug("oncontent_callback",
 		"content", content,
 		"content_len", len(content),
 	)
-	h.chunker.Write(content)
-}
-
-func (h *callbackHandler) beforeToolExecute(ctx context.Context, tc messages.ChatMessageToolCall, args map[string]any) context.Context {
-	return irc.InjectContext(ctx, h.chatCtx)
+	h.framer.Write(content)
 }
 
 func (h *callbackHandler) onToolStart(calls []messages.ChatMessageToolCall) {
-	h.chunker.Flush()
+	h.framer.Flush()
 
 	h.toolCount += len(calls)
 
 	// Log each tool
 	for _, tc := range calls {
-		h.chatCtx.GetLogger().Info("tool_started", "tool", tc.Name)
+		h.turn.GetLogger().Info("tool_started", "tool", tc.Name)
 	}
 
 	if !h.cfg.Bot.ShowToolActions || len(calls) == 0 {
@@ -186,13 +168,13 @@ func (h *callbackHandler) onToolStart(calls []messages.ChatMessageToolCall) {
 	}
 
 	if len(names) > 0 {
-		h.chatCtx.ReplyAction(fmt.Sprintf("calling %s", strings.Join(names, ", ")))
+		h.turn.ReplyAction(fmt.Sprintf("calling %s", strings.Join(names, ", ")))
 	}
 }
 
 func (h *callbackHandler) onToolEnd(tc messages.ChatMessageToolCall, result string, duration time.Duration, toolErr error) {
 	if toolErr != nil {
-		h.chatCtx.GetLogger().Error("tool_failed",
+		h.turn.GetLogger().Error("tool_failed",
 			"tool", tc.Name,
 			"duration_ms", duration.Milliseconds(),
 			"error", toolErr.Error(),
@@ -204,7 +186,7 @@ func (h *callbackHandler) onToolEnd(tc messages.ChatMessageToolCall, result stri
 	if len(preview) > 60 && !h.cfg.Bot.Verbose {
 		preview = preview[:60] + "..."
 	}
-	h.chatCtx.GetLogger().Info("tool_completed",
+	h.turn.GetLogger().Info("tool_completed",
 		"tool", tc.Name,
 		"duration_ms", duration.Milliseconds(),
 		"result_size", len(result),
@@ -213,8 +195,8 @@ func (h *callbackHandler) onToolEnd(tc messages.ChatMessageToolCall, result stri
 }
 
 func (h *callbackHandler) onError(err error) {
-	h.chatCtx.GetLogger().Error("stream_error", "error", err.Error())
-	h.chunker.Write(fmt.Sprintf("Error: %v", err))
+	h.turn.GetLogger().Error("stream_error", "error", err.Error())
+	h.framer.Write(fmt.Sprintf("Error: %v", err))
 }
 
 // CreateAgentForRegistry uses Polly's private per-agent built-ins while sharing

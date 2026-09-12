@@ -6,11 +6,11 @@ import (
 	"time"
 
 	"github.com/alexschlessinger/pollytool/llm"
-	"github.com/alexschlessinger/pollytool/sessions"
 	"github.com/alexschlessinger/pollytool/tools"
 
 	"pkdindustries/soulshack/internal/config"
 	"pkdindustries/soulshack/internal/core"
+	"pkdindustries/soulshack/internal/memory"
 )
 
 // MockLLM implements core.LLM for testing
@@ -22,7 +22,7 @@ type MockLLM struct {
 }
 
 // ChatCompletionStream implements core.LLM
-func (m *MockLLM) ChatCompletionStream(ctx core.ChatContextInterface, req *llm.CompletionRequest) <-chan string {
+func (m *MockLLM) ChatCompletionStream(turn *core.Turn, req *llm.CompletionRequest) <-chan string {
 	m.LastRequest = req
 	ch := make(chan string, len(m.Responses)+1)
 	go func() {
@@ -31,12 +31,12 @@ func (m *MockLLM) ChatCompletionStream(ctx core.ChatContextInterface, req *llm.C
 			if m.Delay > 0 {
 				select {
 				case <-time.After(m.Delay):
-				case <-ctx.Done():
+				case <-turn.Done():
 					return
 				}
 			}
 			select {
-			case <-ctx.Done():
+			case <-turn.Done():
 				return
 			case ch <- resp:
 			}
@@ -54,27 +54,22 @@ var _ core.LLM = (*MockLLM)(nil)
 // MockSystem implements core.System for testing
 type MockSystem struct {
 	ToolRegistry *tools.ToolRegistry
-	Sessions     sessions.SessionStore
+	Memory       *memory.Memory
+	Config       *config.Store
 	LLM          core.LLM
 }
 
 // NewMockSystem creates a MockSystem with sensible defaults
 func NewMockSystem(t testing.TB) *MockSystem {
-	store, err := sessions.OpenStore(sessions.StoreConfig{
-		Mode: sessions.ModeMemory,
-		DefaultMetadata: &sessions.Metadata{
-			MaxHistoryTokens: 100000,
-			TTL:              time.Minute * 10,
-			SystemPrompt:     "You are a test bot.",
-		},
+	mem := memory.New(memory.Config{
+		Budget: 100000,
+		TTL:    time.Minute * 10,
 	})
-	if err != nil {
-		t.Fatal("failed to open test session store: " + err.Error())
-	}
-	t.Cleanup(func() { store.Close() })
+	t.Cleanup(mem.Close)
 	return &MockSystem{
 		ToolRegistry: tools.NewToolRegistry([]tools.Tool{}),
-		Sessions:     store,
+		Memory:       mem,
+		Config:       config.NewStore(DefaultTestConfig()),
 		LLM: &MockLLM{
 			Responses: []string{"Hello from mock LLM"},
 		},
@@ -86,9 +81,19 @@ func (m *MockSystem) GetToolRegistry() *tools.ToolRegistry {
 	return m.ToolRegistry
 }
 
-// GetSessions implements core.System
-func (m *MockSystem) GetSessions() sessions.SessionStore {
-	return m.Sessions
+// GetMemory implements core.System
+func (m *MockSystem) GetMemory() *memory.Memory {
+	return m.Memory
+}
+
+// GetConfig implements core.System
+func (m *MockSystem) GetConfig() *config.Configuration {
+	return m.Config.Snapshot()
+}
+
+// UpdateConfig implements core.System
+func (m *MockSystem) UpdateConfig(fn func(*config.Configuration) error) error {
+	return m.Config.Update(fn)
 }
 
 // GetLLM implements core.System
@@ -105,13 +110,31 @@ func (m *MockSystem) UpdateLLM(cfg config.APIConfig) error {
 // Verify MockSystem implements core.System
 var _ core.System = (*MockSystem)(nil)
 
-// AcquireSession supplies an explicitly scoped lease for command-level tests.
-func (m *MockSystem) AcquireSession(t testing.TB, key string) sessions.Session {
+// SetConfig changes the system's settings, the way /set does.
+func SetConfig(t testing.TB, sys *MockSystem, fn func(*config.Configuration)) {
 	t.Helper()
-	session, err := m.Sessions.Acquire(context.Background(), key, sessions.AcquireOptions{})
-	if err != nil {
+	if err := sys.UpdateConfig(func(c *config.Configuration) error {
+		fn(c)
+		return nil
+	}); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { session.Close() })
-	return session
+}
+
+// NewTurnContext builds a context ready for command execution: a turn over a
+// conversation in this system, which is what Execute needs.
+func NewTurnContext(t testing.TB, sys *MockSystem, key string) *MockChatContext {
+	t.Helper()
+	return NewMockContext().WithSystem(sys).WithConversation(sys.Conversation(t, key))
+}
+
+// Conversation supplies a conversation for command-level tests, keyed like a
+// turn's would be.
+func (m *MockSystem) Conversation(t testing.TB, key string) *memory.Conversation {
+	t.Helper()
+	var conversation *memory.Conversation
+	if !m.Memory.With(context.Background(), key, func(c *memory.Conversation) { conversation = c }) {
+		t.Fatal("failed to open test conversation")
+	}
+	return conversation
 }

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"pkdindustries/soulshack/internal/irc"
+	"pkdindustries/soulshack/internal/core"
 	mocktest "pkdindustries/soulshack/internal/testing"
 )
 
@@ -17,7 +17,7 @@ type mockCommand struct {
 
 func (c *mockCommand) Name() string    { return c.name }
 func (c *mockCommand) AdminOnly() bool { return c.adminOnly }
-func (c *mockCommand) Execute(ctx irc.ChatContextInterface) {
+func (c *mockCommand) Execute(turn *core.Turn) {
 	c.executed = true
 }
 
@@ -35,7 +35,7 @@ func TestRegistry_CommandRouting(t *testing.T) {
 		WithAdmin(true).
 		WithArgs("/set", "key", "value")
 
-	registry.Dispatch(ctx)
+	registry.Dispatch(ctx.Turn())
 
 	if !setCmd.executed {
 		t.Error("expected /set command to be executed")
@@ -51,7 +51,7 @@ func TestRegistry_CommandRouting(t *testing.T) {
 	ctx = mocktest.NewMockContext().
 		WithArgs("/get", "key")
 
-	registry.Dispatch(ctx)
+	registry.Dispatch(ctx.Turn())
 
 	if setCmd.executed {
 		t.Error("expected /set command NOT to be executed")
@@ -72,7 +72,7 @@ func TestRegistry_AdminOnlyEnforcement(t *testing.T) {
 		WithAdmin(false).
 		WithArgs("/admin")
 
-	registry.Dispatch(ctx)
+	registry.Dispatch(ctx.Turn())
 
 	if adminCmd.executed {
 		t.Error("admin-only command should NOT be executed for non-admin")
@@ -90,7 +90,7 @@ func TestRegistry_AdminOnlyEnforcement(t *testing.T) {
 		WithAdmin(true).
 		WithArgs("/admin")
 
-	registry.Dispatch(ctx)
+	registry.Dispatch(ctx.Turn())
 
 	if !adminCmd.executed {
 		t.Error("admin-only command should be executed for admin")
@@ -107,7 +107,7 @@ func TestRegistry_DefaultCommand(t *testing.T) {
 	ctx := mocktest.NewMockContext().
 		WithArgs("hello", "world") // not a slash command
 
-	registry.Dispatch(ctx)
+	registry.Dispatch(ctx.Turn())
 
 	if !defaultCmd.executed {
 		t.Error("default command should be executed for unknown commands")

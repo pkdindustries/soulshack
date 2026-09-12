@@ -23,7 +23,7 @@ func TestNewSystemLoadsUnsandboxedTools(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			t.Cleanup(func() { sys.GetSessions().Close() })
+			t.Cleanup(func() { sys.GetMemory().Close() })
 			registry := sys.GetToolRegistry()
 			if !atStartup {
 				if _, err := registry.LoadToolAuto("bash"); err != nil {

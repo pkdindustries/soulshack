@@ -4,7 +4,6 @@ import (
 	"github.com/lrstanley/girc"
 
 	"pkdindustries/soulshack/internal/commands"
-	"pkdindustries/soulshack/internal/core"
 	"pkdindustries/soulshack/internal/irc"
 )
 
@@ -26,9 +25,5 @@ func (b *AddressedBehavior) Check(ctx irc.ChatContextInterface, event *girc.Even
 }
 
 func (b *AddressedBehavior) Execute(ctx irc.ChatContextInterface, event *girc.Event) {
-	core.WithConversation(ctx, "addressed", func(ctx irc.ChatContextInterface) {
-		b.CmdRegistry.Dispatch(ctx)
-	}, func() {
-		ctx.Reply("Request timed out waiting for previous operation to complete")
-	})
+	dispatch(ctx, b.Name(), b.CmdRegistry)
 }
