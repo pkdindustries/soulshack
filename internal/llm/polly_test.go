@@ -2,9 +2,6 @@ package llm
 
 import (
 	"context"
-	"encoding/json"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -12,7 +9,6 @@ import (
 	polly "github.com/alexschlessinger/pollytool/llm"
 	"github.com/alexschlessinger/pollytool/messages"
 	"github.com/alexschlessinger/pollytool/tools"
-	"github.com/alexschlessinger/pollytool/tools/sandbox"
 	"pkdindustries/soulshack/internal/core"
 	mocktest "pkdindustries/soulshack/internal/testing"
 )
@@ -26,90 +22,43 @@ func (f completionFunc) ChatCompletionStream(ctx context.Context, req *polly.Com
 	return processor.ProcessMessagesToEvents(input)
 }
 
-func TestCreateAgentForRegistryTranscriptIsolation(t *testing.T) {
-	registry := tools.NewToolRegistry(nil)
-	calls := 0
-	client := completionFunc(func(ctx context.Context, _ *polly.CompletionRequest) messages.ChatMessage {
-		calls++
-		if calls == 1 {
-			// Run B while A is waiting for its first model response. A must
-			// still read its own transcript when its tool call arrives.
-			otherClient := completionFunc(func(context.Context, *polly.CompletionRequest) messages.ChatMessage {
-				return messages.ChatMessage{Role: messages.MessageRoleAssistant, Content: "noted", StopReason: messages.StopReasonEndTurn}
-			})
-			otherAgent := CreateAgentForRegistry(otherClient, registry, time.Second)
-			defer otherAgent.Close()
-			if _, err := otherAgent.Run(ctx, &polly.CompletionRequest{Messages: messages.User("PRIVATE_B_TRANSCRIPT")}, nil); err != nil {
-				t.Fatal(err)
-			}
-			return messages.ChatMessage{
-				Role: messages.MessageRoleAssistant, StopReason: messages.StopReasonToolUse,
-				ToolCalls: []messages.ChatMessageToolCall{{ID: "recall", Name: "read_transcript", Arguments: "{}"}},
-			}
-		}
-		return messages.ChatMessage{Role: messages.MessageRoleAssistant, Content: "done", StopReason: messages.StopReasonEndTurn}
+// The bot offers only the tools soulshack registered. Polly's private
+// built-ins (read_transcript, view_image, and the artifact readers) are
+// removed, and removing them must not disturb the caller's own tools.
+func TestCreateAgentForRegistryDropsPollyBuiltins(t *testing.T) {
+	registry := tools.NewToolRegistry([]tools.Tool{}, tools.WithUnsafeNoSandbox())
+	registry.Register(&tools.Func{
+		Name: "irc__action",
+		Desc: "send an action",
+		Run:  func(context.Context, tools.Args) (string, error) { return "ok", nil },
 	})
-	agent := CreateAgentForRegistry(client, registry, time.Second)
-	defer agent.Close()
-	response, err := agent.Run(context.Background(), &polly.CompletionRequest{Messages: messages.User("PRIVATE_A_TRANSCRIPT")}, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	found := false
-	for _, msg := range response.AllMessages {
-		if msg.Role == messages.MessageRoleTool && msg.ToolName == "read_transcript" {
-			found = true
-			if !strings.Contains(msg.Content, "PRIVATE_A_TRANSCRIPT") || strings.Contains(msg.Content, "PRIVATE_B_TRANSCRIPT") {
-				t.Fatalf("agent A read the wrong transcript: %s", msg.Content)
-			}
-		}
-	}
-	if !found {
-		t.Fatal("agent A did not receive its transcript")
-	}
-	for _, name := range []string{"read_transcript", "view_image"} {
-		if _, ok := registry.Get(name); ok {
-			t.Errorf("agent added %s to the shared registry", name)
-		}
-	}
-}
 
-func TestCreateAgentForRegistryPreservesImageReadPolicy(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "private.png")
-	if err := os.WriteFile(path, []byte("private file"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	registry := tools.NewToolRegistry(nil, tools.WithSandboxFactory(sandbox.New, sandbox.Config{DenyPaths: []string{path}}))
-	args, err := json.Marshal(map[string]string{"source": path})
-	if err != nil {
-		t.Fatal(err)
-	}
-	calls := 0
-	client := completionFunc(func(context.Context, *polly.CompletionRequest) messages.ChatMessage {
-		calls++
-		if calls == 1 {
-			return messages.ChatMessage{
-				Role: messages.MessageRoleAssistant, StopReason: messages.StopReasonToolUse,
-				ToolCalls: []messages.ChatMessageToolCall{{ID: "image", Name: "view_image", Arguments: string(args)}},
-			}
-		}
+	var offered []tools.Tool
+	client := completionFunc(func(_ context.Context, req *polly.CompletionRequest) messages.ChatMessage {
+		offered = req.Tools
 		return messages.ChatMessage{Role: messages.MessageRoleAssistant, Content: "done", StopReason: messages.StopReasonEndTurn}
 	})
 	agent := CreateAgentForRegistry(client, registry, time.Second)
 	defer agent.Close()
-	response, err := agent.Run(context.Background(), &polly.CompletionRequest{Messages: messages.User("view the image")}, nil)
-	if err != nil {
+	if _, err := agent.Run(context.Background(), &polly.CompletionRequest{Messages: messages.User("hello")}, nil); err != nil {
 		t.Fatal(err)
 	}
-	for _, msg := range response.AllMessages {
-		if msg.Role == messages.MessageRoleTool && msg.ToolName == "view_image" {
-			if !strings.Contains(msg.Content, "blocked from reads by the sandbox policy") {
-				t.Fatalf("view_image did not enforce the read policy: %s", msg.Content)
-			}
-			return
+
+	names := make(map[string]bool, len(offered))
+	for _, tool := range offered {
+		names[tool.GetName()] = true
+	}
+	for _, builtin := range polly.BuiltinToolNames() {
+		if names[builtin] {
+			t.Errorf("agent offered polly built-in %s", builtin)
 		}
 	}
-	t.Fatal("agent did not execute view_image")
+	if !names["irc__action"] {
+		t.Errorf("agent did not offer the caller's tools; got %v", names)
+	}
+	if _, ok := registry.Get("irc__action"); !ok {
+		t.Error("agent removed a tool from the shared registry")
+	}
 }
 
 func TestPollyTrimsOldestExchangesAndKeepsFinalReply(t *testing.T) {
