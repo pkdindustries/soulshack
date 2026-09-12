@@ -162,6 +162,9 @@ docker build . -t soulshack:dev
 | `--openaikey` | | OpenAI API key |
 | `--anthropickey` | | Anthropic API key |
 | `--geminikey` | | Google Gemini API key |
+| `--deepseekkey` | | DeepSeek API key |
+| `--openrouterkey` | | OpenRouter API key |
+| `--huggingfacekey` | | Hugging Face API key |
 | `--ollamaurl` | http://localhost:11434 | Ollama API endpoint |
 | `--tool` | | Path to tool definition (repeatable) |
 | `--thinkingeffort` | off | Reasoning effort level: off, low, medium, high |

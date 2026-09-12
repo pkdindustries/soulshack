@@ -22,10 +22,13 @@ type PollyLLM struct {
 // NewPollyLLM creates a new pollytool-based LLM client
 func NewPollyLLM(config config.APIConfig) *PollyLLM {
 	apiKeys := map[string]string{
-		"openai":    config.OpenAIKey,
-		"anthropic": config.AnthropicKey,
-		"gemini":    config.GeminiKey,
-		"ollama":    config.OllamaKey,
+		"openai":      config.OpenAIKey,
+		"anthropic":   config.AnthropicKey,
+		"gemini":      config.GeminiKey,
+		"ollama":      config.OllamaKey,
+		"deepseek":    config.DeepSeekKey,
+		"openrouter":  config.OpenRouterKey,
+		"huggingface": config.HuggingFaceKey,
 	}
 	return &PollyLLM{client: llm.NewMultiPass(apiKeys)}
 }
@@ -33,10 +36,9 @@ func NewPollyLLM(config config.APIConfig) *PollyLLM {
 // ChatCompletionStream returns a channel of string chunks for IRC output
 func (p *PollyLLM) ChatCompletionStream(turn *core.Turn, req *CompletionRequest) <-chan string {
 	cfg := turn.GetConfig()
-	// Only apply OllamaURL for ollama/ models
-	if strings.HasPrefix(req.Model, "ollama/") && cfg.API.OllamaURL != "" {
-		req.BaseURL = cfg.API.OllamaURL
-	}
+	// A custom endpoint belongs only to the provider it was configured for;
+	// every other provider keeps polly's default base URL.
+	req.BaseURL = baseURLForModel(req.Model, cfg.API)
 
 	output := make(chan string, 10)
 
@@ -68,6 +70,18 @@ func (p *PollyLLM) ChatCompletionStream(turn *core.Turn, req *CompletionRequest)
 	}()
 
 	return output
+}
+
+// baseURLForModel returns the configured endpoint override for a model's
+// provider, or "" to let polly use the provider's default.
+func baseURLForModel(model string, api *config.APIConfig) string {
+	switch {
+	case strings.HasPrefix(model, "ollama/"):
+		return api.OllamaURL
+	case strings.HasPrefix(model, "openai/"):
+		return api.OpenAIURL
+	}
+	return ""
 }
 
 // callbackHandler organizes callback construction

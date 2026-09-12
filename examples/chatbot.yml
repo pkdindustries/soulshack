@@ -36,9 +36,12 @@ model: anthropic/claude-sonnet-4-5-20250929
 # anthropickey: sk-ant-xxxxx     # Or use SOULSHACK_ANTHROPICKEY env var
 # openaikey: sk-xxxxx            # Or use SOULSHACK_OPENAIKEY env var
 # geminikey: AIzaxxxxx           # Or use SOULSHACK_GEMINIKEY env var
+# deepseekkey: sk-xxxxx          # Or use SOULSHACK_DEEPSEEKKEY env var
+# openrouterkey: sk-or-xxxxx     # Or use SOULSHACK_OPENROUTERKEY env var
+# huggingfacekey: hf_xxxxx       # Or use SOULSHACK_HUGGINGFACEKEY env var
 
 # Custom API endpoints
-# openaiurl: https://api.openai.com/v1  # For OpenAI-compatible APIs
+# openaiurl: https://api.openai.com/v1  # Applies to openai/ models only
 # ollamaurl: http://localhost:11434     # Default for Ollama
 # ollamakey: xxxxx                      # Bearer token for secured Ollama endpoints
 

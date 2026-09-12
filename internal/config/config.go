@@ -65,13 +65,16 @@ type SessionConfig struct {
 }
 
 type APIConfig struct {
-	Timeout      time.Duration
-	OpenAIKey    string
-	OpenAIURL    string
-	AnthropicKey string
-	GeminiKey    string
-	OllamaURL    string
-	OllamaKey    string
+	Timeout        time.Duration
+	OpenAIKey      string
+	OpenAIURL      string
+	AnthropicKey   string
+	GeminiKey      string
+	OllamaURL      string
+	OllamaKey      string
+	DeepSeekKey    string
+	OpenRouterKey  string
+	HuggingFaceKey string
 }
 
 // YamlSource implements cli.ValueSource for a map loaded from YAML
@@ -151,6 +154,9 @@ func GetFlags() []cli.Flag {
 		&cli.StringFlag{Name: "geminikey", Usage: "Google Gemini API key", Sources: src("geminikey", "SOULSHACK_GEMINIKEY")},
 		&cli.StringFlag{Name: "ollamaurl", Value: "http://localhost:11434", Usage: "Ollama API URL", Sources: src("ollamaurl", "SOULSHACK_OLLAMAURL")},
 		&cli.StringFlag{Name: "ollamakey", Usage: "Ollama API key (Bearer token for authentication)", Sources: src("ollamakey", "SOULSHACK_OLLAMAKEY")},
+		&cli.StringFlag{Name: "deepseekkey", Usage: "DeepSeek API key", Sources: src("deepseekkey", "SOULSHACK_DEEPSEEKKEY")},
+		&cli.StringFlag{Name: "openrouterkey", Usage: "OpenRouter API key", Sources: src("openrouterkey", "SOULSHACK_OPENROUTERKEY")},
+		&cli.StringFlag{Name: "huggingfacekey", Usage: "Hugging Face API key", Sources: src("huggingfacekey", "SOULSHACK_HUGGINGFACEKEY")},
 		&cli.IntFlag{Name: "maxtokens", Value: 16384, Usage: "maximum number of tokens to generate", Sources: src("maxtokens", "SOULSHACK_MAXTOKENS")},
 		&cli.StringFlag{Name: "model", Value: "ollama/llama3.2", Usage: "model to be used for responses", Sources: src("model", "SOULSHACK_MODEL")},
 		&cli.DurationFlag{Name: "apitimeout", Aliases: []string{"t"}, Value: time.Minute * 5, Usage: "timeout for each completion request", Sources: src("apitimeout", "SOULSHACK_APITIMEOUT")},
@@ -249,13 +255,16 @@ func NewConfiguration(c *cli.Command) *Configuration {
 		},
 
 		API: &APIConfig{
-			Timeout:      c.Duration("apitimeout"),
-			OpenAIKey:    c.String("openaikey"),
-			OpenAIURL:    c.String("openaiurl"),
-			AnthropicKey: c.String("anthropickey"),
-			GeminiKey:    c.String("geminikey"),
-			OllamaURL:    c.String("ollamaurl"),
-			OllamaKey:    c.String("ollamakey"),
+			Timeout:        c.Duration("apitimeout"),
+			OpenAIKey:      c.String("openaikey"),
+			OpenAIURL:      c.String("openaiurl"),
+			AnthropicKey:   c.String("anthropickey"),
+			GeminiKey:      c.String("geminikey"),
+			OllamaURL:      c.String("ollamaurl"),
+			OllamaKey:      c.String("ollamakey"),
+			DeepSeekKey:    c.String("deepseekkey"),
+			OpenRouterKey:  c.String("openrouterkey"),
+			HuggingFaceKey: c.String("huggingfacekey"),
 		},
 	}
 
