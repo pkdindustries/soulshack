@@ -2,29 +2,29 @@ package llm
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/alexschlessinger/pollytool/llm"
 	"github.com/alexschlessinger/pollytool/messages"
-	"github.com/alexschlessinger/pollytool/sessions"
 	"github.com/alexschlessinger/pollytool/tools"
 
 	"pkdindustries/soulshack/internal/config"
 	"pkdindustries/soulshack/internal/core"
-	"pkdindustries/soulshack/internal/irc"
+	"pkdindustries/soulshack/internal/memory"
 )
 
 type CompletionRequest = llm.CompletionRequest
 
-// Warn from the request Polly actually projected, independently of retained
-// history size and cumulative provider billing. The previous turn supplies the
-// warning state without a second session cache.
-func checkContextUsage(ctx irc.ChatContextInterface, usage core.ContextUsage, history []messages.ChatMessage) {
-	previous, _ := core.LastContextUsage(history)
+// Warn from the request Polly actually projected, independently of the
+// transcript we keep and of cumulative provider billing. The previous turn
+// supplies the warning state, so no second cache is needed.
+func checkContextUsage(turn *core.Turn, usage memory.ContextUsage) {
+	previous, _ := turn.Conversation.Usage()
 	if usage.OmittedExchanges > 0 && previous.OmittedExchanges == 0 {
-		ctx.ReplyAction(fmt.Sprintf("Model input omitted %d older exchanges; stored history is retained", usage.OmittedExchanges))
+		turn.ReplyAction(fmt.Sprintf("Model input omitted %d older exchanges", usage.OmittedExchanges))
 		return
 	}
-	level := func(u core.ContextUsage) int {
+	level := func(u memory.ContextUsage) int {
 		if u.Budget <= 0 {
 			return 0
 		}
@@ -38,11 +38,11 @@ func checkContextUsage(ctx irc.ChatContextInterface, usage core.ContextUsage, hi
 		return 0
 	}
 	if current := level(usage); current > level(previous) {
-		ctx.ReplyAction(fmt.Sprintf("Model input reached %d%% of its context budget; stored history is retained", current))
+		turn.ReplyAction(fmt.Sprintf("Model input reached %d%% of its context budget", current))
 	}
 }
 
-func NewCompletionRequest(config *config.Configuration, history []messages.ChatMessage, metadata *sessions.Metadata, tools []tools.Tool) *CompletionRequest {
+func NewCompletionRequest(config *config.Configuration, history []messages.ChatMessage, budget int, tools []tools.Tool) *CompletionRequest {
 	// Parse thinking effort - validated at config load time
 	thinkingEffort, _ := llm.ParseThinkingEffort(config.Model.ThinkingEffort)
 
@@ -52,9 +52,10 @@ func NewCompletionRequest(config *config.Configuration, history []messages.ChatM
 		Model:     config.Model.Model,
 		MaxTokens: config.Model.MaxTokens,
 		Messages:  history,
-		// The projection budget enforces maxcontext: polly omits the oldest
-		// exchanges when the history estimate exceeds it.
-		MaxContextTokens: metadata.MaxHistoryTokens,
+		// The budget the conversation is trimmed to, so the request and the
+		// transcript agree; polly omits the oldest exchanges if the request
+		// still estimates above it.
+		MaxContextTokens: budget,
 		Temperature:      llm.Float32Ptr(config.Model.Temperature),
 		Tools:            tools,
 		ThinkingEffort:   thinkingEffort,
@@ -69,19 +70,13 @@ func NewCompletionRequest(config *config.Configuration, history []messages.ChatM
 	return req
 }
 
-// Complete processes a user message and returns a channel of response chunks.
-func Complete(ctx irc.ChatContextInterface, msg string) (<-chan string, error) {
-	session := ctx.GetSession()
-	history, err := session.GetHistory(ctx)
-	if err != nil {
-		return nil, err
-	}
-	metadata, err := session.GetMetadata(ctx)
-	if err != nil {
-		return nil, err
-	}
+// Complete appends the user message to the turn's conversation and returns the
+// stream of response chunks. The stream also appends the finished turn, so
+// callers must drain it.
+func Complete(turn *core.Turn, msg string) <-chan string {
+	cfg := turn.GetConfig()
+	history := turn.Conversation.Messages()
 
-	// Add user message to session
 	cmsg := messages.ChatMessage{
 		Role:    messages.MessageRoleUser,
 		Content: msg,
@@ -90,24 +85,23 @@ func Complete(ctx irc.ChatContextInterface, msg string) (<-chan string, error) {
 	if len(truncated) > 100 {
 		truncated = truncated[:100] + "..."
 	}
-	ctx.GetLogger().Info("message_received", "message", truncated)
-	if err := session.AddMessage(ctx, cmsg); err != nil {
-		return nil, err
-	}
-	history = append(history, cmsg)
+	turn.GetLogger().Info("message_received", "message", truncated)
+	turn.Conversation.Append([]messages.ChatMessage{cmsg})
 
-	// Build completion request
-	cfg := ctx.GetConfig()
-	sys := ctx.GetSystem()
+	// The system prompt is the process's, not part of the transcript: it is
+	// rebuilt per request so /set prompt takes effect immediately.
+	request := make([]messages.ChatMessage, 0, len(history)+2)
+	if prompt := strings.TrimSpace(cfg.Bot.Prompt); prompt != "" {
+		request = append(request, messages.ChatMessage{Role: messages.MessageRoleSystem, Content: prompt})
+	}
+	request = append(request, history...)
+	request = append(request, cmsg)
 
 	var allTools []tools.Tool
-	if sys.GetToolRegistry() != nil {
-		allTools = sys.GetToolRegistry().All()
+	if registry := turn.GetSystem().GetToolRegistry(); registry != nil {
+		allTools = registry.All()
 	}
 
-	req := NewCompletionRequest(cfg, history, metadata, allTools)
-
-	// Closing this stream also completes persistence; the conversation helper
-	// keeps the lease until the caller has drained it.
-	return sys.GetLLM().ChatCompletionStream(ctx, req), nil
+	budget := turn.GetSystem().GetMemory().Budget()
+	return turn.GetSystem().GetLLM().ChatCompletionStream(turn, NewCompletionRequest(cfg, request, budget, allTools))
 }

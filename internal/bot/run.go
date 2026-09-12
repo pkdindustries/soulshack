@@ -28,7 +28,7 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 	if err != nil {
 		return err
 	}
-	defer sys.GetSessions().Close()
+	defer sys.GetMemory().Close()
 
 	// Initialize command registry
 	cmdRegistry := commands.NewRegistry()
@@ -88,7 +88,7 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 		if !behaviorRegistry.Handles(e.Command) {
 			return
 		}
-		chatCtx, cancel := irc.NewChatContext(ctx, cfg, sys, client, &e, fatalErr)
+		chatCtx, cancel := irc.NewChatContext(ctx, sys, client, &e, fatalErr)
 		defer cancel()
 		behaviorRegistry.Process(chatCtx, &e)
 	})

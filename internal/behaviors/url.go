@@ -8,7 +8,6 @@ import (
 
 	"pkdindustries/soulshack/internal/core"
 	"pkdindustries/soulshack/internal/irc"
-	"pkdindustries/soulshack/internal/llm"
 )
 
 var urlPattern = regexp.MustCompile(`^https?://[^\s]+`)
@@ -45,21 +44,7 @@ func (b *URLBehavior) Execute(ctx irc.ChatContextInterface, event *girc.Event) {
 	if silent {
 		withConversation = core.WithDetachedConversation
 	}
-	withConversation(ctx, "url", func(ctx irc.ChatContextInterface) {
-		prompt := fmt.Sprintf("(nick:%s) %s", ctx.GetSource(), event.Last())
-		outch, err := llm.Complete(ctx, prompt)
-		if err != nil {
-			ctx.GetLogger().Error("url_behavior_error", "error", err)
-			if !silent {
-				ctx.Reply(err.Error())
-			}
-			return
-		}
-
-		for res := range outch {
-			if !silent {
-				ctx.Reply(res)
-			}
-		}
+	withConversation(ctx, "url", func(turn *core.Turn) {
+		complete(turn, fmt.Sprintf("(nick:%s) %s", turn.GetSource(), event.Last()), silent)
 	}, nil)
 }

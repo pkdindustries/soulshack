@@ -3,167 +3,127 @@ package core_test
 import (
 	"context"
 	"errors"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/alexschlessinger/pollytool/messages"
-	"github.com/alexschlessinger/pollytool/sessions"
 
 	"pkdindustries/soulshack/internal/core"
 	mocktest "pkdindustries/soulshack/internal/testing"
 )
 
-type observedStore struct {
-	sessions.SessionStore
-	acquires int
-}
-
-func (s *observedStore) Acquire(ctx context.Context, key string, options sessions.AcquireOptions) (sessions.Session, error) {
-	s.acquires++
-	return s.SessionStore.Acquire(ctx, key, options)
-}
-
-func TestConversationQueuesBeforeAcquiringAndReleasesLease(t *testing.T) {
+func TestConversationQueuesTurnsAndKeepsTheTranscript(t *testing.T) {
 	sys := mocktest.NewMockSystem(t)
-	store := &observedStore{SessionStore: sys.Sessions}
-	sys.Sessions = store
 	ctx := mocktest.NewMockContext().WithSystem(sys)
-	var first sessions.Session
-	core.WithConversation(ctx, "first", func(turn core.ChatContextInterface) {
-		first = turn.GetSession()
+
+	var conversation *core.Turn
+	core.WithConversation(ctx, "first", func(turn *core.Turn) {
+		turn.Conversation.Append([]messages.ChatMessage{{Role: messages.MessageRoleAssistant, Content: "saved response"}})
+		// A second turn for the same key waits for this one, and gives up
+		// rather than running when its own deadline passes first.
 		waitCtx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
 		defer cancel()
 		waiting := mocktest.NewMockContext().WithSystem(sys).WithContext(waitCtx)
 		timedOut := false
-		core.WithConversation(waiting, "queued", func(core.ChatContextInterface) { t.Fatal("queued turn ran before the first finished") }, func() { timedOut = true })
-		if !timedOut || store.acquires != 1 {
-			t.Fatalf("queued turn acquired a session: acquires=%d, timedOut=%v", store.acquires, timedOut)
-		}
-		// Completed replies can still save after their request deadline.
-		if err := first.AddMessage(context.WithoutCancel(turn), messages.ChatMessage{Role: messages.MessageRoleAssistant, Content: "saved response"}); err != nil {
-			t.Fatal(err)
+		core.WithConversation(waiting, "queued", func(*core.Turn) { t.Fatal("queued turn ran before the first finished") }, func() { timedOut = true })
+		if !timedOut {
+			t.Fatal("queued turn did not report a timeout")
 		}
 	}, nil)
-	if first == nil || first.Context().Err() == nil {
-		t.Fatal("lease was not closed")
+
+	core.WithConversation(ctx, "next", func(turn *core.Turn) {
+		history := turn.Conversation.Messages()
+		if len(history) != 1 || history[0].Content != "saved response" {
+			t.Fatalf("transcript from the previous turn is missing: %+v", history)
+		}
+		conversation = turn
+	}, nil)
+	if conversation == nil {
+		t.Fatal("second turn did not run")
 	}
-	core.WithConversation(ctx, "next", func(turn core.ChatContextInterface) {
-		if turn.GetSession() == first {
-			t.Fatal("closed lease reused")
+}
+
+func TestConversationCancellationReachesTheTurn(t *testing.T) {
+	sys := mocktest.NewMockSystem(t)
+	parent, cancel := context.WithCancelCause(context.Background())
+	defer cancel(nil)
+	ctx := mocktest.NewMockContext().WithSystem(sys).WithContext(parent)
+
+	core.WithConversation(ctx, "cancel", func(turn *core.Turn) {
+		cause := errors.New("request ended")
+		cancel(cause)
+		select {
+		case <-turn.Done():
+		case <-time.After(time.Second):
+			t.Fatal("turn did not observe cancellation")
 		}
-		history, err := turn.GetSession().GetHistory(turn)
-		if err != nil {
-			t.Fatal(err)
+		if !errors.Is(context.Cause(turn), cause) {
+			t.Fatalf("lost cancellation cause: %v", context.Cause(turn))
 		}
-		if history[len(history)-1].Content != "saved response" {
-			t.Fatalf("saved history missing: %v", history)
+		// A finished reply can still be appended after the request ended:
+		// the transcript is process memory, not a leased resource.
+		turn.Conversation.Append([]messages.ChatMessage{{Role: messages.MessageRoleAssistant, Content: "final"}})
+	}, nil)
+
+	core.WithConversation(ctx, "verify", func(turn *core.Turn) {
+		history := turn.Conversation.Messages()
+		if len(history) != 1 || history[0].Content != "final" {
+			t.Fatalf("finished reply was lost: %+v", history)
 		}
 	}, nil)
 }
 
-func TestConversationCancelAndLeaseLoss(t *testing.T) {
-	for _, loseLease := range []bool{false, true} {
-		t.Run(map[bool]string{false: "request", true: "lease"}[loseLease], func(t *testing.T) {
-			sys := mocktest.NewMockSystem(t)
-			parent, cancel := context.WithCancelCause(context.Background())
-			defer cancel(nil)
-			ctx := mocktest.NewMockContext().WithSystem(sys).WithContext(parent)
-			core.WithConversation(ctx, "cancel", func(turn core.ChatContextInterface) {
-				cause := errors.New("request ended")
-				if loseLease {
-					if err := turn.GetSession().Close(); err != nil {
-						t.Fatal(err)
-					}
-				} else {
-					cancel(cause)
-				}
-				select {
-				case <-turn.Done():
-				case <-time.After(time.Second):
-					t.Fatal("turn did not observe cancellation")
-				}
-				if !loseLease {
-					if !errors.Is(context.Cause(turn), cause) {
-						t.Fatalf("lost cancellation cause: %v", context.Cause(turn))
-					}
-					if err := turn.GetSession().AddMessage(context.WithoutCancel(turn), messages.ChatMessage{Role: messages.MessageRoleAssistant, Content: "final"}); err != nil {
-						t.Fatalf("deadline prematurely released session: %v", err)
-					}
-				}
-			}, nil)
-		})
-	}
-}
-
-func TestConversationDetachedCleanup(t *testing.T) {
+func TestDetachedConversationIsDiscarded(t *testing.T) {
 	sys := mocktest.NewMockSystem(t)
 	ctx := mocktest.NewMockContext().WithSystem(sys)
-	core.WithConversation(ctx, "seed", func(turn core.ChatContextInterface) {
-		if err := turn.GetSession().AddMessage(turn, messages.ChatMessage{Role: messages.MessageRoleUser, Content: "named history"}); err != nil {
-			t.Fatal(err)
-		}
+	core.WithConversation(ctx, "seed", func(turn *core.Turn) {
+		turn.Conversation.Append([]messages.ChatMessage{{Role: messages.MessageRoleUser, Content: "named history"}})
 	}, nil)
+
 	for _, canceled := range []bool{false, true} {
 		parent, cancel := context.WithCancel(context.Background())
 		detached := mocktest.NewMockContext().WithSystem(sys).WithContext(parent)
-		core.WithDetachedConversation(detached, "silent", func(turn core.ChatContextInterface) {
-			name, err := turn.GetSession().GetName(turn)
-			if err != nil || !strings.HasPrefix(name, "__detached_") {
-				t.Fatalf("detached name = %q, %v", name, err)
-			}
-			history, err := turn.GetSession().GetHistory(turn)
-			if err != nil {
-				t.Fatal(err)
-			}
-			for _, msg := range history {
+		core.WithDetachedConversation(detached, "silent", func(turn *core.Turn) {
+			for _, msg := range turn.Conversation.Messages() {
 				if msg.Content == "named history" {
-					t.Fatal("silent turn inherited named history")
+					t.Fatal("detached turn inherited the conversation's history")
 				}
 			}
-			if err := turn.GetSession().AddMessage(turn, messages.ChatMessage{Role: messages.MessageRoleUser, Content: "temporary"}); err != nil {
-				t.Fatal(err)
-			}
+			turn.Conversation.Append([]messages.ChatMessage{{Role: messages.MessageRoleUser, Content: "temporary"}})
 			if canceled {
 				cancel()
 			}
 		}, nil)
 		cancel()
-		keys, err := sys.Sessions.List(context.Background())
-		if err != nil || len(keys) != 1 || keys[0] != ctx.GetLockKey() {
-			t.Fatalf("detached session leaked after cancellation=%v: %v, %v", canceled, keys, err)
+
+		keys := sys.Memory.Keys()
+		if len(keys) != 1 || keys[0] != ctx.GetConversationKey() {
+			t.Fatalf("detached turn registered a conversation (canceled=%v): %v", canceled, keys)
 		}
 	}
-	core.WithConversation(ctx, "verify", func(turn core.ChatContextInterface) {
-		history, err := turn.GetSession().GetHistory(turn)
-		if err != nil || history[len(history)-1].Content != "named history" {
-			t.Fatalf("named history changed: %v, %v", history, err)
+
+	core.WithConversation(ctx, "verify", func(turn *core.Turn) {
+		history := turn.Conversation.Messages()
+		if len(history) != 1 || history[0].Content != "named history" {
+			t.Fatalf("detached turns changed the conversation: %+v", history)
 		}
 	}, nil)
 }
 
-func TestConversationExpiredSessionStartsFresh(t *testing.T) {
+func TestConversationIdleExpiryStartsFresh(t *testing.T) {
 	sys := mocktest.NewMockSystem(t)
 	ctx := mocktest.NewMockContext().WithSystem(sys)
-	core.WithConversation(ctx, "seed", func(turn core.ChatContextInterface) {
-		if err := turn.GetSession().AddMessage(turn, messages.ChatMessage{Role: messages.MessageRoleUser, Content: "expired"}); err != nil {
-			t.Fatal(err)
-		}
-		metadata, err := turn.GetSession().GetMetadata(turn)
-		if err != nil {
-			t.Fatal(err)
-		}
-		metadata.TTL = time.Nanosecond
-		if err := turn.GetSession().SetMetadata(turn, metadata); err != nil {
-			t.Fatal(err)
-		}
+	core.WithConversation(ctx, "seed", func(turn *core.Turn) {
+		turn.Conversation.Append([]messages.ChatMessage{{Role: messages.MessageRoleUser, Content: "expired"}})
 	}, nil)
-	core.WithConversation(ctx, "fresh", func(turn core.ChatContextInterface) {
-		history, err := turn.GetSession().GetHistory(turn)
-		if err != nil {
-			t.Fatal(err)
-		}
-		for _, msg := range history {
+
+	// Expire by hand rather than sleeping: the TTL clock is the memory's.
+	sys.Memory.SetTTL(time.Nanosecond)
+	time.Sleep(time.Millisecond)
+	sys.Memory.Sweep()
+
+	core.WithConversation(ctx, "fresh", func(turn *core.Turn) {
+		for _, msg := range turn.Conversation.Messages() {
 			if msg.Content == "expired" {
 				t.Fatal("idle-expired transcript was reused")
 			}
@@ -177,15 +137,16 @@ func TestDifferentConversationsProceedIndependently(t *testing.T) {
 	otherConfig := mocktest.DefaultTestConfig()
 	otherConfig.Server.Channel = "#other"
 	second := mocktest.NewMockContext().WithSystem(sys).WithConfig(otherConfig)
-	core.WithConversation(first, "first", func(a core.ChatContextInterface) {
+
+	core.WithConversation(first, "first", func(a *core.Turn) {
 		deadline, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
 		second.WithContext(deadline)
 		ran := false
-		core.WithConversation(second, "second", func(b core.ChatContextInterface) {
+		core.WithConversation(second, "second", func(b *core.Turn) {
 			ran = true
-			if a.GetSession() == b.GetSession() {
-				t.Fatal("independent conversations share a lease")
+			if a.Conversation == b.Conversation {
+				t.Fatal("independent conversations share a transcript")
 			}
 		}, nil)
 		if !ran {

@@ -3,7 +3,7 @@ package commands
 import (
 	"strings"
 
-	"pkdindustries/soulshack/internal/irc"
+	"pkdindustries/soulshack/internal/core"
 )
 
 // HelpCommand handles the /help command
@@ -19,10 +19,10 @@ func NewHelpCommand(registry *Registry) *HelpCommand {
 func (c *HelpCommand) Name() string    { return "/help" }
 func (c *HelpCommand) AdminOnly() bool { return false }
 
-func (c *HelpCommand) Execute(ctx irc.ChatContextInterface) {
+func (c *HelpCommand) Execute(turn *core.Turn) {
 	cmds := c.registry.All()
 	var names []string
-	isAdmin := ctx.IsAdmin()
+	isAdmin := turn.IsAdmin()
 
 	for _, cmd := range cmds {
 		if cmd.AdminOnly() && !isAdmin {
@@ -33,5 +33,5 @@ func (c *HelpCommand) Execute(ctx irc.ChatContextInterface) {
 		}
 	}
 
-	ctx.Reply("Supported commands: " + strings.Join(names, ", "))
+	turn.Reply("Supported commands: " + strings.Join(names, ", "))
 }

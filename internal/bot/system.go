@@ -1,11 +1,9 @@
 package bot
 
 import (
-	"fmt"
 	"log/slog"
 	"sync/atomic"
 
-	"github.com/alexschlessinger/pollytool/sessions"
 	"github.com/alexschlessinger/pollytool/tools"
 	"github.com/alexschlessinger/pollytool/tools/sandbox"
 
@@ -13,20 +11,30 @@ import (
 	"pkdindustries/soulshack/internal/core"
 	"pkdindustries/soulshack/internal/irc"
 	"pkdindustries/soulshack/internal/llm"
+	"pkdindustries/soulshack/internal/memory"
 )
 
 type SystemImpl struct {
-	Sessions sessions.SessionStore
-	Tools    *tools.ToolRegistry
-	llm      atomic.Value // stores core.LLM
+	Memory *memory.Memory
+	Tools  *tools.ToolRegistry
+	Config *config.Store
+	llm    atomic.Value // stores core.LLM
+}
+
+func (s *SystemImpl) GetConfig() *config.Configuration {
+	return s.Config.Snapshot()
+}
+
+func (s *SystemImpl) UpdateConfig(fn func(*config.Configuration) error) error {
+	return s.Config.Update(fn)
 }
 
 func (s *SystemImpl) GetToolRegistry() *tools.ToolRegistry {
 	return s.Tools
 }
 
-func (s *SystemImpl) GetSessions() sessions.SessionStore {
-	return s.Sessions
+func (s *SystemImpl) GetMemory() *memory.Memory {
+	return s.Memory
 }
 
 func (s *SystemImpl) GetLLM() core.LLM {
@@ -40,7 +48,7 @@ func (s *SystemImpl) UpdateLLM(cfg config.APIConfig) error {
 }
 
 func NewSystem(c *config.Configuration) (core.System, error) {
-	s := &SystemImpl{}
+	s := &SystemImpl{Config: config.NewStore(c)}
 
 	// Optionally enable platform sandboxing for shell/bash/MCP tools.
 	var regOpts []tools.RegistryOption
@@ -73,19 +81,12 @@ func NewSystem(c *config.Configuration) (core.System, error) {
 		}
 	}
 
-	// initialize sessions with pollytool's in-memory SQLite store
-	store, err := sessions.OpenStore(sessions.StoreConfig{
-		Mode: sessions.ModeMemory,
-		DefaultMetadata: &sessions.Metadata{
-			MaxHistoryTokens: c.Session.MaxContext,
-			TTL:              c.Session.TTL,
-			SystemPrompt:     c.Bot.Prompt,
-		},
+	// Conversations live in this process only: an in-memory transcript with
+	// an idle expiry.
+	s.Memory = memory.New(memory.Config{
+		Budget: c.Session.MaxContext,
+		TTL:    c.Session.TTL,
 	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to open session store: %w", err)
-	}
-	s.Sessions = store
 
 	// Initialize LLM
 	s.UpdateLLM(*c.API)

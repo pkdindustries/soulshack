@@ -3,7 +3,10 @@ package behaviors
 import (
 	"github.com/lrstanley/girc"
 
+	"pkdindustries/soulshack/internal/commands"
+	"pkdindustries/soulshack/internal/core"
 	"pkdindustries/soulshack/internal/irc"
+	"pkdindustries/soulshack/internal/llm"
 )
 
 // Behavior defines the interface for event-based behaviors
@@ -55,4 +58,25 @@ func (r *Registry) Process(ctx irc.ChatContextInterface, event *girc.Event) bool
 		}
 	}
 	return false
+}
+
+// complete runs a completion for this turn, replying with each chunk unless the
+// turn is only being recorded (a silent URL observation, say). The stream is
+// always drained: that is what finishes the turn and stores it.
+func complete(turn *core.Turn, prompt string, silent bool) {
+	for chunk := range llm.Complete(turn, prompt) {
+		if !silent {
+			turn.Reply(chunk)
+		}
+	}
+}
+
+// dispatch runs one command turn for this message, in its own operation, and
+// tells the sender when the conversation's queue is still busy.
+func dispatch(ctx irc.ChatContextInterface, operation string, registry *commands.Registry) {
+	core.WithConversation(ctx, operation, func(turn *core.Turn) {
+		registry.Dispatch(turn)
+	}, func() {
+		ctx.Reply("Request timed out waiting for previous operation to complete")
+	})
 }

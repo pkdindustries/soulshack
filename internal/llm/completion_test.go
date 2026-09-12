@@ -20,18 +20,14 @@ func TestComplete_ContextCancellation(t *testing.T) {
 	// Create cancellable context
 	ctx, cancel := context.WithCancel(context.Background())
 
-	session := mockSys.AcquireSession(t, "test")
 	mockCtx := mocktest.NewMockContext().
 		WithContext(ctx).
 		WithSystem(mockSys).
-		WithSession(session).
+		WithConversation(mockSys.Conversation(t, "test")).
 		WithArgs("hello")
 
 	// Start completion
-	outch, err := Complete(mockCtx, "test message")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	outch := Complete(mockCtx.Turn(), "test message")
 
 	// Read first response
 	firstResp := <-outch
@@ -68,18 +64,14 @@ func TestComplete_Timeout(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
-	session := mockSys.AcquireSession(t, "test")
 	mockCtx := mocktest.NewMockContext().
 		WithContext(ctx).
 		WithSystem(mockSys).
-		WithSession(session).
+		WithConversation(mockSys.Conversation(t, "test")).
 		WithArgs("hello")
 
 	// Start completion
-	outch, err := Complete(mockCtx, "test message")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	outch := Complete(mockCtx.Turn(), "test message")
 
 	// Collect all responses
 	var responses []string
@@ -98,26 +90,21 @@ func TestComplete_SetsProjectionBudget(t *testing.T) {
 	mockLLM := &mocktest.MockLLM{Responses: []string{"ok"}}
 	mockSys.LLM = mockLLM
 
-	session := mockSys.AcquireSession(t, "test")
 	mockCtx := mocktest.NewMockContext().
 		WithSystem(mockSys).
-		WithSession(session).
+		WithConversation(mockSys.Conversation(t, "test")).
 		WithArgs("hello")
 
-	outch, err := Complete(mockCtx, "test message")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	for range outch {
+	for range Complete(mockCtx.Turn(), "test message") {
 	}
 
-	// maxcontext must reach the request as the projection budget (the store
-	// no longer trims history at write time).
+	// maxcontext reaches the request as the projection budget, and is the same
+	// number the conversation is trimmed to.
 	if mockLLM.LastRequest == nil {
 		t.Fatal("no completion request captured")
 	}
 	if mockLLM.LastRequest.MaxContextTokens != 100000 {
-		t.Fatalf("MaxContextTokens = %d, want 100000 (session MaxHistoryTokens)",
+		t.Fatalf("MaxContextTokens = %d, want 100000 (config maxcontext)",
 			mockLLM.LastRequest.MaxContextTokens)
 	}
 }
@@ -128,20 +115,13 @@ func TestComplete_NoLeakedGoroutines(t *testing.T) {
 		Responses: []string{"Quick response"},
 	}
 
-	session := mockSys.AcquireSession(t, "test")
 	mockCtx := mocktest.NewMockContext().
 		WithSystem(mockSys).
-		WithSession(session).
+		WithConversation(mockSys.Conversation(t, "test")).
 		WithArgs("hello")
 
-	// Run completion
-	outch, err := Complete(mockCtx, "test message")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	// Drain the channel completely
-	for range outch {
+	// Run completion and drain the channel completely
+	for range Complete(mockCtx.Turn(), "test message") {
 	}
 
 	// If we reach here without hanging, goroutines cleaned up properly

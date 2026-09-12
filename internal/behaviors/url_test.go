@@ -1,13 +1,13 @@
 package behaviors
 
 import (
-	"context"
 	"github.com/alexschlessinger/pollytool/messages"
 	"pkdindustries/soulshack/internal/core"
 	"testing"
 
 	"github.com/lrstanley/girc"
 
+	"pkdindustries/soulshack/internal/config"
 	mocktest "pkdindustries/soulshack/internal/testing"
 )
 
@@ -130,16 +130,14 @@ func TestURLBehavior_Name(t *testing.T) {
 	}
 }
 
-func TestSilentURLUsesTemporarySession(t *testing.T) {
+func TestSilentURLUsesTemporaryConversation(t *testing.T) {
 	sys := mocktest.NewMockSystem(t)
 	model := &mocktest.MockLLM{Responses: []string{"silent result"}}
 	sys.LLM = model
 	ctx := mocktest.NewMockContext().WithSystem(sys).WithAddressed(false)
-	ctx.GetConfig().Bot.URLWatcherSilent = true
-	core.WithConversation(ctx, "seed", func(turn core.ChatContextInterface) {
-		if err := turn.GetSession().AddMessage(turn, messages.ChatMessage{Role: messages.MessageRoleUser, Content: "channel history"}); err != nil {
-			t.Fatal(err)
-		}
+	mocktest.SetConfig(t, sys, func(c *config.Configuration) { c.Bot.URLWatcherSilent = true })
+	core.WithConversation(ctx, "seed", func(turn *core.Turn) {
+		turn.Conversation.Append([]messages.ChatMessage{{Role: messages.MessageRoleUser, Content: "channel history"}})
 	}, nil)
 	behavior := &URLBehavior{}
 	behavior.Execute(ctx, &girc.Event{Command: girc.PRIVMSG, Params: []string{"#test", "https://example.com"}})
@@ -154,14 +152,14 @@ func TestSilentURLUsesTemporarySession(t *testing.T) {
 	if ctx.ReplyCount() != 0 {
 		t.Fatalf("silent URL replied: %v", ctx.Replies)
 	}
-	keys, err := sys.Sessions.List(context.Background())
-	if err != nil || len(keys) != 1 || keys[0] != ctx.GetLockKey() {
-		t.Fatalf("temporary session leaked: %v, %v", keys, err)
+	keys := sys.Memory.Keys()
+	if len(keys) != 1 || keys[0] != ctx.GetConversationKey() {
+		t.Fatalf("temporary conversation leaked: %v", keys)
 	}
-	core.WithConversation(ctx, "verify", func(turn core.ChatContextInterface) {
-		history, err := turn.GetSession().GetHistory(turn)
-		if err != nil || history[len(history)-1].Content != "channel history" {
-			t.Fatalf("silent URL changed channel history: %v, %v", history, err)
+	core.WithConversation(ctx, "verify", func(turn *core.Turn) {
+		history := turn.Conversation.Messages()
+		if len(history) != 1 || history[0].Content != "channel history" {
+			t.Fatalf("silent URL changed channel history: %v", history)
 		}
 	}, nil)
 }

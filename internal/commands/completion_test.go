@@ -1,7 +1,6 @@
 package commands
 
 import (
-	"context"
 	"errors"
 	"testing"
 	"time"
@@ -15,13 +14,11 @@ func TestCompletionCommand_BasicFlow(t *testing.T) {
 		Responses: []string{"Hello from the LLM!"},
 	}
 
-	ctx := mocktest.NewMockContext().
-		WithSystem(mockSys).
-		WithSession(mockSys.AcquireSession(t, "test")).
+	ctx := mocktest.NewTurnContext(t, mockSys, "test").
 		WithArgs("hello", "world")
 
 	cmd := &CompletionCommand{}
-	cmd.Execute(ctx)
+	cmd.Execute(ctx.Turn())
 
 	// Wait a bit for the async response
 	time.Sleep(50 * time.Millisecond)
@@ -40,13 +37,11 @@ func TestCompletionCommand_MultiChunkResponse(t *testing.T) {
 		Responses: []string{"First chunk", "Second chunk", "Third chunk"},
 	}
 
-	ctx := mocktest.NewMockContext().
-		WithSystem(mockSys).
-		WithSession(mockSys.AcquireSession(t, "test")).
+	ctx := mocktest.NewTurnContext(t, mockSys, "test").
 		WithArgs("tell", "me", "a", "story")
 
 	cmd := &CompletionCommand{}
-	cmd.Execute(ctx)
+	cmd.Execute(ctx.Turn())
 
 	// Wait for all chunks
 	time.Sleep(50 * time.Millisecond)
@@ -70,13 +65,11 @@ func TestCompletionCommand_ErrorHandling(t *testing.T) {
 		Error:     errors.New("API rate limit exceeded"),
 	}
 
-	ctx := mocktest.NewMockContext().
-		WithSystem(mockSys).
-		WithSession(mockSys.AcquireSession(t, "test")).
+	ctx := mocktest.NewTurnContext(t, mockSys, "test").
 		WithArgs("hello")
 
 	cmd := &CompletionCommand{}
-	cmd.Execute(ctx)
+	cmd.Execute(ctx.Turn())
 
 	// Wait for error to propagate
 	time.Sleep(50 * time.Millisecond)
@@ -91,35 +84,29 @@ func TestCompletionCommand_ErrorHandling(t *testing.T) {
 	}
 }
 
-func TestCompletionCommand_SessionUpdated(t *testing.T) {
+func TestCompletionCommand_ConversationUpdated(t *testing.T) {
 	mockSys := mocktest.NewMockSystem(t)
 	mockSys.LLM = &mocktest.MockLLM{
 		Responses: []string{"Response"},
 	}
 
-	// Get a session from the store
-	session := mockSys.AcquireSession(t, "test")
-
+	conversation := mockSys.Conversation(t, "test")
 	ctx := mocktest.NewMockContext().
 		WithSystem(mockSys).
-		WithSession(session).
+		WithConversation(conversation).
 		WithSource("testuser").
 		WithArgs("hello", "world")
 
-	initialHistory, _ := session.GetHistory(context.Background())
-	initialHistoryLen := len(initialHistory)
+	initialLen := len(conversation.Messages())
 
 	cmd := &CompletionCommand{}
-	cmd.Execute(ctx)
+	cmd.Execute(ctx.Turn())
 
 	// Wait for completion
 	time.Sleep(50 * time.Millisecond)
 
-	// Session should have new messages added
-	newHistory, _ := session.GetHistory(context.Background())
-	newHistoryLen := len(newHistory)
-	if newHistoryLen <= initialHistoryLen {
-		t.Errorf("expected session history to grow, was %d, now %d",
-			initialHistoryLen, newHistoryLen)
+	// The conversation should have the new messages
+	if newLen := len(conversation.Messages()); newLen <= initialLen {
+		t.Errorf("expected conversation to grow, was %d, now %d", initialLen, newLen)
 	}
 }

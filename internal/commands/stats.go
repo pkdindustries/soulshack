@@ -6,31 +6,18 @@ import (
 	"time"
 
 	"pkdindustries/soulshack/internal/core"
-	"pkdindustries/soulshack/internal/irc"
 
 	"github.com/alexschlessinger/pollytool/messages"
 )
 
-// StatsCommand handles the /stats command for showing session statistics
+// StatsCommand handles the /stats command for showing conversation statistics
 type StatsCommand struct{}
 
 func (c *StatsCommand) Name() string    { return "/stats" }
 func (c *StatsCommand) AdminOnly() bool { return false }
 
-func (c *StatsCommand) Execute(ctx irc.ChatContextInterface) {
-	session := ctx.GetSession()
-	history, err := session.GetHistory(ctx)
-	if err != nil {
-		ctx.GetLogger().Error("stats_failed", "error", err)
-		ctx.Reply("Failed to read session stats")
-		return
-	}
-	metadata, err := session.GetMetadata(ctx)
-	if err != nil {
-		ctx.GetLogger().Error("stats_failed", "error", err)
-		ctx.Reply("Failed to read session stats")
-		return
-	}
+func (c *StatsCommand) Execute(turn *core.Turn) {
+	history := turn.Conversation.Messages()
 
 	// Calculate token breakdown
 	totalInputTokens := 0
@@ -38,8 +25,11 @@ func (c *StatsCommand) Execute(ctx irc.ChatContextInterface) {
 
 	// Track participants (IRC-specific)
 	participants := make(map[string]bool)
+	counts := make(map[string]int)
 
 	for _, msg := range history {
+		counts[string(msg.Role)]++
+
 		// Token counting
 		input := msg.GetInputTokens()
 		output := msg.GetOutputTokens()
@@ -66,21 +56,12 @@ func (c *StatsCommand) Execute(ctx irc.ChatContextInterface) {
 		}
 	}
 
-	// Get message counts and tool calls using new interface methods
-	messageCounts, err := session.GetMessageCounts(ctx)
-	if err != nil {
-		ctx.GetLogger().Error("stats_failed", "error", err)
-		ctx.Reply("Failed to read session stats")
-		return
-	}
-
-	// The active lease keeps a session alive; expiry is an idle retention rule.
 	ttlStr := "disabled"
-	if metadata.TTL > 0 {
-		ttlStr = fmt.Sprintf("after %s idle", formatDuration(metadata.TTL))
+	if ttl := turn.GetSystem().GetMemory().TTL(); ttl > 0 {
+		ttlStr = fmt.Sprintf("after %s idle", formatDuration(ttl))
 	}
 	contextStr := "no completed request"
-	if usage, ok := core.LastContextUsage(history); ok {
+	if usage, ok := turn.Conversation.Usage(); ok {
 		contextStr = fmt.Sprintf("~%d tokens (no configured limit)", usage.EstimatedTokens)
 		if usage.Budget > 0 {
 			contextStr = fmt.Sprintf("~%d/%d tokens", usage.EstimatedTokens, usage.Budget)
@@ -102,14 +83,14 @@ func (c *StatsCommand) Execute(ctx irc.ChatContextInterface) {
 		totalOutputTokens,
 		contextStr,
 		len(history),
-		messageCounts[string(messages.MessageRoleUser)],
-		messageCounts[string(messages.MessageRoleAssistant)],
-		messageCounts[string(messages.MessageRoleTool)],
+		counts[string(messages.MessageRoleUser)],
+		counts[string(messages.MessageRoleAssistant)],
+		counts[string(messages.MessageRoleTool)],
 		len(participants),
 		ttlStr,
 	)
 
-	ctx.Reply(response)
+	turn.Reply(response)
 }
 
 // formatDuration formats a duration into a human-readable string

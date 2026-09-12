@@ -15,13 +15,11 @@ func TestToolsCommand_ListEmpty(t *testing.T) {
 	mockSys := mocktest.NewMockSystem(t)
 	// Registry is empty by default
 
-	ctx := mocktest.NewMockContext().
-		WithSystem(mockSys).
-		WithSession(mockSys.AcquireSession(t, "test")).
+	ctx := mocktest.NewTurnContext(t, mockSys, "test").
 		WithArgs("/tools", "list")
 
 	cmd := &ToolsCommand{}
-	cmd.Execute(ctx)
+	cmd.Execute(ctx.Turn())
 
 	if ctx.ReplyCount() != 1 {
 		t.Fatalf("expected 1 reply, got %d", ctx.ReplyCount())
@@ -41,13 +39,11 @@ func TestToolsCommand_ListTools(t *testing.T) {
 	// LoadToolAuto instantiates the native tool from the factory
 	mockSys.ToolRegistry.LoadToolAuto("native__test_tool")
 
-	ctx := mocktest.NewMockContext().
-		WithSystem(mockSys).
-		WithSession(mockSys.AcquireSession(t, "test")).
+	ctx := mocktest.NewTurnContext(t, mockSys, "test").
 		WithArgs("/tools", "list")
 
 	cmd := &ToolsCommand{}
-	cmd.Execute(ctx)
+	cmd.Execute(ctx.Turn())
 
 	if ctx.ReplyCount() != 1 {
 		t.Fatalf("expected 1 reply, got %d", ctx.ReplyCount())
@@ -61,14 +57,12 @@ func TestToolsCommand_ListTools(t *testing.T) {
 func TestToolsCommand_AddRequiresAdmin(t *testing.T) {
 	mockSys := mocktest.NewMockSystem(t)
 
-	ctx := mocktest.NewMockContext().
+	ctx := mocktest.NewTurnContext(t, mockSys, "test").
 		WithAdmin(false).
-		WithSystem(mockSys).
-		WithSession(mockSys.AcquireSession(t, "test")).
 		WithArgs("/tools", "add", "/some/path")
 
 	cmd := &ToolsCommand{}
-	cmd.Execute(ctx)
+	cmd.Execute(ctx.Turn())
 
 	if ctx.ReplyCount() != 1 {
 		t.Fatalf("expected 1 reply, got %d", ctx.ReplyCount())
@@ -81,14 +75,12 @@ func TestToolsCommand_AddRequiresAdmin(t *testing.T) {
 func TestToolsCommand_RemoveRequiresAdmin(t *testing.T) {
 	mockSys := mocktest.NewMockSystem(t)
 
-	ctx := mocktest.NewMockContext().
+	ctx := mocktest.NewTurnContext(t, mockSys, "test").
 		WithAdmin(false).
-		WithSystem(mockSys).
-		WithSession(mockSys.AcquireSession(t, "test")).
 		WithArgs("/tools", "remove", "some_tool")
 
 	cmd := &ToolsCommand{}
-	cmd.Execute(ctx)
+	cmd.Execute(ctx.Turn())
 
 	if ctx.ReplyCount() != 1 {
 		t.Fatalf("expected 1 reply, got %d", ctx.ReplyCount())
