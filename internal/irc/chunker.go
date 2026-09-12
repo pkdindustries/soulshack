@@ -40,16 +40,34 @@ func (c *Chunker) Write(content string) {
 		}
 		// Remove the newline and send
 		if line = strings.TrimSuffix(line, "\n"); line != "" {
-			c.output <- line
+			c.writeLine(line)
 		}
 	}
 
-	// If buffer is getting too large, force a chunk
-	if c.buffer.Len() >= c.maxChunkSize {
+	// Force chunks until the buffer is back under the limit: one write can
+	// overshoot it by far more than a single chunk.
+	for c.buffer.Len() >= c.maxChunkSize {
 		chunk := c.extractBestSplitChunk()
-		if chunk != "" {
-			c.output <- chunk
+		if chunk == "" {
+			break
 		}
+		c.output <- chunk
+	}
+}
+
+// writeLine emits a complete line, splitting it when it is longer than one
+// message can carry. Like extractBestSplitChunk, it prefers a word boundary.
+func (c *Chunker) writeLine(line string) {
+	for len(line) > c.maxChunkSize {
+		split := c.maxChunkSize
+		if idx := strings.LastIndexByte(line[:split], ' '); idx > 0 {
+			split = idx
+		}
+		c.output <- line[:split]
+		line = strings.TrimLeft(line[split:], " ")
+	}
+	if line != "" {
+		c.output <- line
 	}
 }
 
@@ -74,8 +92,16 @@ func (c *Chunker) extractBestSplitChunk() string {
 	return chunk
 }
 
-// Flush emits any remaining buffer content.
+// Flush emits any remaining buffer content, still respecting the message size
+// limit.
 func (c *Chunker) Flush() {
+	for c.buffer.Len() > c.maxChunkSize {
+		chunk := c.extractBestSplitChunk()
+		if chunk == "" {
+			break
+		}
+		c.output <- chunk
+	}
 	if c.buffer.Len() > 0 {
 		c.output <- c.buffer.String()
 		c.buffer.Reset()
