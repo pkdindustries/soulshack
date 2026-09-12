@@ -83,7 +83,11 @@ func RegisterIRCTools(registry *tools.ToolRegistry) {
 		"irc__whois":      newIrcWhoisTool,
 	}
 	for name, f := range factories {
+		// The factory makes the tool loadable by name; registering the
+		// instance is what puts it in registry.All(), which is the list the
+		// model is offered.
 		registry.RegisterNative(name, f)
+		registry.Register(f())
 	}
 }
 
