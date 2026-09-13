@@ -5,11 +5,18 @@ import (
 	"log/slog"
 
 	"github.com/alexschlessinger/pollytool/llm"
-	"github.com/alexschlessinger/pollytool/sessions"
 	"github.com/alexschlessinger/pollytool/tools"
 
 	"pkdindustries/soulshack/internal/config"
+	"pkdindustries/soulshack/internal/memory"
 )
+
+// ChunkWriter frames model output into messages a transport can send, emitting
+// each finished message on the channel it was built with.
+type ChunkWriter interface {
+	Write(content string)
+	Flush()
+}
 
 // ChatContextInterface provides all context needed for handling IRC messages
 type ChatContextInterface interface {
@@ -27,6 +34,9 @@ type ChatContextInterface interface {
 	Reply(string)
 	ReplyAction(string)
 	SendAction(target, message string)
+	// NewChunkWriter frames output for this chat, since only the transport
+	// knows the message size limit.
+	NewChunkWriter(output chan<- string) ChunkWriter
 
 	// Controller methods
 	Join(string) bool
@@ -46,11 +56,10 @@ type ChatContextInterface interface {
 	GetChannel(name string) *ChannelInfo
 	GetChannelUsers(channel string) []ChannelUser
 	GetBotNick() string
-	GetLockKey() string
-	IsOp(channel, nick string) bool
+	GetServerOption(key string) (string, bool)
+	GetConversationKey() string
 
 	// Runtime methods
-	GetSession() sessions.Session
 	GetConfig() *config.Configuration
 	GetSystem() System
 	GetLogger() *slog.Logger
@@ -58,13 +67,18 @@ type ChatContextInterface interface {
 
 // LLM defines the interface for the language model client
 type LLM interface {
-	// ChatCompletionStream returns a channel of string chunks for IRC output
-	ChatCompletionStream(ChatContextInterface, *llm.CompletionRequest) <-chan string
+	// ChatCompletionStream returns IRC output and closes after history saving finishes.
+	ChatCompletionStream(*Turn, *llm.CompletionRequest) <-chan string
 }
 
 type System interface {
 	GetToolRegistry() *tools.ToolRegistry
-	GetSessionStore() sessions.SessionStore
+	GetMemory() *memory.Memory
 	GetLLM() LLM
 	UpdateLLM(config.APIConfig) error
+	// GetConfig returns the settings this turn runs with: a snapshot, so
+	// reading them is safe while another turn changes them.
+	GetConfig() *config.Configuration
+	// UpdateConfig changes the running configuration under the write lock.
+	UpdateConfig(func(*config.Configuration) error) error
 }

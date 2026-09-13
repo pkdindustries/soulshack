@@ -1,69 +1,64 @@
 package llm
 
 import (
-	"sync"
+	"fmt"
+	"strings"
 
 	"github.com/alexschlessinger/pollytool/llm"
 	"github.com/alexschlessinger/pollytool/messages"
-	"github.com/alexschlessinger/pollytool/sessions"
 	"github.com/alexschlessinger/pollytool/tools"
 
 	"pkdindustries/soulshack/internal/config"
-	"pkdindustries/soulshack/internal/irc"
+	"pkdindustries/soulshack/internal/core"
+	"pkdindustries/soulshack/internal/memory"
 )
 
 type CompletionRequest = llm.CompletionRequest
 
-// Track warned sessions to avoid repeated warnings
-var (
-	warnedSessions = make(map[string]int) // session_name -> last_warning_percentage
-	warningMutex   sync.RWMutex
-)
-
-// checkSessionCapacity checks if the session is approaching token limits and sends warnings
-func checkSessionCapacity(ctx irc.ChatContextInterface) {
-	session := ctx.GetSession()
-
-	// Use polly's capacity calculation
-	percentage := session.GetCapacityPercentage()
-	if percentage == 0 {
-		return // No limit set
+// Warn from the request Polly actually projected, independently of the
+// transcript we keep and of cumulative provider billing. The previous turn
+// supplies the warning state, so no second cache is needed.
+func checkContextUsage(turn *core.Turn, usage memory.ContextUsage) {
+	previous, _ := turn.Conversation.Usage()
+	if usage.OmittedExchanges > 0 && previous.OmittedExchanges == 0 {
+		turn.ReplyAction(fmt.Sprintf("Model input omitted %d older exchanges", usage.OmittedExchanges))
+		return
 	}
-
-	// Get session identifier and check last warning level
-	sessionName := session.GetName()
-
-	warningMutex.Lock()
-	defer warningMutex.Unlock()
-
-	lastWarning := warnedSessions[sessionName]
-
-	// Send warnings at thresholds, avoiding repeats
-	if percentage >= 90 && lastWarning < 90 {
-		ctx.ReplyAction("Session at 90% capacity - conversation history will be trimmed soon")
-		warnedSessions[sessionName] = 90
-	} else if percentage >= 75 && lastWarning < 75 {
-		ctx.ReplyAction("Session at 75% capacity")
-		warnedSessions[sessionName] = 75
-	} else if percentage < 75 && lastWarning > 0 {
-		// Reset warning state if capacity drops below thresholds
-		delete(warnedSessions, sessionName)
+	level := func(u memory.ContextUsage) int {
+		if u.Budget <= 0 {
+			return 0
+		}
+		percentage := float64(u.EstimatedTokens) / float64(u.Budget) * 100
+		if percentage >= 90 {
+			return 90
+		}
+		if percentage >= 75 {
+			return 75
+		}
+		return 0
+	}
+	if current := level(usage); current > level(previous) {
+		turn.ReplyAction(fmt.Sprintf("Model input reached %d%% of its context budget", current))
 	}
 }
 
-func NewCompletionRequest(config *config.Configuration, session sessions.Session, tools []tools.Tool) *CompletionRequest {
+func NewCompletionRequest(config *config.Configuration, history []messages.ChatMessage, budget int, tools []tools.Tool) *CompletionRequest {
 	// Parse thinking effort - validated at config load time
 	thinkingEffort, _ := llm.ParseThinkingEffort(config.Model.ThinkingEffort)
 
 	req := &CompletionRequest{
-		BaseURL:        config.API.OpenAIURL,
-		Timeout:        config.API.Timeout,
-		Model:          config.Model.Model,
-		MaxTokens:      config.Model.MaxTokens,
-		Messages:       session.GetHistory(),
-		Temperature:    llm.Float32Ptr(config.Model.Temperature),
-		Tools:          tools,
-		ThinkingEffort: thinkingEffort,
+		// BaseURL is resolved per provider when the request is dispatched.
+		Timeout:   config.API.Timeout,
+		Model:     config.Model.Model,
+		MaxTokens: config.Model.MaxTokens,
+		Messages:  history,
+		// The budget the conversation is trimmed to, so the request and the
+		// transcript agree; polly omits the oldest exchanges if the request
+		// still estimates above it.
+		MaxContextTokens: budget,
+		Temperature:      llm.Float32Ptr(config.Model.Temperature),
+		Tools:            tools,
+		ThinkingEffort:   thinkingEffort,
 	}
 
 	// Set streaming mode (nil = streaming default, false = non-streaming)
@@ -75,12 +70,13 @@ func NewCompletionRequest(config *config.Configuration, session sessions.Session
 	return req
 }
 
-// Complete processes a user message and returns a channel of response chunks.
-func Complete(ctx irc.ChatContextInterface, msg string) (<-chan string, error) {
-	// Check session capacity and warn if approaching limits
-	checkSessionCapacity(ctx)
+// Complete appends the user message to the turn's conversation and returns the
+// stream of response chunks. The stream also appends the finished turn, so
+// callers must drain it.
+func Complete(turn *core.Turn, msg string) <-chan string {
+	cfg := turn.GetConfig()
+	history := turn.Conversation.Messages()
 
-	// Add user message to session
 	cmsg := messages.ChatMessage{
 		Role:    messages.MessageRoleUser,
 		Content: msg,
@@ -89,32 +85,23 @@ func Complete(ctx irc.ChatContextInterface, msg string) (<-chan string, error) {
 	if len(truncated) > 100 {
 		truncated = truncated[:100] + "..."
 	}
-	ctx.GetLogger().Info("message_received", "message", truncated)
-	ctx.GetSession().AddMessage(cmsg)
+	turn.GetLogger().Info("message_received", "message", truncated)
+	turn.Conversation.Append([]messages.ChatMessage{cmsg})
 
-	// Build completion request
-	session := ctx.GetSession()
-	cfg := ctx.GetConfig()
-	sys := ctx.GetSystem()
+	// The system prompt is the process's, not part of the transcript: it is
+	// rebuilt per request so /set prompt takes effect immediately.
+	request := make([]messages.ChatMessage, 0, len(history)+2)
+	if prompt := strings.TrimSpace(cfg.Bot.Prompt); prompt != "" {
+		request = append(request, messages.ChatMessage{Role: messages.MessageRoleSystem, Content: prompt})
+	}
+	request = append(request, history...)
+	request = append(request, cmsg)
 
 	var allTools []tools.Tool
-	if sys.GetToolRegistry() != nil {
-		allTools = sys.GetToolRegistry().All()
+	if registry := turn.GetSystem().GetToolRegistry(); registry != nil {
+		allTools = registry.All()
 	}
 
-	req := NewCompletionRequest(cfg, session, allTools)
-
-	// Get response stream from LLM
-	stream := sys.GetLLM().ChatCompletionStream(ctx, req)
-
-	output := make(chan string, 10)
-
-	go func() {
-		defer close(output)
-		for chunk := range stream {
-			output <- chunk
-		}
-	}()
-
-	return output, nil
+	budget := turn.GetSystem().GetMemory().Budget()
+	return turn.GetSystem().GetLLM().ChatCompletionStream(turn, NewCompletionRequest(cfg, request, budget, allTools))
 }

@@ -8,7 +8,6 @@ import (
 
 	"pkdindustries/soulshack/internal/core"
 	"pkdindustries/soulshack/internal/irc"
-	"pkdindustries/soulshack/internal/llm"
 )
 
 var urlPattern = regexp.MustCompile(`^https?://[^\s]+`)
@@ -40,35 +39,12 @@ func (b *URLBehavior) Check(ctx irc.ChatContextInterface, event *girc.Event) boo
 }
 
 func (b *URLBehavior) Execute(ctx irc.ChatContextInterface, event *girc.Event) {
-	core.WithRequestLock(ctx, ctx.GetLockKey(), "url", func() {
-		cfg := ctx.GetConfig()
-		prompt := fmt.Sprintf("(nick:%s) %s", ctx.GetSource(), event.Last())
-
-		silent := cfg.Bot.URLWatcherSilent
-		execCtx := irc.ChatContextInterface(ctx)
-		if silent {
-			dctx, cleanup, err := newDetachedContext(ctx)
-			if err != nil {
-				ctx.GetLogger().Error("url_behavior_error", "error", err)
-				return
-			}
-			defer cleanup()
-			execCtx = dctx
-		}
-
-		outch, err := llm.Complete(execCtx, prompt)
-		if err != nil {
-			ctx.GetLogger().Error("url_behavior_error", "error", err)
-			if !silent {
-				ctx.Reply(err.Error())
-			}
-			return
-		}
-
-		for res := range outch {
-			if !silent {
-				ctx.Reply(res)
-			}
-		}
+	silent := ctx.GetConfig().Bot.URLWatcherSilent
+	withConversation := core.WithConversation
+	if silent {
+		withConversation = core.WithDetachedConversation
+	}
+	withConversation(ctx, "url", func(turn *core.Turn) {
+		complete(turn, fmt.Sprintf("(nick:%s) %s", turn.GetSource(), event.Last()), silent)
 	}, nil)
 }

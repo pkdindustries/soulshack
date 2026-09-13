@@ -43,29 +43,3 @@ func DefaultTestConfig() *config.Configuration {
 		},
 	}
 }
-
-// KickCall records a Kick() invocation
-type KickCall struct {
-	Channel string
-	Nick    string
-	Reason  string
-}
-
-// ModeCall records a Mode() invocation
-type ModeCall struct {
-	Channel string
-	Mode    string
-	Target  string
-}
-
-// TopicCall records a Topic() invocation
-type TopicCall struct {
-	Channel string
-	Topic   string
-}
-
-// OperCall records an Oper() invocation
-type OperCall struct {
-	Channel string
-	Nick    string
-}

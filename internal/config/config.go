@@ -40,13 +40,12 @@ type BotConfig struct {
 	Prompt             string
 	Greeting           string
 	OpWatcher          bool
-	OpWatcherTemplate  string
 	Tools              []string
 	ShowThinkingAction bool
 	ShowToolActions    bool
-	URLWatcher       bool
-	URLWatcherSilent bool
-	Sandbox          bool
+	URLWatcher         bool
+	URLWatcherSilent   bool
+	Sandbox            bool
 }
 
 type ModelConfig struct {
@@ -65,13 +64,16 @@ type SessionConfig struct {
 }
 
 type APIConfig struct {
-	Timeout      time.Duration
-	OpenAIKey    string
-	OpenAIURL    string
-	AnthropicKey string
-	GeminiKey    string
-	OllamaURL    string
-	OllamaKey    string
+	Timeout        time.Duration
+	OpenAIKey      string
+	OpenAIURL      string
+	AnthropicKey   string
+	GeminiKey      string
+	OllamaURL      string
+	OllamaKey      string
+	DeepSeekKey    string
+	OpenRouterKey  string
+	HuggingFaceKey string
 }
 
 // YamlSource implements cli.ValueSource for a map loaded from YAML
@@ -139,7 +141,7 @@ func GetFlags() []cli.Flag {
 		&cli.StringFlag{Name: "saslpass", Usage: "password for SASL plain", Sources: src("saslpass", "SOULSHACK_SASLPASS")},
 
 		// Bot Configuration
-		&cli.StringSliceFlag{Name: "admins", Aliases: []string{"A"}, Usage: "comma-separated list of allowed hostmasks to administrate the bot", Sources: src("admins", "SOULSHACK_ADMINS")},
+		&cli.StringSliceFlag{Name: "admins", Aliases: []string{"A"}, Usage: "comma-separated admin hostmasks (case-insensitive; * and ? wildcards)", Sources: src("admins", "SOULSHACK_ADMINS")},
 		&cli.BoolFlag{Name: "verbose", Aliases: []string{"V"}, Usage: "enable verbose logging (shortcut for --loglevel=debug)", Sources: src("verbose", "SOULSHACK_VERBOSE")},
 		&cli.StringFlag{Name: "loglevel", Value: "info", Usage: "log level: debug, info, warn, error", Sources: src("loglevel", "SOULSHACK_LOGLEVEL")},
 		&cli.StringFlag{Name: "logformat", Value: "text", Usage: "log format: text (colorized), json", Sources: src("logformat", "SOULSHACK_LOGFORMAT")},
@@ -151,12 +153,15 @@ func GetFlags() []cli.Flag {
 		&cli.StringFlag{Name: "geminikey", Usage: "Google Gemini API key", Sources: src("geminikey", "SOULSHACK_GEMINIKEY")},
 		&cli.StringFlag{Name: "ollamaurl", Value: "http://localhost:11434", Usage: "Ollama API URL", Sources: src("ollamaurl", "SOULSHACK_OLLAMAURL")},
 		&cli.StringFlag{Name: "ollamakey", Usage: "Ollama API key (Bearer token for authentication)", Sources: src("ollamakey", "SOULSHACK_OLLAMAKEY")},
+		&cli.StringFlag{Name: "deepseekkey", Usage: "DeepSeek API key", Sources: src("deepseekkey", "SOULSHACK_DEEPSEEKKEY")},
+		&cli.StringFlag{Name: "openrouterkey", Usage: "OpenRouter API key", Sources: src("openrouterkey", "SOULSHACK_OPENROUTERKEY")},
+		&cli.StringFlag{Name: "huggingfacekey", Usage: "Hugging Face API key", Sources: src("huggingfacekey", "SOULSHACK_HUGGINGFACEKEY")},
 		&cli.IntFlag{Name: "maxtokens", Value: 16384, Usage: "maximum number of tokens to generate", Sources: src("maxtokens", "SOULSHACK_MAXTOKENS")},
 		&cli.StringFlag{Name: "model", Value: "ollama/llama3.2", Usage: "model to be used for responses", Sources: src("model", "SOULSHACK_MODEL")},
 		&cli.DurationFlag{Name: "apitimeout", Aliases: []string{"t"}, Value: time.Minute * 5, Usage: "timeout for each completion request", Sources: src("apitimeout", "SOULSHACK_APITIMEOUT")},
 		&cli.FloatFlag{Name: "temperature", Value: 0.7, Usage: "temperature for the completion", Sources: src("temperature", "SOULSHACK_TEMPERATURE")},
 		&cli.FloatFlag{Name: "top_p", Value: 1.0, Usage: "top P value for the completion", Sources: src("top_p", "SOULSHACK_TOP_P")},
-		&cli.StringFlag{Name: "thinkingeffort", Value: "off", Usage: "thinking effort level: off, low, medium, high", Sources: src("thinkingeffort", "SOULSHACK_THINKINGEFFORT")},
+		&cli.StringFlag{Name: "thinkingeffort", Value: "off", Usage: "thinking effort: off, dynamic, minimal, low, medium, high, xhigh, max, or a token budget", Sources: src("thinkingeffort", "SOULSHACK_THINKINGEFFORT")},
 		&cli.BoolFlag{Name: "stream", Value: true, Usage: "enable streaming responses", Sources: src("stream", "SOULSHACK_STREAM")},
 		&cli.StringSliceFlag{Name: "tool", Usage: "tools to load (shell scripts, MCP server JSON files, or native tools like irc__op)", Sources: src("tool", "SOULSHACK_TOOL")},
 		&cli.BoolFlag{Name: "showthinkingaction", Value: true, Usage: "show '[thinking]' IRC action when bot is reasoning", Sources: src("showthinkingaction", "SOULSHACK_SHOWTHINKINGACTION")},
@@ -167,14 +172,13 @@ func GetFlags() []cli.Flag {
 
 		// Timeouts and Behavior
 		&cli.BoolFlag{Name: "addressed", Aliases: []string{"a"}, Value: true, Usage: "require bot be addressed by nick for response", Sources: src("addressed", "SOULSHACK_ADDRESSED")},
-		&cli.DurationFlag{Name: "sessionduration", Aliases: []string{"S"}, Value: time.Minute * 10, Usage: "message context will be cleared after it is unused for this duration", Sources: src("sessionduration", "SOULSHACK_SESSIONDURATION")},
-		&cli.IntFlag{Name: "maxcontext", Value: 0, Usage: "maximum token count for session history (0 = unlimited)", Sources: src("maxcontext", "SOULSHACK_MAXCONTEXT")},
+		&cli.DurationFlag{Name: "sessionduration", Aliases: []string{"S"}, Value: time.Minute * 10, Usage: "a conversation is forgotten after this duration of inactivity (0 = no expiry)", Sources: src("sessionduration", "SOULSHACK_SESSIONDURATION")},
+		&cli.IntFlag{Name: "maxcontext", Value: 0, Usage: "maximum token budget for a conversation: bounds both model input and retained history (0 = unlimited)", Sources: src("maxcontext", "SOULSHACK_MAXCONTEXT")},
 		&cli.IntFlag{Name: "chunkmax", Aliases: []string{"m"}, Value: 350, Usage: "maximum number of characters to send as a single message", Sources: src("chunkmax", "SOULSHACK_CHUNKMAX")},
 
 		// Personality / Prompting
 		&cli.StringFlag{Name: "greeting", Value: "hello.", Usage: "prompt to be used when the bot joins the channel", Sources: src("greeting", "SOULSHACK_GREETING")},
-		&cli.BoolFlag{Name: "opwatcher", Usage: "enable +o watcher to trigger LLM on being opped", Sources: src("opwatcher", "SOULSHACK_OPWATCHER")},
-		&cli.StringFlag{Name: "opwatchertemplate", Value: "you were just %s by %s", Usage: "prompt template: first %s=action (opped/deopped), second %s=nick", Sources: src("opwatchertemplate", "SOULSHACK_OPWATCHERTEMPLATE")},
+		&cli.BoolFlag{Name: "opwatcher", Usage: "respond when the bot is opped or deopped", Sources: src("opwatcher", "SOULSHACK_OPWATCHER")},
 		&cli.StringFlag{Name: "prompt", Value: "you are a helpful chatbot. do not use caps. do not use emoji.", Usage: "initial system prompt", Sources: src("prompt", "SOULSHACK_PROMPT")},
 	}
 }
@@ -197,59 +201,6 @@ func getConfigPath() string {
 		// Handle -b=... if needed, though standard is space
 	}
 	return ""
-}
-
-func (c *Configuration) PrintConfig() {
-	mask := func(key string) string {
-		if key == "" || len(key) <= 3 {
-			return key
-		}
-		return strings.Repeat("*", len(key)-3) + key[len(key)-3:]
-	}
-
-	fields := []struct{ name, value string }{
-		{"nick", c.Server.Nick},
-		{"server", c.Server.Server},
-		{"port", fmt.Sprintf("%d", c.Server.Port)},
-		{"channel", c.Server.Channel},
-		{"channelkey", mask(c.Server.ChannelKey)},
-		{"tls", fmt.Sprintf("%t", c.Server.SSL)},
-		{"tlsinsecure", fmt.Sprintf("%t", c.Server.TLSInsecure)},
-		{"saslnick", c.Server.SASLNick},
-		{"saslpass", c.Server.SASLPass},
-		{"admins", fmt.Sprintf("%v", c.Bot.Admins)},
-		{"verbose", fmt.Sprintf("%t", c.Bot.Verbose)},
-		{"addressed", fmt.Sprintf("%t", c.Bot.Addressed)},
-		{"chunkmax", fmt.Sprintf("%d", c.Session.ChunkMax)},
-		{"clienttimeout", c.API.Timeout.String()},
-		{"maxcontext", fmt.Sprintf("%d", c.Session.MaxContext)},
-		{"maxtokens", fmt.Sprintf("%d", c.Model.MaxTokens)},
-		{"tool", fmt.Sprintf("%v", c.Bot.Tools)},
-		{"showthinkingaction", fmt.Sprintf("%t", c.Bot.ShowThinkingAction)},
-		{"showtoolactions", fmt.Sprintf("%t", c.Bot.ShowToolActions)},
-		{"urlwatcher", fmt.Sprintf("%t", c.Bot.URLWatcher)},
-		{"urlwatchersilent", fmt.Sprintf("%t", c.Bot.URLWatcherSilent)},
-		{"sandbox", fmt.Sprintf("%t", c.Bot.Sandbox)},
-		{"sessionduration", c.Session.TTL.String()},
-		{"openaikey", mask(c.API.OpenAIKey)},
-		{"anthropickey", mask(c.API.AnthropicKey)},
-		{"geminikey", mask(c.API.GeminiKey)},
-		{"openaiurl", c.API.OpenAIURL},
-		{"ollamaurl", c.API.OllamaURL},
-		{"model", c.Model.Model},
-		{"temperature", fmt.Sprintf("%f", c.Model.Temperature)},
-		{"topp", fmt.Sprintf("%f", c.Model.TopP)},
-		{"thinkingeffort", c.Model.ThinkingEffort},
-		{"stream", fmt.Sprintf("%t", c.Model.Stream)},
-		{"prompt", c.Bot.Prompt},
-		{"greeting", c.Bot.Greeting},
-		{"opwatcher", fmt.Sprintf("%t", c.Bot.OpWatcher)},
-		{"opwatchertemplate", c.Bot.OpWatcherTemplate},
-	}
-
-	for _, f := range fields {
-		fmt.Printf("%s: %s\n", f.name, f.value)
-	}
 }
 
 func NewConfiguration(c *cli.Command) *Configuration {
@@ -278,13 +229,12 @@ func NewConfiguration(c *cli.Command) *Configuration {
 			Prompt:             c.String("prompt"),
 			Greeting:           c.String("greeting"),
 			OpWatcher:          c.Bool("opwatcher"),
-			OpWatcherTemplate:  c.String("opwatchertemplate"),
 			Tools:              c.StringSlice("tool"),
 			ShowThinkingAction: c.Bool("showthinkingaction"),
 			ShowToolActions:    c.Bool("showtoolactions"),
-			URLWatcher:       c.Bool("urlwatcher"),
-			URLWatcherSilent: c.Bool("urlwatchersilent"),
-			Sandbox:          c.Bool("sandbox"),
+			URLWatcher:         c.Bool("urlwatcher"),
+			URLWatcherSilent:   c.Bool("urlwatchersilent"),
+			Sandbox:            c.Bool("sandbox"),
 		},
 		Model: &ModelConfig{
 			Model:          c.String("model"),
@@ -302,13 +252,16 @@ func NewConfiguration(c *cli.Command) *Configuration {
 		},
 
 		API: &APIConfig{
-			Timeout:      c.Duration("apitimeout"),
-			OpenAIKey:    c.String("openaikey"),
-			OpenAIURL:    c.String("openaiurl"),
-			AnthropicKey: c.String("anthropickey"),
-			GeminiKey:    c.String("geminikey"),
-			OllamaURL:    c.String("ollamaurl"),
-			OllamaKey:    c.String("ollamakey"),
+			Timeout:        c.Duration("apitimeout"),
+			OpenAIKey:      c.String("openaikey"),
+			OpenAIURL:      c.String("openaiurl"),
+			AnthropicKey:   c.String("anthropickey"),
+			GeminiKey:      c.String("geminikey"),
+			OllamaURL:      c.String("ollamaurl"),
+			OllamaKey:      c.String("ollamakey"),
+			DeepSeekKey:    c.String("deepseekkey"),
+			OpenRouterKey:  c.String("openrouterkey"),
+			HuggingFaceKey: c.String("huggingfacekey"),
 		},
 	}
 

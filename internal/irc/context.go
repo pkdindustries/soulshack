@@ -5,10 +5,8 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"log/slog"
-	"os"
 	"strings"
 
-	"github.com/alexschlessinger/pollytool/sessions"
 	"github.com/lrstanley/girc"
 
 	"pkdindustries/soulshack/internal/config"
@@ -20,21 +18,24 @@ type ChatContextInterface = core.ChatContextInterface
 
 type ChatContext struct {
 	context.Context
-	Sys       core.System
-	Session   sessions.Session
-	Config    *config.Configuration
-	client    *girc.Client
-	event     *girc.Event
-	args      []string
-	logger    *slog.Logger
-	requestID string
-	fatalCh   chan<- error
+	Sys core.System
+	// conversationKey is what identifies this event's conversation: the
+	// channel for channel traffic, the source nick for anything else.
+	conversationKey string
+	client          *girc.Client
+	event           *girc.Event
+	args            []string
+	logger          *slog.Logger
+	fatalCh         chan<- error
 }
 
 var _ ChatContextInterface = (*ChatContext)(nil)
 
-func NewChatContext(parentctx context.Context, config *config.Configuration, system core.System, ircclient *girc.Client, e *girc.Event, fatalCh chan<- error) (ChatContextInterface, context.CancelFunc) {
-	timedctx, cancel := context.WithTimeout(parentctx, config.API.Timeout)
+func NewChatContext(parentctx context.Context, system core.System, ircclient *girc.Client, e *girc.Event, fatalCh chan<- error) (ChatContextInterface, context.CancelFunc) {
+	// One snapshot for the request: its deadline and its defaults come from
+	// the settings in force now.
+	settings := system.GetConfig()
+	timedctx, cancel := context.WithTimeout(parentctx, settings.API.Timeout)
 
 	// Generate a unique request ID for correlation
 	requestID := generateRequestID()
@@ -42,25 +43,23 @@ func NewChatContext(parentctx context.Context, config *config.Configuration, sys
 	// Ensure Source is not nil for events like CONNECTED
 	if e.Source == nil {
 		e.Source = &girc.Source{
-			Name: config.Server.Channel,
+			Name: settings.Server.Channel,
 		}
 	}
 
 	// Get channel safely
-	channel := config.Server.Channel
+	channel := settings.Server.Channel
 	if len(e.Params) > 0 {
 		channel = e.Params[0]
 	}
 
 	ctx := ChatContext{
-		Context:   timedctx,
-		Config:    config,
-		Sys:       system,
-		client:    ircclient,
-		event:     e,
-		args:      strings.Fields(e.Last()),
-		requestID: requestID,
-		fatalCh:   fatalCh,
+		Context: timedctx,
+		Sys:     system,
+		client:  ircclient,
+		event:   e,
+		args:    strings.Fields(e.Last()),
+		fatalCh: fatalCh,
 		logger: slog.Default().With(
 			"request_id", requestID,
 			"channel", channel,
@@ -77,13 +76,18 @@ func NewChatContext(parentctx context.Context, config *config.Configuration, sys
 		key = e.Source.Name
 	}
 
-	session, err := ctx.Sys.GetSessionStore().Get(key)
-	if err != nil {
-		slog.Error("failed to get session for key", "key", key, "error", err)
-		os.Exit(1)
-	}
-	ctx.Session = session
+	ctx.conversationKey = key
 	return &ctx, cancel
+}
+
+// Value answers the lookup IRC tools use to find their chat context. A turn's
+// context is the chat context, so the lookup resolves by itself: no layer has
+// to inject a value into tool calls.
+func (c *ChatContext) Value(key any) any {
+	if k, ok := key.(contextKey); ok && k == kContextKey {
+		return ChatContextInterface(c)
+	}
+	return c.Context.Value(key)
 }
 
 func (c ChatContext) GetSystem() core.System {
@@ -91,7 +95,7 @@ func (c ChatContext) GetSystem() core.System {
 }
 
 func (c ChatContext) GetConfig() *config.Configuration {
-	return c.Config
+	return c.Sys.GetConfig()
 }
 
 func (c ChatContext) GetLogger() *slog.Logger {
@@ -144,12 +148,12 @@ func (c ChatContext) GetArgs() []string {
 	return c.args
 }
 
-func (c ChatContext) GetSession() sessions.Session {
-	return c.Session
-}
-
 func (c ChatContext) GetBotNick() string {
 	return c.client.GetNick()
+}
+
+func (c ChatContext) GetServerOption(key string) (string, bool) {
+	return c.client.GetServerOption(key)
 }
 
 func (c ChatContext) GetSource() string {
@@ -159,8 +163,9 @@ func (c ChatContext) GetSource() string {
 func (c ChatContext) IsAdmin() bool {
 	hostmask := c.event.Source.String()
 	c.logger.Debug("admin_check", "hostmask", hostmask)
-	isAdmin := CheckAdmin(hostmask, c.Config.Bot.Admins)
-	if isAdmin && len(c.Config.Bot.Admins) == 0 {
+	admins := c.GetConfig().Bot.Admins
+	isAdmin := CheckAdmin(hostmask, admins)
+	if isAdmin && len(admins) == 0 {
 		c.logger.Debug("admin_check_warning")
 	} else if isAdmin {
 		c.logger.Debug("admin_verified", "hostmask", hostmask)
@@ -171,6 +176,23 @@ func (c ChatContext) IsAdmin() bool {
 func (c ChatContext) Reply(message string) {
 	c.client.Cmd.Reply(*c.event, message)
 
+}
+
+// NewChunkWriter frames model output into IRC-sized messages.
+func (c ChatContext) NewChunkWriter(output chan<- string) core.ChunkWriter {
+	return NewChunker(output, c.chunkSize())
+}
+
+var _ core.ChunkWriter = (*Chunker)(nil)
+
+// defaultChunkSize applies when chunkmax is disabled.
+const defaultChunkSize = 400
+
+func (c ChatContext) chunkSize() int {
+	if size := c.GetConfig().Session.ChunkMax; size > 0 {
+		return size
+	}
+	return defaultChunkSize
 }
 
 func (c ChatContext) SendAction(target, message string) {
@@ -266,23 +288,8 @@ func (c ChatContext) GetChannelUsers(channel string) []core.ChannelUser {
 	return result
 }
 
-func (c ChatContext) GetLockKey() string {
-	if len(c.event.Params) > 0 && girc.IsValidChannel(c.event.Params[0]) {
-		return c.Config.Server.Channel
-	}
-	if c.event.Source != nil {
-		return c.event.Source.Name
-	}
-	return c.Config.Server.Channel
-}
-
-func (c ChatContext) IsOp(channel, nick string) bool {
-	user := c.client.LookupUser(nick)
-	if user == nil {
-		return false
-	}
-	perms, ok := user.Perms.Lookup(channel)
-	return ok && perms.IsAdmin()
+func (c ChatContext) GetConversationKey() string {
+	return c.conversationKey
 }
 
 func (c ChatContext) IsPrivate() bool {

@@ -9,7 +9,7 @@
 -   **Multi-Provider Support**: Works with OpenAI, Anthropic, Google Gemini, and Ollama.
 -   **Unified Tool System**: Supports shell scripts, MCP servers, and native IRC tools.
 -   **Secure**: Full SSL/TLS and SASL authentication support.
--   **Session Management**: Configurable history, context window, and session TTL.
+-   **Conversation Management**: Per-channel memory with a configurable context window and idle expiry.
 -   **Streaming**: Real-time responses with IRC-appropriate chunking.
 -   **Passive Mode**: Optional URL watching and analysis.
 -   **Runtime Configuration**: Manage settings via IRC commands.
@@ -155,16 +155,28 @@ docker build . -t soulshack:dev
 | `-V, --verbose` | false | Enable debug logging |
 | `--model` | ollama/llama3.2 | LLM model (`provider/name`) |
 | `--maxtokens` | 4096 | Max tokens per response |
+| `--maxcontext` | 0 | Token budget for a conversation: it bounds both what the model is sent and what is kept in memory (0 = unlimited) |
+| `-S, --sessionduration` | 10m | A conversation is forgotten after this much inactivity (0 = no expiry) |
 | `--temperature` | 0.7 | Sampling temperature |
 | `-t, --apitimeout` | 5m | API request timeout |
 | `--openaikey` | | OpenAI API key |
 | `--anthropickey` | | Anthropic API key |
 | `--geminikey` | | Google Gemini API key |
+| `--deepseekkey` | | DeepSeek API key |
+| `--openrouterkey` | | OpenRouter API key |
+| `--huggingfacekey` | | Hugging Face API key |
 | `--ollamaurl` | http://localhost:11434 | Ollama API endpoint |
 | `--tool` | | Path to tool definition (repeatable) |
 | `--thinkingeffort` | off | Reasoning effort level: off, low, medium, high |
 | `--urlwatcher` | false | Enable passive URL watching |
+| `--opwatcher` | false | Respond when the bot is opped or deopped |
 | `--sandbox` | false | Sandbox shell, bash, and MCP tools (see below) |
+
+`--opwatcher` passes the original MODE event to the model with sender attribution, for example `(nick:alice) MODE #channel +o soulshack`. It uses the channel's conversation history and sends replies normally, without a watcher-specific prompt template.
+
+`/stats` shows the last completed model input separately from stored message counts and total provider token usage.
+
+Conversations live in memory, one per channel (`#chan`) or per correspondent in private messages, and are forgotten after `--sessionduration` of inactivity. With `--maxcontext` set, a conversation keeps only the newest exchanges that fit, so a long-lived channel cannot grow without bound; `maxcontext` also caps what a request may send. Anything that changes what the model sees (`/set` of any key) starts the conversation over as a side effect.
 
 ### YAML Configuration
 
@@ -182,7 +194,7 @@ bot:
   admins: ["nick!user@host"]
   tools:
     - "examples/tools/datetime.sh"
-    - "examples/mcp/filesystem.json"
+    - "examples/tools/news.py"
 ```
 
 Run with: `./soulshack --config config.yml`
@@ -201,16 +213,19 @@ Run with: `./soulshack --config config.yml`
 | `/set <key> <value>` | Yes | Set config parameter |
 | `/get <key>` | No | Get config parameter |
 
+Admin entries use full `nick!user@host` masks and match case-insensitively. `*` matches any number of characters and `?` matches one; other characters, including brackets, are literal. For example, use `admins: ["alex!*@trusted.example"]` in YAML or `/admins add alex!*@trusted.example` at runtime. Runtime additions last until restart.
+
 ## Built-in Tools
 
 Soulshack comes with native IRC management tools (permissions apply):
 
--   `irc_op`, `irc_deop`: Grant/revoke operator status.
--   `irc_kick`, `irc_ban`, `irc_unban`: User management.
--   `irc_topic`: Set channel topic.
--   `irc_invite`: Invite users to channel.
--   `irc_mode_set`, `irc_mode_query`: Manage channel modes.
--   `irc_names`, `irc_whois`: User information.
+-   `irc__op`: Configured bot admins may op/deop anyone; everyone else may op/deop themselves. With no admins configured, this tool allows only self-service. The bot must already be opped.
+-   `irc__kick`, `irc__ban` (which also unbans): User management.
+-   `irc__topic`: Set channel topic.
+-   `irc__action`: Send a channel action.
+-   `irc__invite`: Invite users to channel.
+-   `irc__mode_set`, `irc__mode_query`: Manage channel modes.
+-   `irc__names`, `irc__whois`: User information.
 
 ## Sandboxing
 

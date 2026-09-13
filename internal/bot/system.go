@@ -4,7 +4,6 @@ import (
 	"log/slog"
 	"sync/atomic"
 
-	"github.com/alexschlessinger/pollytool/sessions"
 	"github.com/alexschlessinger/pollytool/tools"
 	"github.com/alexschlessinger/pollytool/tools/sandbox"
 
@@ -12,20 +11,30 @@ import (
 	"pkdindustries/soulshack/internal/core"
 	"pkdindustries/soulshack/internal/irc"
 	"pkdindustries/soulshack/internal/llm"
+	"pkdindustries/soulshack/internal/memory"
 )
 
 type SystemImpl struct {
-	Store sessions.SessionStore
-	Tools *tools.ToolRegistry
-	llm   atomic.Value // stores core.LLM
+	Memory *memory.Memory
+	Tools  *tools.ToolRegistry
+	Config *config.Store
+	llm    atomic.Value // stores core.LLM
+}
+
+func (s *SystemImpl) GetConfig() *config.Configuration {
+	return s.Config.Snapshot()
+}
+
+func (s *SystemImpl) UpdateConfig(fn func(*config.Configuration) error) error {
+	return s.Config.Update(fn)
 }
 
 func (s *SystemImpl) GetToolRegistry() *tools.ToolRegistry {
 	return s.Tools
 }
 
-func (s *SystemImpl) GetSessionStore() sessions.SessionStore {
-	return s.Store
+func (s *SystemImpl) GetMemory() *memory.Memory {
+	return s.Memory
 }
 
 func (s *SystemImpl) GetLLM() core.LLM {
@@ -38,8 +47,8 @@ func (s *SystemImpl) UpdateLLM(cfg config.APIConfig) error {
 	return nil
 }
 
-func NewSystem(c *config.Configuration) core.System {
-	s := &SystemImpl{}
+func NewSystem(c *config.Configuration) (core.System, error) {
+	s := &SystemImpl{Config: config.NewStore(c)}
 
 	// Optionally enable platform sandboxing for shell/bash/MCP tools.
 	var regOpts []tools.RegistryOption
@@ -47,10 +56,13 @@ func NewSystem(c *config.Configuration) core.System {
 		baseCfg := sandbox.DefaultConfig()
 		if _, err := sandbox.New(baseCfg); err != nil {
 			slog.Warn("sandbox_unavailable", "error", err)
+			regOpts = append(regOpts, tools.WithUnsafeNoSandbox())
 		} else {
 			regOpts = append(regOpts, tools.WithSandboxFactory(sandbox.New, baseCfg))
 			slog.Info("sandbox_enabled")
 		}
+	} else {
+		regOpts = append(regOpts, tools.WithUnsafeNoSandbox())
 	}
 	s.Tools = tools.NewToolRegistry([]tools.Tool{}, regOpts...)
 
@@ -69,11 +81,11 @@ func NewSystem(c *config.Configuration) core.System {
 		}
 	}
 
-	// initialize sessions with pollytool's SyncMapSessionStore
-	s.Store = sessions.NewSyncMapSessionStore(&sessions.Metadata{
-		MaxHistoryTokens: c.Session.MaxContext,
-		TTL:              c.Session.TTL,
-		SystemPrompt:     c.Bot.Prompt,
+	// Conversations live in this process only: an in-memory transcript with
+	// an idle expiry.
+	s.Memory = memory.New(memory.Config{
+		Budget: c.Session.MaxContext,
+		TTL:    c.Session.TTL,
 	})
 
 	// Initialize LLM
@@ -90,5 +102,5 @@ func NewSystem(c *config.Configuration) core.System {
 	}
 	slog.Info("system_initialized", fields...)
 
-	return s
+	return s, nil
 }
