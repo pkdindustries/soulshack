@@ -9,6 +9,7 @@ import (
 	polly "github.com/alexschlessinger/pollytool/llm"
 	"github.com/alexschlessinger/pollytool/messages"
 	"github.com/alexschlessinger/pollytool/tools"
+	"pkdindustries/soulshack/internal/config"
 	"pkdindustries/soulshack/internal/core"
 	mocktest "pkdindustries/soulshack/internal/testing"
 )
@@ -20,6 +21,57 @@ func (f completionFunc) ChatCompletionStream(ctx context.Context, req *polly.Com
 	input <- f(ctx, req)
 	close(input)
 	return processor.ProcessMessagesToEvents(input)
+}
+
+func TestCompletionOmissionDoesNotRecommendRemovedTools(t *testing.T) {
+	sys := mocktest.NewMockSystem(t)
+	sys.Memory.SetBudget(1000)
+	// The retained transcript fits, but the system prompt forces projection
+	// to omit an exchange from the request sent to the provider.
+	mocktest.SetConfig(t, sys, func(c *config.Configuration) { c.Bot.Prompt = strings.Repeat("a", 1800) })
+	ctx := mocktest.NewMockContext().WithSystem(sys)
+	modelCalls := 0
+	sys.LLM = &PollyLLM{client: completionFunc(func(_ context.Context, req *polly.CompletionRequest) messages.ChatMessage {
+		modelCalls++
+		for _, tool := range req.Tools {
+			if tool.GetName() == "read_transcript" {
+				t.Error("request offers removed read_transcript tool")
+			}
+		}
+		for _, msg := range req.Messages {
+			if strings.Contains(msg.Content, "read_transcript") {
+				t.Error("projection recommends removed read_transcript tool")
+			}
+		}
+		return messages.ChatMessage{Role: messages.MessageRoleAssistant, Content: "done", StopReason: messages.StopReasonEndTurn}
+	})}
+	core.WithConversation(ctx, "seed", func(turn *core.Turn) {
+		turn.Conversation.Append([]messages.ChatMessage{
+			{Role: messages.MessageRoleUser, Content: strings.Repeat("old", 800)},
+			{Role: messages.MessageRoleAssistant, Content: "old answer"},
+		})
+	}, nil)
+	for i := range 2 {
+		ctx.Actions = nil
+		core.WithConversation(ctx, "complete", func(turn *core.Turn) {
+			for range Complete(turn, "new question") {
+			}
+			usage, ok := turn.Conversation.Usage()
+			if !ok || usage.OmittedExchanges != 1 {
+				t.Fatalf("usage = %+v, recorded=%v", usage, ok)
+			}
+		}, nil)
+		if i == 0 {
+			if len(ctx.Actions) != 1 || ctx.Actions[0] != "Model input omitted 1 older exchanges" {
+				t.Fatalf("omission warning = %v", ctx.Actions)
+			}
+		} else if len(ctx.Actions) != 0 {
+			t.Fatalf("omission warning repeated: %v", ctx.Actions)
+		}
+	}
+	if modelCalls != 2 {
+		t.Fatalf("model calls = %d, want 2", modelCalls)
+	}
 }
 
 // The bot offers only the tools soulshack registered. Polly's private
