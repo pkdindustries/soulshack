@@ -3,6 +3,7 @@ package irc
 import (
 	"bytes"
 	"strings"
+	"unicode/utf8"
 )
 
 // Chunker handles chunking of content for IRC message limits.
@@ -16,6 +17,9 @@ type Chunker struct {
 
 // NewChunker creates a new IRC chunker that writes to the given output channel.
 func NewChunker(output chan<- string, maxChunkSize int) *Chunker {
+	if maxChunkSize <= 0 {
+		maxChunkSize = defaultChunkSize
+	}
 	return &Chunker{
 		output:       output,
 		buffer:       &bytes.Buffer{},
@@ -58,16 +62,17 @@ func (c *Chunker) Write(content string) {
 // writeLine emits a complete line, splitting it when it is longer than one
 // message can carry. Like extractBestSplitChunk, it prefers a word boundary.
 func (c *Chunker) writeLine(line string) {
-	for len(line) > c.maxChunkSize {
-		split := c.maxChunkSize
-		if idx := strings.LastIndexByte(line[:split], ' '); idx > 0 {
-			split = idx
+	data := []byte(line)
+	for len(data) > c.maxChunkSize {
+		end, consumed := splitChunk(data, c.maxChunkSize)
+		if consumed == 0 {
+			break
 		}
-		c.output <- line[:split]
-		line = strings.TrimLeft(line[split:], " ")
+		c.output <- string(data[:end])
+		data = bytes.TrimLeft(data[consumed:], " ")
 	}
-	if line != "" {
-		c.output <- line
+	if len(data) > 0 {
+		c.output <- string(data)
 	}
 }
 
@@ -77,19 +82,33 @@ func (c *Chunker) extractBestSplitChunk() string {
 	}
 
 	data := c.buffer.Bytes()
-	end := min(c.maxChunkSize, len(data))
-
-	// Try to find a space within the allowed range to break cleanly
-	if idx := bytes.LastIndexByte(data[:end], ' '); idx > 0 {
-		chunk := string(data[:idx])
-		c.buffer.Next(idx + 1) // Skip the space itself
-		return chunk
-	}
-
-	// If no space is found, hard break at maxChunkSize
+	end, consumed := splitChunk(data, c.maxChunkSize)
 	chunk := string(data[:end])
-	c.buffer.Next(end)
+	c.buffer.Next(consumed)
 	return chunk
+}
+
+// splitChunk prefers a word boundary within the byte limit. It waits for
+// incomplete UTF-8 at the end of a streaming write, and lets a single rune
+// exceed a limit smaller than that rune so the text can always make progress.
+func splitChunk(data []byte, limit int) (end, consumed int) {
+	for end < len(data) {
+		if !utf8.FullRune(data[end:]) {
+			break
+		}
+		_, width := utf8.DecodeRune(data[end:])
+		if end > 0 && end+width > limit {
+			break
+		}
+		end += width
+		if end >= limit {
+			break
+		}
+	}
+	if idx := bytes.LastIndexByte(data[:end], ' '); idx > 0 {
+		return idx, idx + 1
+	}
+	return end, end
 }
 
 // Flush emits any remaining buffer content, still respecting the message size
