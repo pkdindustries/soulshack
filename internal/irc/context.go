@@ -152,6 +152,10 @@ func (c ChatContext) GetBotNick() string {
 	return c.client.GetNick()
 }
 
+func (c ChatContext) GetServerOption(key string) (string, bool) {
+	return c.client.GetServerOption(key)
+}
+
 func (c ChatContext) GetSource() string {
 	return c.event.Source.Name
 }

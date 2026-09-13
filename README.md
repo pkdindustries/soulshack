@@ -169,7 +169,10 @@ docker build . -t soulshack:dev
 | `--tool` | | Path to tool definition (repeatable) |
 | `--thinkingeffort` | off | Reasoning effort level: off, low, medium, high |
 | `--urlwatcher` | false | Enable passive URL watching |
+| `--opwatcher` | false | Respond when the bot is opped or deopped |
 | `--sandbox` | false | Sandbox shell, bash, and MCP tools (see below) |
+
+`--opwatcher` passes the original MODE event to the model with sender attribution, for example `(nick:alice) MODE #channel +o soulshack`. It uses the channel's conversation history and sends replies normally, without a watcher-specific prompt template.
 
 `/stats` shows the last completed model input separately from stored message counts and total provider token usage.
 
@@ -210,11 +213,13 @@ Run with: `./soulshack --config config.yml`
 | `/set <key> <value>` | Yes | Set config parameter |
 | `/get <key>` | No | Get config parameter |
 
+Admin entries use full `nick!user@host` masks and match case-insensitively. `*` matches any number of characters and `?` matches one; other characters, including brackets, are literal. For example, use `admins: ["alex!*@trusted.example"]` in YAML or `/admins add alex!*@trusted.example` at runtime. Runtime additions last until restart.
+
 ## Built-in Tools
 
 Soulshack comes with native IRC management tools (permissions apply):
 
--   `irc__op`: Grant or revoke operator status.
+-   `irc__op`: Configured bot admins may op/deop anyone; everyone else may op/deop themselves. With no admins configured, this tool allows only self-service. The bot must already be opped.
 -   `irc__kick`, `irc__ban` (which also unbans): User management.
 -   `irc__topic`: Set channel topic.
 -   `irc__action`: Send a channel action.

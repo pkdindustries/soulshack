@@ -94,21 +94,35 @@ func RegisterIRCTools(registry *tools.ToolRegistry) {
 func newIrcOpTool() tools.Tool {
 	return &tools.Func{
 		Name: "irc__op",
-		Desc: "Grant or revoke IRC operator status for one or more users",
+		Desc: "Grant or revoke IRC operator status. Anyone may op or deop themselves; honor explicit self-service requests by calling this tool. Configured bot admins may op or deop anyone. The requester is identified from the IRC event, not from tool arguments. The tool checks permissions and whether the bot is opped; report any denial it returns.",
 		Params: schema.Params{
 			"users": schema.Strings("List of user nicknames to op/deop"),
 			"grant": schema.Bool("true to grant op, false to revoke"),
 		},
 		Required: []string{"users", "grant"},
 		Run: func(ctx context.Context, args tools.Args) (string, error) {
-			chatCtx, msg, err := validateAdminOp(ctx)
-			if err != nil || msg != "" {
-				return msg, err
+			chatCtx, err := validateContext(ctx)
+			if err != nil {
+				return "", err
 			}
-
 			users := args.StringSlice("users")
 			if len(users) == 0 {
 				return "", fmt.Errorf("users must be a non-empty array of strings")
+			}
+			cfg := chatCtx.GetConfig()
+			// Empty admin lists historically make IsAdmin true. For this tool,
+			// changing other users requires an explicitly configured admin.
+			if len(cfg.Bot.Admins) == 0 || !chatCtx.IsAdmin() {
+				caseMapping, _ := chatCtx.GetServerOption("CASEMAPPING")
+				requester := FoldNick(chatCtx.GetSource(), caseMapping)
+				for _, nick := range users {
+					if requester == "" || FoldNick(nick, caseMapping) != requester {
+						return "Only configured admins may change other users' operator status; you may op or deop yourself", nil
+					}
+				}
+			}
+			if !isBotOpped(chatCtx) {
+				return "Bot does not have operator status in the channel", nil
 			}
 
 			mode := "-o"
@@ -116,7 +130,7 @@ func newIrcOpTool() tools.Tool {
 				mode = "+o"
 			}
 
-			channel := chatCtx.GetConfig().Server.Channel
+			channel := cfg.Server.Channel
 			for _, nick := range users {
 				if err := ctx.Err(); err != nil {
 					return "", err

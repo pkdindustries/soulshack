@@ -9,10 +9,40 @@ import (
 	"github.com/alexschlessinger/pollytool/messages"
 	"github.com/lrstanley/girc"
 
+	"pkdindustries/soulshack/internal/commands"
 	"pkdindustries/soulshack/internal/core"
 	"pkdindustries/soulshack/internal/irc"
 	mocktest "pkdindustries/soulshack/internal/testing"
 )
+
+func TestIsAdminUsesMasksAddedAtRuntime(t *testing.T) {
+	sys := mocktest.NewMockSystem(t)
+	setup := mocktest.NewTurnContext(t, sys, "#test").WithAdmin(true).
+		WithArgs("/admins", "add", "alex!*@trusted.example")
+	command := &commands.AdminCommand{}
+	command.Execute(setup.Turn())
+	if admins := sys.GetConfig().Bot.Admins; len(admins) != 1 || admins[0] != "alex!*@trusted.example" {
+		t.Fatalf("wildcard admin was not added: %v; replies: %v", admins, setup.Replies)
+	}
+	for _, tt := range []struct {
+		nick, host string
+		want       bool
+	}{
+		{"alex", "trusted.example", true},
+		{"Alex", "TRUSTED.example", true},
+		{"other", "trusted.example", false},
+		{"alex", "untrusted.example", false},
+	} {
+		ctx := newEventContext(t, sys, &girc.Event{
+			Command: girc.PRIVMSG,
+			Source:  &girc.Source{Name: tt.nick, Ident: "~alex", Host: tt.host},
+			Params:  []string{"#test", "soulshack: op me"},
+		})
+		if got := ctx.IsAdmin(); got != tt.want {
+			t.Errorf("IsAdmin(%s!~alex@%s) = %v, want %v", tt.nick, tt.host, got, tt.want)
+		}
+	}
+}
 
 func newEventContext(t *testing.T, sys core.System, event *girc.Event) irc.ChatContextInterface {
 	t.Helper()

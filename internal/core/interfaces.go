@@ -56,6 +56,7 @@ type ChatContextInterface interface {
 	GetChannel(name string) *ChannelInfo
 	GetChannelUsers(channel string) []ChannelUser
 	GetBotNick() string
+	GetServerOption(key string) (string, bool)
 	GetConversationKey() string
 
 	// Runtime methods

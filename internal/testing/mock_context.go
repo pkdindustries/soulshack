@@ -36,10 +36,11 @@ type MockChatContext struct {
 	client       *girc.Client
 
 	// Mock data for lookups
-	Users        map[string]*core.UserInfo
-	Channels     map[string]*core.ChannelInfo
-	ChannelUsers map[string][]core.ChannelUser
-	BotNick      string
+	Users         map[string]*core.UserInfo
+	Channels      map[string]*core.ChannelInfo
+	ChannelUsers  map[string][]core.ChannelUser
+	BotNick       string
+	ServerOptions map[string]string
 }
 
 // Verify MockChatContext implements core.ChatContextInterface
@@ -208,6 +209,11 @@ func (m *MockChatContext) GetChannelUsers(channel string) []core.ChannelUser {
 
 func (m *MockChatContext) GetBotNick() string {
 	return m.BotNick
+}
+
+func (m *MockChatContext) GetServerOption(key string) (string, bool) {
+	value, ok := m.ServerOptions[key]
+	return value, ok
 }
 
 // Runtime methods

@@ -49,7 +49,7 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 	behaviorRegistry.Register(&behaviors.ChannelErrorBehavior{})
 	// Reactive behaviors
 	behaviorRegistry.Register(&behaviors.URLBehavior{})
-	behaviorRegistry.Register(&behaviors.OpBehavior{BotNick: cfg.Server.Nick})
+	behaviorRegistry.Register(&behaviors.OpBehavior{})
 	behaviorRegistry.Register(&behaviors.JoinBehavior{BotNick: cfg.Server.Nick})
 	behaviorRegistry.Register(&behaviors.AddressedBehavior{CmdRegistry: cmdRegistry})
 	behaviorRegistry.Register(&behaviors.NonAddressedBehavior{CmdRegistry: cmdRegistry})
