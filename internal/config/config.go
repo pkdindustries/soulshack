@@ -40,7 +40,6 @@ type BotConfig struct {
 	Prompt             string
 	Greeting           string
 	OpWatcher          bool
-	OpWatcherTemplate  string
 	Tools              []string
 	ShowThinkingAction bool
 	ShowToolActions    bool
@@ -142,7 +141,7 @@ func GetFlags() []cli.Flag {
 		&cli.StringFlag{Name: "saslpass", Usage: "password for SASL plain", Sources: src("saslpass", "SOULSHACK_SASLPASS")},
 
 		// Bot Configuration
-		&cli.StringSliceFlag{Name: "admins", Aliases: []string{"A"}, Usage: "comma-separated list of allowed hostmasks to administrate the bot", Sources: src("admins", "SOULSHACK_ADMINS")},
+		&cli.StringSliceFlag{Name: "admins", Aliases: []string{"A"}, Usage: "comma-separated admin hostmasks (case-insensitive; * and ? wildcards)", Sources: src("admins", "SOULSHACK_ADMINS")},
 		&cli.BoolFlag{Name: "verbose", Aliases: []string{"V"}, Usage: "enable verbose logging (shortcut for --loglevel=debug)", Sources: src("verbose", "SOULSHACK_VERBOSE")},
 		&cli.StringFlag{Name: "loglevel", Value: "info", Usage: "log level: debug, info, warn, error", Sources: src("loglevel", "SOULSHACK_LOGLEVEL")},
 		&cli.StringFlag{Name: "logformat", Value: "text", Usage: "log format: text (colorized), json", Sources: src("logformat", "SOULSHACK_LOGFORMAT")},
@@ -179,8 +178,7 @@ func GetFlags() []cli.Flag {
 
 		// Personality / Prompting
 		&cli.StringFlag{Name: "greeting", Value: "hello.", Usage: "prompt to be used when the bot joins the channel", Sources: src("greeting", "SOULSHACK_GREETING")},
-		&cli.BoolFlag{Name: "opwatcher", Usage: "enable +o watcher to trigger LLM on being opped", Sources: src("opwatcher", "SOULSHACK_OPWATCHER")},
-		&cli.StringFlag{Name: "opwatchertemplate", Value: "you were just %s by %s", Usage: "prompt template: first %s=action (opped/deopped), second %s=nick", Sources: src("opwatchertemplate", "SOULSHACK_OPWATCHERTEMPLATE")},
+		&cli.BoolFlag{Name: "opwatcher", Usage: "respond when the bot is opped or deopped", Sources: src("opwatcher", "SOULSHACK_OPWATCHER")},
 		&cli.StringFlag{Name: "prompt", Value: "you are a helpful chatbot. do not use caps. do not use emoji.", Usage: "initial system prompt", Sources: src("prompt", "SOULSHACK_PROMPT")},
 	}
 }
@@ -231,7 +229,6 @@ func NewConfiguration(c *cli.Command) *Configuration {
 			Prompt:             c.String("prompt"),
 			Greeting:           c.String("greeting"),
 			OpWatcher:          c.Bool("opwatcher"),
-			OpWatcherTemplate:  c.String("opwatchertemplate"),
 			Tools:              c.StringSlice("tool"),
 			ShowThinkingAction: c.Bool("showthinkingaction"),
 			ShowToolActions:    c.Bool("showtoolactions"),

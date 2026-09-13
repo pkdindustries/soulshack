@@ -60,7 +60,7 @@ func (c *AdminCommand) addAdmin(turn *core.Turn, hostmask string) {
 		return
 	}
 
-	if err := irc.ValidateHostmask(hostmask); err != nil {
+	if err := irc.ValidateAdminMask(hostmask); err != nil {
 		turn.Reply(fmt.Sprintf("Invalid hostmask: %s", err))
 		return
 	}

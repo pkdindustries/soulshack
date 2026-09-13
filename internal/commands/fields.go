@@ -53,7 +53,6 @@ var configFields = map[string]configField{
 	"urlwatcher":         boolSetting(func(c *settings) *bool { return &c.Bot.URLWatcher }),
 	"urlwatchersilent":   boolSetting(func(c *settings) *bool { return &c.Bot.URLWatcherSilent }),
 	"opwatcher":          boolSetting(func(c *settings) *bool { return &c.Bot.OpWatcher }),
-	"opwatchertemplate":  stringSetting(func(c *settings) *string { return &c.Bot.OpWatcherTemplate }),
 
 	// Two settings are also held by the conversations themselves.
 	"maxcontext": withApply(intSetting(func(c *settings) *int { return &c.Session.MaxContext }, 0),
