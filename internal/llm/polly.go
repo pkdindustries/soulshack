@@ -65,8 +65,8 @@ func (p *PollyLLM) ChatCompletionStream(turn *core.Turn, req *CompletionRequest)
 			OmittedExchanges: resp.Projection.OmittedExchanges,
 		}
 		turn.Conversation.Append(resp.AllMessages)
-		turn.Conversation.SetUsage(usage)
 		checkContextUsage(turn, usage)
+		turn.Conversation.SetUsage(usage)
 	}()
 
 	return output

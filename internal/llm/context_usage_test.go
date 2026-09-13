@@ -1,11 +1,51 @@
 package llm
 
 import (
+	"context"
+	"strings"
 	"testing"
 
+	polly "github.com/alexschlessinger/pollytool/llm"
+	"github.com/alexschlessinger/pollytool/messages"
+	"pkdindustries/soulshack/internal/config"
+	"pkdindustries/soulshack/internal/core"
 	"pkdindustries/soulshack/internal/memory"
 	mocktest "pkdindustries/soulshack/internal/testing"
 )
+
+func TestCompletionWarnsWhenContextUsageIncreases(t *testing.T) {
+	sys := mocktest.NewMockSystem(t)
+	sys.Memory.SetBudget(1000)
+	ctx := mocktest.NewMockContext().WithSystem(sys)
+	sys.LLM = &PollyLLM{client: completionFunc(func(context.Context, *polly.CompletionRequest) messages.ChatMessage {
+		return messages.ChatMessage{Role: messages.MessageRoleAssistant, Content: "done", StopReason: messages.StopReasonEndTurn}
+	})}
+
+	for _, tc := range []struct {
+		promptBytes int
+		want        string
+	}{
+		{2000, ""},
+		{3200, "Model input reached 75% of its context budget"},
+		{3200, ""},
+		{3600, "Model input reached 90% of its context budget"},
+		{3600, ""},
+	} {
+		mocktest.SetConfig(t, sys, func(c *config.Configuration) { c.Bot.Prompt = strings.Repeat("a", tc.promptBytes) })
+		ctx.Actions = nil
+		core.WithConversation(ctx, "complete", func(turn *core.Turn) {
+			for range Complete(turn, "hello") {
+			}
+		}, nil)
+		if tc.want == "" {
+			if len(ctx.Actions) != 0 {
+				t.Fatalf("unexpected warnings: %v", ctx.Actions)
+			}
+		} else if len(ctx.Actions) != 1 || ctx.Actions[0] != tc.want {
+			t.Fatalf("warnings = %v, want %q", ctx.Actions, tc.want)
+		}
+	}
+}
 
 func TestContextUsageWarningsFollowProjection(t *testing.T) {
 	for _, tc := range []struct {
