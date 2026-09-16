@@ -288,10 +288,6 @@ func (b *backgroundMockContext) Value(key any) any {
 	return b.ctx.Value(key)
 }
 
-func (b *backgroundMockContext) Background(timeout time.Duration) (core.ChatContextInterface, context.CancelFunc) {
-	return b.MockChatContext.Background(timeout)
-}
-
 // NewChunkWriter hands model output straight through, so tests see the chunks
 // the LLM produced rather than IRC-framed ones.
 func (m *MockChatContext) NewChunkWriter(output chan<- string) core.ChunkWriter {
