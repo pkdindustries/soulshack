@@ -14,6 +14,10 @@ import (
 	"pkdindustries/soulshack/internal/memory"
 )
 
+// turnMaxIterations bounds the bot's own tool loop for one turn. A child's is
+// shorter; see childMaxIterations.
+const turnMaxIterations = 10
+
 // PollyLLM wraps pollytool's MultiPass and Agent to implement soulshack's LLM interface
 type PollyLLM struct {
 	client llm.LLM
@@ -48,7 +52,10 @@ func (p *PollyLLM) ChatCompletionStream(turn *core.Turn, req *CompletionRequest)
 		registry, release := offeredRegistry(turn.GetSystem().GetToolRegistry(), req.Tools)
 		defer release()
 
-		agent := CreateAgentForRegistry(p.client, registry, cfg.API.Timeout)
+		agent := CreateAgent(p.client, registry, llm.AgentConfig{
+			MaxIterations: turnMaxIterations,
+			ToolTimeout:   cfg.API.Timeout,
+		})
 		defer agent.Close()
 
 		framer := turn.NewChunkWriter(output)
@@ -216,14 +223,17 @@ func (h *callbackHandler) onError(err error) {
 	h.framer.Write(fmt.Sprintf("Error: %v", err))
 }
 
-// CreateAgentForRegistry shares the caller-owned configured tools, sandbox
-// policy, and MCP connections. Polly's private per-agent built-ins are dropped:
-// an IRC turn has nothing to do with artifacts or images, and its conversation
-// is short enough that paging a transcript only spends tokens. Removing them
-// from the agent's own registry leaves the caller's tools, which it inherits,
-// untouched.
-func CreateAgentForRegistry(client llm.LLM, registry *tools.ToolRegistry, timeout time.Duration) *llm.Agent {
-	return createAgent(client, registry, llm.AgentConfig{MaxIterations: 10, ToolTimeout: timeout})
+// CreateAgent shares the caller-owned configured tools, sandbox policy, and MCP
+// connections. Polly's private per-agent built-ins are dropped: an IRC turn has
+// nothing to do with artifacts or images, and its conversation is short enough
+// that paging a transcript only spends tokens. Removing them from the agent's
+// own registry leaves the caller's tools, which it inherits, untouched.
+func CreateAgent(client llm.LLM, registry *tools.ToolRegistry, config llm.AgentConfig) *llm.Agent {
+	agent := llm.NewAgent(client, registry, config)
+	for _, name := range llm.BuiltinToolNames() {
+		agent.ToolRegistry().Remove(name)
+	}
+	return agent
 }
 
 // offeredRegistry narrows what an agent may run to what the request offered
@@ -253,14 +263,4 @@ func offeredRegistry(registry *tools.ToolRegistry, offered []tools.Tool) (*tools
 
 	derived := registry.Derive(tools.DenyTools(withheld...))
 	return derived, func() { derived.Close() }
-}
-
-// createAgent is CreateAgentForRegistry's shared body, for the callers that
-// run an agent on something other than a turn's settings.
-func createAgent(client llm.LLM, registry *tools.ToolRegistry, config llm.AgentConfig) *llm.Agent {
-	agent := llm.NewAgent(client, registry, config)
-	for _, name := range llm.BuiltinToolNames() {
-		agent.ToolRegistry().Remove(name)
-	}
-	return agent
 }

@@ -132,16 +132,18 @@ func TestChildSeesOnlyItsBrief(t *testing.T) {
 func TestChildModelResolution(t *testing.T) {
 	cfg := mocktest.DefaultTestConfig()
 	cfg.Model.Model = "anthropic/big"
+	spec := core.SubagentSpec{Config: cfg}
 
 	cfg.Bot.SubagentModel = ""
-	if model := childModel(core.SubagentSpec{}, cfg); model != "" {
+	if model := childModel(spec); model != "" {
 		t.Fatalf("expected the bot's own model to stand, got %q", model)
 	}
 	cfg.Bot.SubagentModel = "ollama/small"
-	if model := childModel(core.SubagentSpec{}, cfg); model != "ollama/small" {
+	if model := childModel(spec); model != "ollama/small" {
 		t.Fatalf("expected the configured agent model, got %q", model)
 	}
-	if model := childModel(core.SubagentSpec{Model: "openai/asked-for"}, cfg); model != "openai/asked-for" {
+	spec.Model = "openai/asked-for"
+	if model := childModel(spec); model != "openai/asked-for" {
 		t.Fatalf("expected the brief's model, got %q", model)
 	}
 }
