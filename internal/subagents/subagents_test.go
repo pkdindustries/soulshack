@@ -15,11 +15,11 @@ import (
 	mocktest "pkdindustries/soulshack/internal/testing"
 )
 
-// spawn starts one child through the runner and hands back the result, so a
+// launch starts one child through the spawn path and hands back the result, so a
 // test can wait on the child rather than sleeping until it looks finished.
-func spawn(t *testing.T, tracker *Tracker, ctx core.ChatContextInterface, req subagent.Request) subagent.Result {
+func launch(t *testing.T, tracker *Tracker, ctx core.ChatContextInterface, req subagent.Request) subagent.Result {
 	t.Helper()
-	result, err := runner(tracker)(ctx, req)
+	result, err := spawn(ctx, tracker, req)
 	if err != nil {
 		t.Fatalf("spawn: %v", err)
 	}
@@ -73,7 +73,7 @@ func TestDelegationIsAnnouncedWhateverTheToolActionSettingIs(t *testing.T) {
 			return core.SubagentResult{Text: "done"}, nil
 		}
 
-		settled(t, spawn(t, tracker, ctx, subagent.Request{Task: "find out", Label: "bird lookup"}))
+		settled(t, launch(t, tracker, ctx, subagent.Request{Task: "find out", Label: "bird lookup"}))
 
 		actions := ctx.AllActions()
 		if len(actions) != 1 || actions[0] != "delegating: bird lookup" {
@@ -95,7 +95,7 @@ func TestSpawnReturnsWhileTheChildIsStillWorking(t *testing.T) {
 		return core.SubagentResult{Text: "found it"}, nil
 	}
 
-	result := spawn(t, tracker, ctx, subagent.Request{Task: "find out", Label: "the lookup"})
+	result := launch(t, tracker, ctx, subagent.Request{Task: "find out", Label: "the lookup"})
 	<-working
 
 	select {
@@ -124,7 +124,7 @@ func TestReportIsDeliveredAsTheBotsOwnTurn(t *testing.T) {
 		return core.SubagentResult{Text: "the thing is a kind of bird"}, nil
 	}
 
-	settled(t, spawn(t, tracker, ctx, subagent.Request{Task: "find out", Label: "bird lookup"}))
+	settled(t, launch(t, tracker, ctx, subagent.Request{Task: "find out", Label: "bird lookup"}))
 
 	if replies := ctx.AllReplies(); len(replies) != 1 || replies[0] != "right, here is what it found" {
 		t.Fatalf("expected the bot's answer in the channel, got %q", replies)
@@ -154,7 +154,7 @@ func TestDeliveryTurnCannotSpawnAgain(t *testing.T) {
 		return core.SubagentResult{Text: "done"}, nil
 	}
 
-	settled(t, spawn(t, tracker, ctx, subagent.Request{Task: "find out", Label: "lookup"}))
+	settled(t, launch(t, tracker, ctx, subagent.Request{Task: "find out", Label: "lookup"}))
 
 	if !offers(sys.ToolRegistry.All(), subagent.ToolName) {
 		t.Fatal("the bot's own tools no longer include the spawning tool")
@@ -182,7 +182,7 @@ func TestForgottenConversationGetsTheReportVerbatim(t *testing.T) {
 		return core.SubagentResult{Text: "it was a bird all along"}, nil
 	}
 
-	settled(t, spawn(t, tracker, ctx, subagent.Request{Task: "find out", Label: "bird lookup"}))
+	settled(t, launch(t, tracker, ctx, subagent.Request{Task: "find out", Label: "bird lookup"}))
 
 	if replies := ctx.AllReplies(); len(replies) != 1 || replies[0] != "[bird lookup] it was a bird all along" {
 		t.Fatalf("expected the child's own words, got %q", replies)
@@ -199,7 +199,7 @@ func TestFailedChildReportsAndReleasesItsSlot(t *testing.T) {
 		return core.SubagentResult{}, context.DeadlineExceeded
 	}
 
-	settled(t, spawn(t, tracker, ctx, subagent.Request{Task: "find out", Label: "doomed lookup"}))
+	settled(t, launch(t, tracker, ctx, subagent.Request{Task: "find out", Label: "doomed lookup"}))
 
 	if actions := ctx.AllActions(); len(actions) != 2 || !strings.Contains(actions[1], "doomed lookup failed") {
 		t.Fatalf("expected the delegation and then the failure, got %q", actions)
@@ -220,7 +220,7 @@ func TestCancelledChildIsQuiet(t *testing.T) {
 		return core.SubagentResult{}, ctx.Err()
 	}
 
-	result := spawn(t, tracker, ctx, subagent.Request{Task: "find out", Label: "interrupted"})
+	result := launch(t, tracker, ctx, subagent.Request{Task: "find out", Label: "interrupted"})
 	shutdown()
 	settled(t, result)
 
@@ -242,7 +242,7 @@ func TestTimedOutChildSaysSo(t *testing.T) {
 		return core.SubagentResult{}, ctx.Err()
 	}
 
-	settled(t, spawn(t, tracker, ctx, subagent.Request{Task: "find out", Label: "slow lookup"}))
+	settled(t, launch(t, tracker, ctx, subagent.Request{Task: "find out", Label: "slow lookup"}))
 
 	if actions := ctx.AllActions(); len(actions) != 2 || !strings.Contains(actions[1], "slow lookup gave up") {
 		t.Fatalf("expected the channel to hear that the agent ran out of time, got %q", actions)
@@ -266,7 +266,7 @@ func TestReportSurvivesAChildThatUsedItsWholeBudget(t *testing.T) {
 	// delivery on the child's leftovers is one that never gets to speak.
 	model.Delay = 50 * time.Millisecond
 
-	settled(t, spawn(t, tracker, ctx, subagent.Request{Task: "find out", Label: "slow lookup"}))
+	settled(t, launch(t, tracker, ctx, subagent.Request{Task: "find out", Label: "slow lookup"}))
 
 	if replies := ctx.AllReplies(); len(replies) != 1 || replies[0] != "right, here is what it found" {
 		t.Fatalf("the report was dropped for arriving near the child's deadline: %q", replies)
@@ -282,7 +282,7 @@ func TestSilentRelayFallsBackToTheChildsWords(t *testing.T) {
 		return core.SubagentResult{Text: "it was a bird"}, nil
 	}
 
-	settled(t, spawn(t, tracker, ctx, subagent.Request{Task: "find out", Label: "bird lookup"}))
+	settled(t, launch(t, tracker, ctx, subagent.Request{Task: "find out", Label: "bird lookup"}))
 
 	if replies := ctx.AllReplies(); len(replies) != 1 || replies[0] != "[bird lookup] it was a bird" {
 		t.Fatalf("expected the child's own words after a silent relay, got %q", replies)
@@ -299,10 +299,10 @@ func TestCapsRefuseRatherThanWait(t *testing.T) {
 		return core.SubagentResult{Text: "done"}, nil
 	}
 
-	first := spawn(t, tracker, ctx, subagent.Request{Task: "one", Label: "one"})
-	second := spawn(t, tracker, ctx, subagent.Request{Task: "two", Label: "two"})
+	first := launch(t, tracker, ctx, subagent.Request{Task: "one", Label: "one"})
+	second := launch(t, tracker, ctx, subagent.Request{Task: "two", Label: "two"})
 
-	if _, err := runner(tracker)(ctx, subagent.Request{Task: "three", Label: "three"}); err == nil {
+	if _, err := spawn(ctx, tracker, subagent.Request{Task: "three", Label: "three"}); err == nil {
 		t.Fatal("the per-conversation cap admitted a third child")
 	}
 
@@ -310,7 +310,7 @@ func TestCapsRefuseRatherThanWait(t *testing.T) {
 	settled(t, first)
 	settled(t, second)
 
-	if _, err := runner(tracker)(ctx, subagent.Request{Task: "three", Label: "three"}); err != nil {
+	if _, err := spawn(ctx, tracker, subagent.Request{Task: "three", Label: "three"}); err != nil {
 		t.Fatalf("a freed slot was not reusable: %v", err)
 	}
 }
