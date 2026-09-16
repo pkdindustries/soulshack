@@ -3,6 +3,7 @@ package irc
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/alexschlessinger/pollytool/schema"
@@ -66,26 +67,52 @@ func validateContext(ctx context.Context) (ChatContextInterface, error) {
 	return chatCtx, nil
 }
 
+// ircTool is one native IRC tool: how to build it, and whether it acts on the
+// channel rather than only reading state the client already has. The
+// classification lives here, beside the definitions, so that adding a tool
+// forces the question at the point where the answer is obvious. Anything that
+// acts is withheld from child agents, and a list of names kept in another
+// package would drift the first time a tool was added, silently and in the
+// direction of granting authority.
+type ircTool struct {
+	new  func() tools.Tool
+	acts bool
+}
+
+var ircTools = map[string]ircTool{
+	"irc__op":         {newIrcOpTool, true},
+	"irc__kick":       {newIrcKickTool, true},
+	"irc__ban":        {newIrcBanTool, true},
+	"irc__topic":      {newIrcTopicTool, true},
+	"irc__action":     {newIrcActionTool, true},
+	"irc__mode_set":   {newIrcModeSetTool, true},
+	"irc__invite":     {newIrcInviteTool, true},
+	"irc__mode_query": {newIrcModeQueryTool, false},
+	"irc__names":      {newIrcNamesTool, false},
+	"irc__whois":      {newIrcWhoisTool, false},
+}
+
+// ChannelWriteTools names the IRC tools that act on the channel, in a stable
+// order.
+func ChannelWriteTools() []string {
+	names := make([]string, 0, len(ircTools))
+	for name, tool := range ircTools {
+		if tool.acts {
+			names = append(names, name)
+		}
+	}
+	slices.Sort(names)
+	return names
+}
+
 // RegisterIRCTools registers IRC tools as native tools with polly's registry
 func RegisterIRCTools(registry *tools.ToolRegistry) {
-	factories := map[string]func() tools.Tool{
-		"irc__op":         newIrcOpTool,
-		"irc__kick":       newIrcKickTool,
-		"irc__ban":        newIrcBanTool,
-		"irc__topic":      newIrcTopicTool,
-		"irc__action":     newIrcActionTool,
-		"irc__mode_set":   newIrcModeSetTool,
-		"irc__mode_query": newIrcModeQueryTool,
-		"irc__invite":     newIrcInviteTool,
-		"irc__names":      newIrcNamesTool,
-		"irc__whois":      newIrcWhoisTool,
-	}
-	for name, f := range factories {
+	for name, tool := range ircTools {
 		// The factory makes the tool loadable by name; registering the
 		// instance is what puts it in registry.All(), which is the list the
 		// model is offered.
-		registry.RegisterNative(name, f)
-		registry.Register(f())
+		registry.RegisterNative(name, tool.new)
+		registry.Register(tool.new())
 	}
 }
 
