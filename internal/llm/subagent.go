@@ -13,27 +13,13 @@ import (
 
 	"pkdindustries/soulshack/internal/config"
 	"pkdindustries/soulshack/internal/core"
+	"pkdindustries/soulshack/internal/irc"
 )
 
 // childMaxIterations bounds a child's tool loop. It is shorter than the
 // parent's: a child has one brief to answer, and a child that has not
 // finished by then is looping rather than working.
 const childMaxIterations = 8
-
-// ircWriteTools are the IRC tools a child never gets. A child acts on a brief
-// the parent model wrote from channel traffic, under whatever authority the
-// original event carried, possibly long after that event. The read-only IRC
-// tools are left in place: a child may look at who is in the channel, it may
-// not do anything to them.
-var ircWriteTools = []string{
-	"irc__op",
-	"irc__kick",
-	"irc__ban",
-	"irc__mode_set",
-	"irc__invite",
-	"irc__topic",
-	"irc__action",
-}
 
 // childPrompt tells a child what it is. It replaces the bot's own prompt
 // rather than extending it: a child is not talking to the channel, it is
@@ -104,7 +90,10 @@ func childModel(spec core.SubagentSpec, cfg *config.Configuration) string {
 // parent's registry and its MCP connections open.
 func childRegistry(parent *tools.ToolRegistry, allow []string) (*tools.ToolRegistry, func(), error) {
 	inherited := subagent.ChildRegistry(parent, allow)
-	child := inherited.Derive(tools.DenyTools(ircWriteTools...))
+	// A child acts on a brief the parent model wrote, under the authority of
+	// an event that may be long past. It may look at the channel; it may not
+	// do anything to it.
+	child := inherited.Derive(tools.DenyTools(irc.ChannelWriteTools()...))
 	release := func() {
 		child.Close()
 		inherited.Close()
