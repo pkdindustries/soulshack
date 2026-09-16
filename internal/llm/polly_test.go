@@ -8,6 +8,7 @@ import (
 
 	polly "github.com/alexschlessinger/pollytool/llm"
 	"github.com/alexschlessinger/pollytool/messages"
+	"github.com/alexschlessinger/pollytool/subagent"
 	"github.com/alexschlessinger/pollytool/tools"
 	"pkdindustries/soulshack/internal/config"
 	"pkdindustries/soulshack/internal/core"
@@ -180,5 +181,29 @@ func TestPollyTrimsOldestExchangesAndKeepsFinalReply(t *testing.T) {
 	// nothing left to omit.
 	if usage.OmittedExchanges != 0 {
 		t.Fatalf("request was over budget with a trimmed transcript: %+v", usage)
+	}
+}
+
+// The running commentary announces the spawning tool like any other, so with
+// the setting on a delegation shows twice: the call, then what it delegated.
+// irc__action stays skipped, since announcing it would print the message it
+// is announcing.
+func TestToolActionsAnnounceSpawningButNotActions(t *testing.T) {
+	sys := mocktest.NewMockSystem(t)
+	mocktest.SetConfig(t, sys, func(c *config.Configuration) { c.Bot.ShowToolActions = true })
+	ctx := mocktest.NewMockContext().WithSystem(sys)
+
+	core.WithConversation(ctx, "tools", func(turn *core.Turn) {
+		handler := newCallbackHandler(turn, turn.NewChunkWriter(make(chan string, 1)), turn.GetConfig())
+		handler.build().OnToolStart([]messages.ChatMessageToolCall{
+			{Name: "irc__action"},
+			{Name: subagent.ToolName},
+			{Name: "irc__names"},
+		})
+	}, nil)
+
+	actions := ctx.AllActions()
+	if len(actions) != 1 || actions[0] != "calling "+subagent.ToolName+", names" {
+		t.Fatalf("unexpected announcement: %q", actions)
 	}
 }
