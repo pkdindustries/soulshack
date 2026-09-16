@@ -60,11 +60,23 @@ func (r *Registry) Process(ctx irc.ChatContextInterface, event *girc.Event) bool
 	return false
 }
 
-// complete runs a completion for this turn, replying with each chunk unless the
-// turn is only being recorded (a silent URL observation, say). The stream is
-// always drained: that is what finishes the turn and stores it.
+// complete runs a completion for this turn, replying with each chunk.
 func complete(turn *core.Turn, prompt string, silent bool) {
-	for chunk := range llm.Complete(turn, prompt) {
+	drain(turn, llm.Complete(turn, prompt), silent)
+}
+
+// observe is complete for a turn the bot took on its own initiative rather
+// than because it was asked. It cannot delegate: nobody requested this work,
+// so it should not grow into more of it.
+func observe(turn *core.Turn, prompt string, silent bool) {
+	drain(turn, llm.CompleteWithoutDelegating(turn, prompt), silent)
+}
+
+// drain replies with each chunk unless the turn is only being recorded (a
+// silent URL observation, say). The stream is always drained: that is what
+// finishes the turn and stores it.
+func drain(turn *core.Turn, chunks <-chan string, silent bool) {
+	for chunk := range chunks {
 		if !silent {
 			turn.Reply(chunk)
 		}

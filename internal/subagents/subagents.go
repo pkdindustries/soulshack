@@ -211,7 +211,7 @@ func deliver(chat core.ChatContextInterface, spec core.SubagentSpec, text string
 			return
 		}
 		answered := false
-		for chunk := range llm.CompleteRelay(turn, fmt.Sprintf("(agent:%s) %s", label, text)) {
+		for chunk := range llm.CompleteWithoutDelegating(turn, fmt.Sprintf("(agent:%s) %s", label, text)) {
 			answered = true
 			turn.Reply(chunk)
 		}

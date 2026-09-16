@@ -177,6 +177,8 @@ docker build . -t soulshack:dev
 | `--subagentmax` | 4 | Child agents running at once |
 | `--subagentmaxperchat` | 2 | Child agents running at once for one conversation |
 
+`--urlwatcher` reads links people post without being asked. That reading runs in the background, so the bot keeps answering the channel while it works, and the turn cannot delegate to a child agent: nobody requested the work, so it does not grow into more of it. With `--urlwatchersilent` the observation is discarded entirely.
+
 `--opwatcher` passes the original MODE event to the model with sender attribution, for example `(nick:alice) MODE #channel +o soulshack`. It uses the channel's conversation history and sends replies normally, without a watcher-specific prompt template.
 
 `/stats` shows the last completed model input separately from stored message counts and total provider token usage.
