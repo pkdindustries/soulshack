@@ -88,7 +88,7 @@ func TestOpToolAdminOrSelf(t *testing.T) {
 			chat := &modeRecordingContext{MockChatContext: mocktest.NewMockContext().WithConfig(cfg).WithAdmin(tt.admin).WithSource(source)}
 			chat.ServerOptions = map[string]string{"CASEMAPPING": tt.caseMapping}
 			chat.ChannelUsers[cfg.Server.Channel] = []core.ChannelUser{{Nick: chat.GetBotNick(), IsOp: tt.opped}}
-			ctx, cancel := context.WithCancel(context.WithValue(chat, kContextKey, ChatContextInterface(chat)))
+			ctx, cancel := context.WithCancel(core.WithChat(chat, chat))
 			defer cancel()
 			if tt.canceled {
 				cancel()
@@ -125,7 +125,7 @@ func TestOpToolAdminOrSelf(t *testing.T) {
 
 func TestPublicOpsDoNotAllowOtherAdminTools(t *testing.T) {
 	chat := mocktest.NewMockContext().WithConfig(mocktest.DefaultTestConfig()).WithAdmin(false)
-	ctx := context.WithValue(chat, kContextKey, ChatContextInterface(chat))
+	ctx := core.WithChat(chat, chat)
 	result, err := newIrcKickTool().Execute(ctx, map[string]any{"users": []string{"alice"}, "reason": "test"})
 	if err != nil || result != "You are not authorized to use this tool" {
 		t.Fatalf("expected admin restriction, got %q, %v", result, err)

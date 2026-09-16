@@ -7,14 +7,12 @@ import (
 
 	"github.com/alexschlessinger/pollytool/schema"
 	"github.com/alexschlessinger/pollytool/tools"
+
+	"pkdindustries/soulshack/internal/core"
 )
 
-type contextKey string
-
-const kContextKey contextKey = "irc_context"
-
 func GetIRCContext(ctx context.Context) (ChatContextInterface, error) {
-	if chatCtx, ok := ctx.Value(kContextKey).(ChatContextInterface); ok {
+	if chatCtx, ok := core.ChatFromContext(ctx); ok {
 		return chatCtx, nil
 	}
 	return nil, fmt.Errorf("no IRC context available")

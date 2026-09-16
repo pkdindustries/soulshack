@@ -46,6 +46,21 @@ type BotConfig struct {
 	URLWatcher         bool
 	URLWatcherSilent   bool
 	Sandbox            bool
+	// Subagents offers the model a tool for delegating a task to a child
+	// agent. Children always run in the background: the turn that spawns one
+	// ends immediately, and the child's reply arrives in the channel later.
+	Subagents bool
+	// SubagentModel runs children on a model of their own. Empty inherits
+	// whatever the bot is answering with.
+	SubagentModel string
+	// SubagentTimeout is how long a child may run. It is not the API
+	// timeout: a child outlives the turn that spawned it.
+	SubagentTimeout time.Duration
+	// SubagentMax and SubagentMaxPerChat bound how many children run at
+	// once, in total and for one conversation. They bound spending, not
+	// permission: anyone in the channel can cause a spawn.
+	SubagentMax        int
+	SubagentMaxPerChat int
 }
 
 type ModelConfig struct {
@@ -170,6 +185,13 @@ func GetFlags() []cli.Flag {
 		&cli.BoolFlag{Name: "urlwatchersilent", Usage: "run URL watcher without sending a reply in chat; response is discarded", Sources: src("urlwatchersilent", "SOULSHACK_URLWATCHERSILENT")},
 		&cli.BoolFlag{Name: "sandbox", Usage: "run shell/bash/MCP tools inside a platform sandbox (macOS sandbox-exec, Linux bubblewrap)", Sources: src("sandbox", "SOULSHACK_SANDBOX")},
 
+		// Subagents
+		&cli.BoolFlag{Name: "subagents", Usage: "let the model delegate a task to a background child agent that reports back later", Sources: src("subagents", "SOULSHACK_SUBAGENTS")},
+		&cli.StringFlag{Name: "subagentmodel", Usage: "model for child agents (empty: the bot's own model)", Sources: src("subagentmodel", "SOULSHACK_SUBAGENTMODEL")},
+		&cli.DurationFlag{Name: "subagenttimeout", Value: time.Minute * 15, Usage: "how long a child agent may run", Sources: src("subagenttimeout", "SOULSHACK_SUBAGENTTIMEOUT")},
+		&cli.IntFlag{Name: "subagentmax", Value: 4, Usage: "maximum child agents running at once", Sources: src("subagentmax", "SOULSHACK_SUBAGENTMAX")},
+		&cli.IntFlag{Name: "subagentmaxperchat", Value: 2, Usage: "maximum child agents running at once for one conversation", Sources: src("subagentmaxperchat", "SOULSHACK_SUBAGENTMAXPERCHAT")},
+
 		// Timeouts and Behavior
 		&cli.BoolFlag{Name: "addressed", Aliases: []string{"a"}, Value: true, Usage: "require bot be addressed by nick for response", Sources: src("addressed", "SOULSHACK_ADDRESSED")},
 		&cli.DurationFlag{Name: "sessionduration", Aliases: []string{"S"}, Value: time.Minute * 10, Usage: "a conversation is forgotten after this duration of inactivity (0 = no expiry)", Sources: src("sessionduration", "SOULSHACK_SESSIONDURATION")},
@@ -235,6 +257,11 @@ func NewConfiguration(c *cli.Command) *Configuration {
 			URLWatcher:         c.Bool("urlwatcher"),
 			URLWatcherSilent:   c.Bool("urlwatchersilent"),
 			Sandbox:            c.Bool("sandbox"),
+			Subagents:          c.Bool("subagents"),
+			SubagentModel:      c.String("subagentmodel"),
+			SubagentTimeout:    c.Duration("subagenttimeout"),
+			SubagentMax:        c.Int("subagentmax"),
+			SubagentMaxPerChat: c.Int("subagentmaxperchat"),
 		},
 		Model: &ModelConfig{
 			Model:          c.String("model"),

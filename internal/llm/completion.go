@@ -2,10 +2,12 @@ package llm
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/alexschlessinger/pollytool/llm"
 	"github.com/alexschlessinger/pollytool/messages"
+	"github.com/alexschlessinger/pollytool/subagent"
 	"github.com/alexschlessinger/pollytool/tools"
 
 	"pkdindustries/soulshack/internal/config"
@@ -74,6 +76,18 @@ func NewCompletionRequest(config *config.Configuration, history []messages.ChatM
 // stream of response chunks. The stream also appends the finished turn, so
 // callers must drain it.
 func Complete(turn *core.Turn, msg string) <-chan string {
+	return complete(turn, msg, nil)
+}
+
+// CompleteRelay is Complete for a turn that exists because a child agent
+// reported back. It withholds the spawning tool: a child's report is input the
+// bot generated for itself, and a turn that can answer it by spawning again
+// has no one in the channel to stop it.
+func CompleteRelay(turn *core.Turn, msg string) <-chan string {
+	return complete(turn, msg, []string{subagent.ToolName})
+}
+
+func complete(turn *core.Turn, msg string, without []string) <-chan string {
 	cfg := turn.GetConfig()
 	history := turn.Conversation.Messages()
 
@@ -99,9 +113,23 @@ func Complete(turn *core.Turn, msg string) <-chan string {
 
 	var allTools []tools.Tool
 	if registry := turn.GetSystem().GetToolRegistry(); registry != nil {
-		allTools = registry.All()
+		allTools = withoutTools(registry.All(), without)
 	}
 
 	budget := turn.GetSystem().GetMemory().Budget()
 	return turn.GetSystem().GetLLM().ChatCompletionStream(turn, NewCompletionRequest(cfg, request, budget, allTools))
+}
+
+// withoutTools returns the tools the model is offered, less the named ones.
+func withoutTools(all []tools.Tool, without []string) []tools.Tool {
+	if len(without) == 0 {
+		return all
+	}
+	kept := make([]tools.Tool, 0, len(all))
+	for _, tool := range all {
+		if !slices.Contains(without, tool.GetName()) {
+			kept = append(kept, tool)
+		}
+	}
+	return kept
 }

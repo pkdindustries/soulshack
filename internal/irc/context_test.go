@@ -160,3 +160,57 @@ func TestChatContextChunkWriterUsesChunkMax(t *testing.T) {
 		t.Fatalf("long output produced %d messages, want it split", got)
 	}
 }
+
+// Work handed to a child agent outlives the event that asked for it: the
+// event's deadline must not be the child's.
+func TestBackgroundOutlivesTheEventButNotTheBot(t *testing.T) {
+	sys := mocktest.NewMockSystem(t)
+	bot, shutdown := context.WithCancel(context.Background())
+	defer shutdown()
+
+	event := &girc.Event{Command: girc.PRIVMSG, Source: &girc.Source{Name: "alice"}, Params: []string{"#test", "testbot: go look that up"}}
+	chat, cancel := irc.NewChatContext(bot, sys, mocktest.NewMockIRCClient(), event, nil)
+
+	background, release := chat.Background(time.Minute)
+	defer release()
+
+	// The event handler returns, which is what ends the turn.
+	cancel()
+	if chat.Err() == nil {
+		t.Fatal("the event's context outlived its handler")
+	}
+	if err := background.Err(); err != nil {
+		t.Fatalf("background work ended with the event it came from: %v", err)
+	}
+	if background.GetConversationKey() != chat.GetConversationKey() {
+		t.Fatalf("background work lost its conversation: %q", background.GetConversationKey())
+	}
+
+	// Shutting the bot down is what does end it.
+	shutdown()
+	select {
+	case <-background.Done():
+	case <-time.After(time.Second):
+		t.Fatal("background work outlived the bot")
+	}
+}
+
+// A background context is still the context its own tools resolve, so a
+// child's tools find the chat they belong to.
+func TestBackgroundResolvesItsOwnChatContext(t *testing.T) {
+	sys := mocktest.NewMockSystem(t)
+	event := &girc.Event{Command: girc.PRIVMSG, Source: &girc.Source{Name: "alice"}, Params: []string{"#test", "hello"}}
+	chat, cancel := irc.NewChatContext(context.Background(), sys, mocktest.NewMockIRCClient(), event, nil)
+	defer cancel()
+
+	background, release := chat.Background(time.Minute)
+	defer release()
+
+	found, err := irc.GetIRCContext(background)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if found != background {
+		t.Fatal("background work resolved a chat context other than its own")
+	}
+}

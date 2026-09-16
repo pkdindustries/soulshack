@@ -19,6 +19,18 @@ type MockLLM struct {
 	Delay       time.Duration          // Delay between chunks (0 = immediate)
 	Error       error                  // Error to return (sent as final chunk)
 	LastRequest *llm.CompletionRequest // Captured by ChatCompletionStream
+
+	// Subagent is what RunSubagent does. Nil returns a fixed reply at once,
+	// which is enough for a test that only cares that a child ran.
+	Subagent func(context.Context, core.SubagentSpec) (core.SubagentResult, error)
+}
+
+// RunSubagent implements core.LLM.
+func (m *MockLLM) RunSubagent(ctx context.Context, spec core.SubagentSpec) (core.SubagentResult, error) {
+	if m.Subagent != nil {
+		return m.Subagent(ctx, spec)
+	}
+	return core.SubagentResult{Text: "mock agent reply"}, nil
 }
 
 // ChatCompletionStream implements core.LLM
@@ -57,6 +69,9 @@ type MockSystem struct {
 	Memory       *memory.Memory
 	Config       *config.Store
 	LLM          core.LLM
+	// Agents is nil unless a test enables subagents, matching a bot started
+	// without them.
+	Agents core.Agents
 }
 
 // NewMockSystem creates a MockSystem with sensible defaults
@@ -99,6 +114,11 @@ func (m *MockSystem) UpdateConfig(fn func(*config.Configuration) error) error {
 // GetLLM implements core.System
 func (m *MockSystem) GetLLM() core.LLM {
 	return m.LLM
+}
+
+// GetAgents implements core.System
+func (m *MockSystem) GetAgents() core.Agents {
+	return m.Agents
 }
 
 // UpdateLLM implements core.System

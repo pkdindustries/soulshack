@@ -45,7 +45,10 @@ func (p *PollyLLM) ChatCompletionStream(turn *core.Turn, req *CompletionRequest)
 	go func() {
 		defer close(output)
 
-		agent := CreateAgentForRegistry(p.client, turn.GetSystem().GetToolRegistry(), cfg.API.Timeout)
+		registry, release := offeredRegistry(turn.GetSystem().GetToolRegistry(), req.Tools)
+		defer release()
+
+		agent := CreateAgentForRegistry(p.client, registry, cfg.API.Timeout)
 		defer agent.Close()
 
 		framer := turn.NewChunkWriter(output)
@@ -220,7 +223,42 @@ func (h *callbackHandler) onError(err error) {
 // from the agent's own registry leaves the caller's tools, which it inherits,
 // untouched.
 func CreateAgentForRegistry(client llm.LLM, registry *tools.ToolRegistry, timeout time.Duration) *llm.Agent {
-	agent := llm.NewAgent(client, registry, llm.AgentConfig{MaxIterations: 10, ToolTimeout: timeout})
+	return createAgent(client, registry, llm.AgentConfig{MaxIterations: 10, ToolTimeout: timeout})
+}
+
+// offeredRegistry narrows what an agent may run to what the request offered
+// the model. An agent runs a call by looking the name up in its registry, not
+// in the request, so a turn that withheld a tool from the model would still
+// run that tool if the model named it anyway. Withholding has to mean both.
+// The returned release closes only what this call derived.
+func offeredRegistry(registry *tools.ToolRegistry, offered []tools.Tool) (*tools.ToolRegistry, func()) {
+	nothing := func() {}
+	if registry == nil {
+		return nil, nothing
+	}
+
+	present := make(map[string]bool, len(offered))
+	for _, tool := range offered {
+		present[tool.GetName()] = true
+	}
+	var withheld []string
+	for _, tool := range registry.All() {
+		if !present[tool.GetName()] {
+			withheld = append(withheld, tool.GetName())
+		}
+	}
+	if len(withheld) == 0 {
+		return registry, nothing
+	}
+
+	derived := registry.Derive(tools.DenyTools(withheld...))
+	return derived, func() { derived.Close() }
+}
+
+// createAgent is CreateAgentForRegistry's shared body, for the callers that
+// run an agent on something other than a turn's settings.
+func createAgent(client llm.LLM, registry *tools.ToolRegistry, config llm.AgentConfig) *llm.Agent {
+	agent := llm.NewAgent(client, registry, config)
 	for _, name := range llm.BuiltinToolNames() {
 		agent.ToolRegistry().Remove(name)
 	}
