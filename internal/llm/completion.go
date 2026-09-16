@@ -78,11 +78,13 @@ func Complete(turn *core.Turn, msg string) <-chan string {
 	return complete(turn, msg, "")
 }
 
-// CompleteRelay is Complete for a turn that exists because a child agent
-// reported back. It withholds the spawning tool: a child's report is input the
-// bot generated for itself, and a turn that can answer it by spawning again
-// has no one in the channel to stop it.
-func CompleteRelay(turn *core.Turn, msg string) <-chan string {
+// CompleteWithoutDelegating is Complete for the turns that must answer for
+// themselves. A turn that reports a child's findings could otherwise answer by
+// starting another child, with nobody in the channel having asked for either;
+// a turn the bot took on its own initiative, watching what people post, would
+// be spending on work nobody requested. Both are turns where the bot is
+// talking to itself, and delegation is for what someone asked for.
+func CompleteWithoutDelegating(turn *core.Turn, msg string) <-chan string {
 	return complete(turn, msg, subagent.ToolName)
 }
 
