@@ -15,12 +15,6 @@ import (
 	"pkdindustries/soulshack/internal/llm"
 )
 
-// slots is what polly's own concurrency bound is set to. It is deliberately
-// out of reach: that bound makes a caller wait for a slot, and a tool call
-// that waits is a turn that has stopped answering the channel. The tracker
-// bounds children instead, by refusing rather than blocking.
-const slots = 1024
-
 // defaultLabel names a child whose brief did not.
 const defaultLabel = "subagent"
 
@@ -33,101 +27,120 @@ const defaultTimeout = 15 * time.Minute
 // Register offers the model the spawning tool and, since delegated work
 // finishes out of sight, a way to look at what is still running.
 func Register(registry *tools.ToolRegistry, tracker *Tracker) {
-	registry.Register(&spawnTool{Tool: subagent.NewTool(runner(tracker), subagent.WithMaxConcurrent(slots))})
+	registry.Register(newSpawnTool(tracker))
 	registry.MarkAlwaysAllowed(subagent.ToolName)
 
 	registry.Register(newListTool(tracker))
 	registry.MarkAlwaysAllowed(listToolName)
 }
 
-// spawnTool is polly's spawning tool with a schema of soulshack's own. The
-// behavior it keeps is the part worth keeping: argument parsing, the
-// exemption from the per-tool timeout, and the result text a parent reads.
-// What it replaces is the description, which otherwise offers a model
-// workspaces, isolation modes and a choice about waiting, none of which an
-// IRC bot has.
-type spawnTool struct {
-	*subagent.Tool
-}
-
-func (t *spawnTool) GetSchema() *schema.ToolSchema {
-	return schema.Tool(subagent.ToolName,
-		"Hand a self-contained task to a child agent that works in the background. Use it for work that would take long enough to leave the channel waiting: research, reading something large, anything with many tool calls. The child starts with no context beyond the brief you write, so state the goal, whatever facts it needs, and what to report back. It cannot talk to the channel or spawn agents of its own, and it reports only to you. This call returns as soon as the child has started; its reply arrives later as a message. Say in the channel that you have delegated, then carry on: do not claim the result before it arrives.",
-		schema.Params{
+// newSpawnTool builds the tool under polly's name, with a schema and an
+// argument list of soulshack's own. Polly's subagent.Tool is not reused:
+// its schema offers workspaces, isolation modes and a choice about waiting,
+// none of which an IRC bot has, and overriding the description alone would
+// leave its parser still accepting the arguments the description no longer
+// mentions. What is worth keeping from that package is its Request type and
+// the wording of a started child's result, which are exported.
+//
+// LongRunning exempts the call from the agent's per-tool timeout. It returns
+// promptly anyway, since the child is what takes the time.
+func newSpawnTool(tracker *Tracker) tools.Tool {
+	return &tools.Func{
+		Name:        subagent.ToolName,
+		LongRunning: true,
+		Coordinator: true,
+		Desc:        "Hand a self-contained task to a child agent that works in the background. Use it for work that would take long enough to leave the channel waiting: research, reading something large, anything with many tool calls. The child starts with no context beyond the brief you write, so state the goal, whatever facts it needs, and what to report back. It cannot talk to the channel or spawn agents of its own, and it reports only to you. This call returns as soon as the child has started; its reply arrives later as a message. Say in the channel that you have delegated, then carry on: do not claim the result before it arrives.",
+		Params: schema.Params{
 			"task":  schema.S("The complete brief for the agent. It starts with no other context."),
 			"label": schema.S("Two to five words naming the job, shown in the channel while it runs."),
 			"tools": schema.Strings("Names or globs of the tools the agent may use. Omitted: whatever it can inherit."),
 			"model": schema.S("Model to run the agent on, as provider/model. Default: the configured agent model."),
 		},
-		"task", "label")
+		Required: []string{"task", "label"},
+		Run: func(ctx context.Context, args tools.Args) (string, error) {
+			task := strings.TrimSpace(args.String("task"))
+			if task == "" {
+				return "", tools.NewToolError("task is required: the complete brief for the agent", "INVALID_ARGS")
+			}
+			label := strings.TrimSpace(args.String("label"))
+			if label == "" {
+				label = defaultLabel
+			}
+			result, err := spawn(ctx, tracker, subagent.Request{
+				Task:  task,
+				Label: label,
+				Tools: args.StringSlice("tools"),
+				Model: strings.TrimSpace(args.String("model")),
+			})
+			if err != nil {
+				return "", tools.NewToolError(err.Error(), "SPAWN_REFUSED")
+			}
+			return result.String(), nil
+		},
+	}
 }
 
-// runner starts a child and returns. Everything after the start happens on
-// the child's own goroutine, under a context that outlives this turn.
-func runner(tracker *Tracker) subagent.Runner {
-	return func(ctx context.Context, req subagent.Request) (subagent.Result, error) {
-		chat, ok := core.ChatFromContext(ctx)
-		if !ok {
-			return subagent.Result{}, errors.New("agents can only be spawned from a chat turn")
-		}
-		if err := ctx.Err(); err != nil {
-			return subagent.Result{}, err
-		}
-
-		cfg := chat.GetConfig()
-		label := strings.TrimSpace(req.Label)
-		if label == "" {
-			label = defaultLabel
-		}
-
-		release, err := tracker.admit(core.AgentInfo{
-			Label:        label,
-			Conversation: chat.GetConversationKey(),
-			Source:       chat.GetSource(),
-			Started:      time.Now(),
-		}, cfg.Bot.SubagentMax, cfg.Bot.SubagentMaxPerChat)
-		if err != nil {
-			return subagent.Result{}, err
-		}
-
-		// The child's own lifetime. It is the bot's context underneath, not
-		// this turn's, so the child survives the end of the turn and still
-		// ends when the bot does.
-		timeout := cfg.Bot.SubagentTimeout
-		if timeout <= 0 {
-			timeout = defaultTimeout
-		}
-		background, cancel := chat.Background(timeout)
-
-		spec := core.SubagentSpec{
-			Task:     req.Task,
-			Label:    label,
-			Model:    req.Model,
-			Tools:    req.Tools,
-			Registry: chat.GetSystem().GetToolRegistry(),
-			Config:   cfg,
-		}
-
-		// Always said, whatever showtoolactions is set to. That setting hides
-		// the running commentary on a turn that is about to answer anyway;
-		// this is the opposite, a turn ending with the work still outstanding.
-		// The channel is owed the same account of it as of its outcome, which
-		// is reported unconditionally further down.
-		chat.ReplyAction("delegating: " + label)
-		chat.GetLogger().Info("agent_started", "agent", label, "model", spec.Model)
-
-		// Done tells polly the child is still holding its slot: the tool
-		// call is long over by the time the child settles.
-		done := make(chan struct{})
-		go func() {
-			defer close(done)
-			defer release()
-			defer cancel()
-			run(background, spec)
-		}()
-
-		return subagent.Result{Started: true, Session: label, Done: done}, nil
+// spawn starts a child and returns. Everything after the start happens on the
+// child's own goroutine, under a context that outlives this turn.
+func spawn(ctx context.Context, tracker *Tracker, req subagent.Request) (subagent.Result, error) {
+	chat, err := chatFor(ctx)
+	if err != nil {
+		return subagent.Result{}, err
 	}
+
+	cfg := chat.GetConfig()
+	label := strings.TrimSpace(req.Label)
+	if label == "" {
+		label = defaultLabel
+	}
+
+	id, err := tracker.admit(core.AgentInfo{
+		Label:        label,
+		Conversation: chat.GetConversationKey(),
+		Source:       chat.GetSource(),
+		Started:      time.Now(),
+	}, cfg.Bot.SubagentMax, cfg.Bot.SubagentMaxPerChat)
+	if err != nil {
+		return subagent.Result{}, err
+	}
+
+	// The child's own lifetime. It is the bot's context underneath, not
+	// this turn's, so the child survives the end of the turn and still
+	// ends when the bot does.
+	timeout := cfg.Bot.SubagentTimeout
+	if timeout <= 0 {
+		timeout = defaultTimeout
+	}
+	background, cancel := chat.Background(timeout)
+
+	spec := core.SubagentSpec{
+		Task:     req.Task,
+		Label:    label,
+		Model:    req.Model,
+		Tools:    req.Tools,
+		Registry: chat.GetSystem().GetToolRegistry(),
+		Config:   cfg,
+	}
+
+	// Always said, whatever showtoolactions is set to. That setting hides
+	// the running commentary on a turn that is about to answer anyway;
+	// this is the opposite, a turn ending with the work still outstanding.
+	// The channel is owed the same account of it as of its outcome, which
+	// is reported unconditionally further down.
+	chat.ReplyAction("delegating: " + label)
+	chat.GetLogger().Info("agent_started", "agent", label, "model", spec.Model)
+
+	// Done closes when the child has settled, which is long after this call
+	// returned. It is what a caller waits on to know the work is over.
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		defer tracker.forget(id)
+		defer cancel()
+		run(background, spec)
+	}()
+
+	return subagent.Result{Started: true, Session: label, Done: done}, nil
 }
 
 // run works the child to completion and reports what it said. It is the whole

@@ -22,6 +22,5 @@ func (c *AgentsCommand) Execute(turn *core.Turn) {
 		return
 	}
 
-	here, elsewhere := subagents.Running(agents, turn.GetConversationKey())
-	turn.Reply(subagents.Report(here, elsewhere, time.Now()))
+	turn.Reply(subagents.Report(agents, turn.GetConversationKey(), time.Now()))
 }
