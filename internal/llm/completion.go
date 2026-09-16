@@ -2,7 +2,6 @@ package llm
 
 import (
 	"fmt"
-	"slices"
 	"strings"
 
 	"github.com/alexschlessinger/pollytool/llm"
@@ -76,7 +75,7 @@ func NewCompletionRequest(config *config.Configuration, history []messages.ChatM
 // stream of response chunks. The stream also appends the finished turn, so
 // callers must drain it.
 func Complete(turn *core.Turn, msg string) <-chan string {
-	return complete(turn, msg, nil)
+	return complete(turn, msg, "")
 }
 
 // CompleteRelay is Complete for a turn that exists because a child agent
@@ -84,10 +83,11 @@ func Complete(turn *core.Turn, msg string) <-chan string {
 // bot generated for itself, and a turn that can answer it by spawning again
 // has no one in the channel to stop it.
 func CompleteRelay(turn *core.Turn, msg string) <-chan string {
-	return complete(turn, msg, []string{subagent.ToolName})
+	return complete(turn, msg, subagent.ToolName)
 }
 
-func complete(turn *core.Turn, msg string, without []string) <-chan string {
+// complete runs the turn, offering every tool but the one named in without.
+func complete(turn *core.Turn, msg string, without string) <-chan string {
 	cfg := turn.GetConfig()
 	history := turn.Conversation.Messages()
 
@@ -113,23 +113,13 @@ func complete(turn *core.Turn, msg string, without []string) <-chan string {
 
 	var allTools []tools.Tool
 	if registry := turn.GetSystem().GetToolRegistry(); registry != nil {
-		allTools = withoutTools(registry.All(), without)
+		for _, tool := range registry.All() {
+			if tool.GetName() != without {
+				allTools = append(allTools, tool)
+			}
+		}
 	}
 
 	budget := turn.GetSystem().GetMemory().Budget()
 	return turn.GetSystem().GetLLM().ChatCompletionStream(turn, NewCompletionRequest(cfg, request, budget, allTools))
-}
-
-// withoutTools returns the tools the model is offered, less the named ones.
-func withoutTools(all []tools.Tool, without []string) []tools.Tool {
-	if len(without) == 0 {
-		return all
-	}
-	kept := make([]tools.Tool, 0, len(all))
-	for _, tool := range all {
-		if !slices.Contains(without, tool.GetName()) {
-			kept = append(kept, tool)
-		}
-	}
-	return kept
 }

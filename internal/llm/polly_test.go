@@ -78,7 +78,7 @@ func TestCompletionOmissionDoesNotRecommendRemovedTools(t *testing.T) {
 // The bot offers only the tools soulshack registered. Polly's private
 // built-ins (read_transcript, view_image, and the artifact readers) are
 // removed, and removing them must not disturb the caller's own tools.
-func TestCreateAgentForRegistryDropsPollyBuiltins(t *testing.T) {
+func TestCreateAgentDropsPollyBuiltins(t *testing.T) {
 	registry := tools.NewToolRegistry([]tools.Tool{}, tools.WithUnsafeNoSandbox())
 	registry.Register(&tools.Func{
 		Name: "irc__action",
@@ -91,7 +91,7 @@ func TestCreateAgentForRegistryDropsPollyBuiltins(t *testing.T) {
 		offered = req.Tools
 		return messages.ChatMessage{Role: messages.MessageRoleAssistant, Content: "done", StopReason: messages.StopReasonEndTurn}
 	})
-	agent := CreateAgentForRegistry(client, registry, time.Second)
+	agent := CreateAgent(client, registry, polly.AgentConfig{MaxIterations: turnMaxIterations, ToolTimeout: time.Second})
 	defer agent.Close()
 	if _, err := agent.Run(context.Background(), &polly.CompletionRequest{Messages: messages.User("hello")}, nil); err != nil {
 		t.Fatal(err)

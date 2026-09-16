@@ -11,7 +11,6 @@ import (
 	"github.com/alexschlessinger/pollytool/subagent"
 	"github.com/alexschlessinger/pollytool/tools"
 
-	"pkdindustries/soulshack/internal/config"
 	"pkdindustries/soulshack/internal/core"
 	"pkdindustries/soulshack/internal/irc"
 )
@@ -46,7 +45,7 @@ func (p *PollyLLM) RunSubagent(ctx context.Context, spec core.SubagentSpec) (cor
 	}
 	defer release()
 
-	agent := createAgent(p.client, registry, llm.AgentConfig{
+	agent := CreateAgent(p.client, registry, llm.AgentConfig{
 		MaxIterations: childMaxIterations,
 		ToolTimeout:   cfg.API.Timeout,
 	})
@@ -56,7 +55,7 @@ func (p *PollyLLM) RunSubagent(ctx context.Context, spec core.SubagentSpec) (cor
 		{Role: messages.MessageRoleSystem, Content: fmt.Sprintf(childPrompt, cfg.Server.Nick)},
 		{Role: messages.MessageRoleUser, Content: spec.Task},
 	}, cfg.Session.MaxContext, registry.All())
-	if model := childModel(spec, cfg); model != "" {
+	if model := childModel(spec); model != "" {
 		req.Model = model
 	}
 	req.BaseURL = baseURLForModel(req.Model, cfg.API)
@@ -76,11 +75,11 @@ func (p *PollyLLM) RunSubagent(ctx context.Context, spec core.SubagentSpec) (cor
 
 // childModel resolves which model a child runs on: what the brief asked for,
 // then the configured subagent model, then, by leaving it unset, the bot's own.
-func childModel(spec core.SubagentSpec, cfg *config.Configuration) string {
+func childModel(spec core.SubagentSpec) string {
 	if spec.Model != "" {
 		return spec.Model
 	}
-	return cfg.Bot.SubagentModel
+	return spec.Config.Bot.SubagentModel
 }
 
 // childRegistry narrows the parent's tools to what a child may use. Polly
