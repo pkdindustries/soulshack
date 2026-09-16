@@ -60,6 +60,28 @@ func newFixture(t *testing.T) (*mocktest.MockSystem, *mocktest.MockChatContext, 
 	return sys, ctx, model, tracker
 }
 
+// Delegation ends a turn with the work still outstanding, so the channel is
+// told either way. showtoolactions hides the running commentary on a turn that
+// is about to answer; this is not that, and it says what was delegated rather
+// than that a tool was called. With the setting on, the commentary announces
+// the call as well, from the layer that runs it.
+func TestDelegationIsAnnouncedWhateverTheToolActionSettingIs(t *testing.T) {
+	for _, show := range []bool{true, false} {
+		sys, ctx, model, tracker := newFixture(t)
+		mocktest.SetConfig(t, sys, func(c *config.Configuration) { c.Bot.ShowToolActions = show })
+		model.Subagent = func(context.Context, core.SubagentSpec) (core.SubagentResult, error) {
+			return core.SubagentResult{Text: "done"}, nil
+		}
+
+		settled(t, spawn(t, tracker, ctx, subagent.Request{Task: "find out", Label: "bird lookup"}))
+
+		actions := ctx.AllActions()
+		if len(actions) != 1 || actions[0] != "delegating: bird lookup" {
+			t.Fatalf("showtoolactions=%v: expected the delegation announced, got %q", show, actions)
+		}
+	}
+}
+
 // The point of the feature: the turn that spawns a child must end while the
 // child is still working, or the channel waits for it.
 func TestSpawnReturnsWhileTheChildIsStillWorking(t *testing.T) {
@@ -179,8 +201,8 @@ func TestFailedChildReportsAndReleasesItsSlot(t *testing.T) {
 
 	settled(t, spawn(t, tracker, ctx, subagent.Request{Task: "find out", Label: "doomed lookup"}))
 
-	if actions := ctx.AllActions(); len(actions) != 1 || !strings.Contains(actions[0], "doomed lookup failed") {
-		t.Fatalf("expected the failure in the channel, got %q", actions)
+	if actions := ctx.AllActions(); len(actions) != 2 || !strings.Contains(actions[1], "doomed lookup failed") {
+		t.Fatalf("expected the delegation and then the failure, got %q", actions)
 	}
 	if running := tracker.List(); len(running) != 0 {
 		t.Fatalf("a failed child is still tracked: %+v", running)
@@ -202,8 +224,9 @@ func TestCancelledChildIsQuiet(t *testing.T) {
 	shutdown()
 	settled(t, result)
 
-	if replies, actions := ctx.AllReplies(), ctx.AllActions(); len(replies) != 0 || len(actions) != 0 {
-		t.Fatalf("a cancelled child spoke: replies %q, actions %q", replies, actions)
+	// The delegation was announced when it started; nothing follows it.
+	if replies, actions := ctx.AllReplies(), ctx.AllActions(); len(replies) != 0 || len(actions) != 1 {
+		t.Fatalf("a cancelled child spoke past its delegation: replies %q, actions %q", replies, actions)
 	}
 }
 
@@ -221,7 +244,7 @@ func TestTimedOutChildSaysSo(t *testing.T) {
 
 	settled(t, spawn(t, tracker, ctx, subagent.Request{Task: "find out", Label: "slow lookup"}))
 
-	if actions := ctx.AllActions(); len(actions) != 1 || !strings.Contains(actions[0], "slow lookup gave up") {
+	if actions := ctx.AllActions(); len(actions) != 2 || !strings.Contains(actions[1], "slow lookup gave up") {
 		t.Fatalf("expected the channel to hear that the agent ran out of time, got %q", actions)
 	}
 }

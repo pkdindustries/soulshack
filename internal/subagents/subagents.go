@@ -108,9 +108,12 @@ func runner(tracker *Tracker) subagent.Runner {
 			Config:   cfg,
 		}
 
-		if cfg.Bot.ShowToolActions {
-			chat.ReplyAction("delegating: " + label)
-		}
+		// Always said, whatever showtoolactions is set to. That setting hides
+		// the running commentary on a turn that is about to answer anyway;
+		// this is the opposite, a turn ending with the work still outstanding.
+		// The channel is owed the same account of it as of its outcome, which
+		// is reported unconditionally further down.
+		chat.ReplyAction("delegating: " + label)
 		chat.GetLogger().Info("agent_started", "agent", label, "model", spec.Model)
 
 		// Done tells polly the child is still holding its slot: the tool
