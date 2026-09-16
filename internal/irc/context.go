@@ -100,12 +100,12 @@ func (c ChatContext) Background(timeout time.Duration) (ChatContextInterface, co
 	}
 	background, cancel := context.WithTimeout(parent, timeout)
 
+	// The receiver is this call's own copy, so it is the fork.
 	event := *c.event
-	forked := c
-	forked.Context = background
-	forked.event = &event
-	forked.logger = c.logger.With("background", true)
-	return &forked, cancel
+	c.Context = background
+	c.event = &event
+	c.logger = c.logger.With("background", true)
+	return &c, cancel
 }
 
 // Value answers the lookup IRC tools use to find their chat context. A turn's
