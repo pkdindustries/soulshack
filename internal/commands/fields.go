@@ -54,6 +54,14 @@ var configFields = map[string]configField{
 	"urlwatchersilent":   boolSetting(func(c *settings) *bool { return &c.Bot.URLWatcherSilent }),
 	"opwatcher":          boolSetting(func(c *settings) *bool { return &c.Bot.OpWatcher }),
 
+	// Subagents. Whether the tool exists at all is fixed at startup, since
+	// that is when it is registered; everything about how children run is
+	// read fresh each time one is spawned.
+	"subagentmodel":      stringSetting(func(c *settings) *string { return &c.Bot.SubagentModel }),
+	"subagenttimeout":    durationSetting(func(c *settings) *time.Duration { return &c.Bot.SubagentTimeout }),
+	"subagentmax":        intSetting(func(c *settings) *int { return &c.Bot.SubagentMax }, 0),
+	"subagentmaxperchat": intSetting(func(c *settings) *int { return &c.Bot.SubagentMaxPerChat }, 0),
+
 	// Two settings are also held by the conversations themselves.
 	"maxcontext": withApply(intSetting(func(c *settings) *int { return &c.Session.MaxContext }, 0),
 		func(c *config.Configuration, sys core.System) { sys.GetMemory().SetBudget(c.Session.MaxContext) }),

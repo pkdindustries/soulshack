@@ -171,6 +171,11 @@ docker build . -t soulshack:dev
 | `--urlwatcher` | false | Enable passive URL watching |
 | `--opwatcher` | false | Respond when the bot is opped or deopped |
 | `--sandbox` | false | Sandbox shell, bash, and MCP tools (see below) |
+| `--subagents` | false | Let the model delegate to background child agents (see below) |
+| `--subagentmodel` | | Model for child agents (empty: the bot's own) |
+| `--subagenttimeout` | 15m | How long a child agent may run |
+| `--subagentmax` | 4 | Child agents running at once |
+| `--subagentmaxperchat` | 2 | Child agents running at once for one conversation |
 
 `--opwatcher` passes the original MODE event to the model with sender attribution, for example `(nick:alice) MODE #channel +o soulshack`. It uses the channel's conversation history and sends replies normally, without a watcher-specific prompt template.
 
@@ -212,8 +217,23 @@ Run with: `./soulshack --config config.yml`
 | `/admins add <hostmask>` | Yes | Add an admin |
 | `/set <key> <value>` | Yes | Set config parameter |
 | `/get <key>` | No | Get config parameter |
+| `/agents` | No | List child agents still working for this conversation |
 
 Admin entries use full `nick!user@host` masks and match case-insensitively. `*` matches any number of characters and `?` matches one; other characters, including brackets, are literal. For example, use `admins: ["alex!*@trusted.example"]` in YAML or `/admins add alex!*@trusted.example` at runtime. Runtime additions last until restart.
+
+## Subagents
+
+With `--subagents`, the model is offered a `spawn_agent` tool for handing a self-contained task to a child agent: research, reading something large, anything with enough tool calls to leave the channel waiting.
+
+Children always run in the background. The turn that spawns one ends as soon as the child has started, so the channel stays responsive, and the child keeps working after that turn is over. When it finishes, its report comes back as a turn of its own on that conversation, and the bot answers it in the channel in its own voice. A child that outlives the conversation it was asked in (see `--sessionduration`) has its report posted as it stands instead, since there is no longer anything to answer it against.
+
+A child starts with only the brief it was given: the channel's conversation is not visible to it. It gets the bot's configured tools and the read-only IRC tools (`irc__names`, `irc__whois`, `irc__mode_query`), but never the ones that act on the channel, and never the ability to spawn agents of its own. Neither can the turn that delivers a report, so a child's answer cannot set off another child.
+
+Ask the bot what it is working on and it can answer: it gets a `list_agents` tool for the agents still running in that conversation and how long each has been going, since its own transcript only records that a child started, not whether it has finished. `/agents` gives the same answer directly. Both are scoped to the conversation you ask in — agents working for another channel or correspondent are counted, never named.
+
+Anyone in the channel can cause a spawn, the same as any other tool. `--subagentmax` and `--subagentmaxperchat` bound how many can be in flight at once; past the limit the model is told to wait rather than the call blocking.
+
+Run children on a cheaper model than the bot answers with using `--subagentmodel`, for example `--subagentmodel ollama/llama3.2`.
 
 ## Built-in Tools
 

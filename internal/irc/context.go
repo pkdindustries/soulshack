@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/lrstanley/girc"
 
@@ -27,6 +28,10 @@ type ChatContext struct {
 	args            []string
 	logger          *slog.Logger
 	fatalCh         chan<- error
+	// parent is the bot's context, which this event's context was given its
+	// deadline from. Background work derives from it so that it outlives the
+	// event and still ends when the bot does.
+	parent context.Context
 }
 
 var _ ChatContextInterface = (*ChatContext)(nil)
@@ -60,6 +65,7 @@ func NewChatContext(parentctx context.Context, system core.System, ircclient *gi
 		event:   e,
 		args:    strings.Fields(e.Last()),
 		fatalCh: fatalCh,
+		parent:  parentctx,
 		logger: slog.Default().With(
 			"request_id", requestID,
 			"channel", channel,
@@ -80,11 +86,33 @@ func NewChatContext(parentctx context.Context, system core.System, ircclient *gi
 	return &ctx, cancel
 }
 
+// Background returns this chat context with the event's deadline replaced by
+// one of its own, derived from the bot's context. The girc client and the
+// event outlive the handler, so replying still reaches the same target long
+// after the handler has returned; only the deadline had to be rebuilt. The
+// event is copied because the handler owns the one it was given.
+func (c ChatContext) Background(timeout time.Duration) (ChatContextInterface, context.CancelFunc) {
+	parent := c.parent
+	if parent == nil {
+		// A context built without one, as in a test: the bot's lifetime is
+		// the best remaining approximation.
+		parent = context.Background()
+	}
+	background, cancel := context.WithTimeout(parent, timeout)
+
+	event := *c.event
+	forked := c
+	forked.Context = background
+	forked.event = &event
+	forked.logger = c.logger.With("background", true)
+	return &forked, cancel
+}
+
 // Value answers the lookup IRC tools use to find their chat context. A turn's
 // context is the chat context, so the lookup resolves by itself: no layer has
 // to inject a value into tool calls.
 func (c *ChatContext) Value(key any) any {
-	if k, ok := key.(contextKey); ok && k == kContextKey {
+	if key == core.ChatKey() {
 		return ChatContextInterface(c)
 	}
 	return c.Context.Value(key)

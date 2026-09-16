@@ -25,6 +25,9 @@ func DefaultTestConfig() *config.Configuration {
 			Tools:              []string{},
 			ShowThinkingAction: false,
 			ShowToolActions:    false,
+			SubagentTimeout:    time.Minute * 15,
+			SubagentMax:        4,
+			SubagentMaxPerChat: 2,
 		},
 		Model: &config.ModelConfig{
 			Model:          "test/model",

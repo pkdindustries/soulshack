@@ -12,12 +12,14 @@ import (
 	"pkdindustries/soulshack/internal/irc"
 	"pkdindustries/soulshack/internal/llm"
 	"pkdindustries/soulshack/internal/memory"
+	"pkdindustries/soulshack/internal/subagents"
 )
 
 type SystemImpl struct {
 	Memory *memory.Memory
 	Tools  *tools.ToolRegistry
 	Config *config.Store
+	Agents core.Agents
 	llm    atomic.Value // stores core.LLM
 }
 
@@ -35,6 +37,10 @@ func (s *SystemImpl) GetToolRegistry() *tools.ToolRegistry {
 
 func (s *SystemImpl) GetMemory() *memory.Memory {
 	return s.Memory
+}
+
+func (s *SystemImpl) GetAgents() core.Agents {
+	return s.Agents
 }
 
 func (s *SystemImpl) GetLLM() core.LLM {
@@ -68,6 +74,21 @@ func NewSystem(c *config.Configuration) (core.System, error) {
 
 	// Register native IRC tools with polly's registry
 	irc.RegisterIRCTools(s.Tools)
+
+	// Whether the model can delegate is fixed here, at startup: offering the
+	// tool is what enables it, and a tool cannot be taken back from a turn
+	// that is already using it.
+	if c.Bot.Subagents {
+		tracker := subagents.NewTracker()
+		s.Agents = tracker
+		subagents.Register(s.Tools, tracker)
+		slog.Info("subagents_enabled",
+			"model", c.Bot.SubagentModel,
+			"timeout", c.Bot.SubagentTimeout,
+			"max", c.Bot.SubagentMax,
+			"max_per_chat", c.Bot.SubagentMaxPerChat,
+		)
+	}
 
 	// Load all tools from configuration (polly now handles native, shell, and MCP tools)
 	toolErrors := 0
