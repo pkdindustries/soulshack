@@ -211,6 +211,15 @@ func (c *Conversation) Messages() []messages.ChatMessage {
 	return slices.Clone(c.history)
 }
 
+// Len returns how many messages the transcript holds, for the callers that
+// only want to know whether there is anything in it. Messages copies the whole
+// transcript, which is a lot of work to answer that.
+func (c *Conversation) Len() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return len(c.history)
+}
+
 // Append adds messages and trims the transcript to the token budget, keeping
 // the newest exchanges.
 func (c *Conversation) Append(msgs []messages.ChatMessage) {

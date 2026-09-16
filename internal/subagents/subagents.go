@@ -193,7 +193,7 @@ func deliver(chat core.ChatContextInterface, spec core.SubagentSpec, text string
 		// The conversation this was asked in has since been forgotten, so
 		// there is nothing left for the bot to answer the report against:
 		// pass it on as it stands rather than reacting to it out of context.
-		if len(turn.Conversation.Messages()) == 0 {
+		if turn.Conversation.Len() == 0 {
 			turn.Reply(verbatim(label, text))
 			return
 		}
