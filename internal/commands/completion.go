@@ -17,7 +17,5 @@ func (c *CompletionCommand) AdminOnly() bool { return false }
 func (c *CompletionCommand) Execute(turn *core.Turn) {
 	msg := strings.Join(turn.GetArgs(), " ")
 
-	for res := range llm.Complete(turn, fmt.Sprintf("(nick:%s) %s", turn.GetSource(), msg)) {
-		turn.Reply(res)
-	}
+	llm.Drain(llm.Complete(turn, fmt.Sprintf("(nick:%s) %s", turn.GetSource(), msg)), turn.Reply)
 }

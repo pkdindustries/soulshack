@@ -88,6 +88,19 @@ func CompleteWithoutDelegating(turn *core.Turn, msg string) <-chan string {
 	return complete(turn, msg, subagent.ToolName)
 }
 
+// Drain replies with each chunk a completion stream emits, as the caller's
+// reply function says, and reports whether the completion produced anything.
+// The stream is always drained: that is what finishes the turn and stores it,
+// whatever the reply function does.
+func Drain(chunks <-chan string, reply func(string)) bool {
+	answered := false
+	for chunk := range chunks {
+		answered = true
+		reply(chunk)
+	}
+	return answered
+}
+
 // complete runs the turn, offering every tool but the one named in without.
 func complete(turn *core.Turn, msg string, without string) <-chan string {
 	cfg := turn.GetConfig()

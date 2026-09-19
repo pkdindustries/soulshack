@@ -62,13 +62,9 @@ func newSpawnTool(tracker *Tracker) tools.Tool {
 			if task == "" {
 				return "", tools.NewToolError("task is required: the complete brief for the agent", "INVALID_ARGS")
 			}
-			label := strings.TrimSpace(args.String("label"))
-			if label == "" {
-				label = defaultLabel
-			}
 			result, err := spawn(ctx, tracker, subagent.Request{
 				Task:  task,
-				Label: label,
+				Label: args.String("label"),
 				Tools: args.StringSlice("tools"),
 				Model: strings.TrimSpace(args.String("model")),
 			})
@@ -210,11 +206,7 @@ func deliver(chat core.ChatContextInterface, spec core.SubagentSpec, text string
 			turn.Reply(verbatim(label, text))
 			return
 		}
-		answered := false
-		for chunk := range llm.CompleteWithoutDelegating(turn, fmt.Sprintf("(agent:%s) %s", label, text)) {
-			answered = true
-			turn.Reply(chunk)
-		}
+		answered := llm.Drain(llm.CompleteWithoutDelegating(turn, fmt.Sprintf("(agent:%s) %s", label, text)), turn.Reply)
 		// The bot had nothing to say, which at this point means the
 		// completion failed rather than that the report was not worth
 		// answering. Either way the channel is owed the report.
