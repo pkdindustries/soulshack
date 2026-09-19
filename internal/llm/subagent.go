@@ -69,7 +69,7 @@ func (p *PollyLLM) RunSubagent(ctx context.Context, spec core.SubagentSpec) (cor
 	}
 
 	result := core.SubagentResult{Text: strings.TrimSpace(resp.Message.GetContent())}
-	result.InputTokens, result.OutputTokens = childTokens(resp.AllMessages)
+	result.InputTokens, result.OutputTokens = resp.TokenUsage()
 	return result, nil
 }
 
@@ -102,17 +102,4 @@ func childRegistry(parent *tools.ToolRegistry, allow []string) (*tools.ToolRegis
 		return nil, nil, err
 	}
 	return child, release, nil
-}
-
-// childTokens sums a child's usage the way polly reports a turn: providers
-// count input per call, cumulatively, so the largest call stands for the run,
-// while output is summed across calls.
-func childTokens(all []messages.ChatMessage) (in, out int) {
-	for _, m := range all {
-		if input := m.GetInputTokens(); input > in {
-			in = input
-		}
-		out += m.GetOutputTokens()
-	}
-	return in, out
 }
