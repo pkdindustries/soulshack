@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"pkdindustries/soulshack/internal/irc"
+	"pkdindustries/soulshack/internal/core"
 	mocktest "pkdindustries/soulshack/internal/testing"
 )
 
@@ -24,7 +24,7 @@ func TestHelpCommand_ListsAllForAdmin(t *testing.T) {
 		WithAdmin(true).
 		WithArgs("/help")
 
-	helpCmd.Execute(ctx)
+	helpCmd.Execute(ctx.Turn())
 
 	if ctx.ReplyCount() != 1 {
 		t.Fatalf("expected 1 reply, got %d", ctx.ReplyCount())
@@ -57,7 +57,7 @@ func TestHelpCommand_HidesAdminOnlyForNonAdmin(t *testing.T) {
 		WithAdmin(false).
 		WithArgs("/help")
 
-	helpCmd.Execute(ctx)
+	helpCmd.Execute(ctx.Turn())
 
 	if ctx.ReplyCount() != 1 {
 		t.Fatalf("expected 1 reply, got %d", ctx.ReplyCount())
@@ -81,6 +81,6 @@ type testCommand struct {
 	adminOnly bool
 }
 
-func (c *testCommand) Name() string                           { return c.name }
-func (c *testCommand) AdminOnly() bool                        { return c.adminOnly }
-func (c *testCommand) Execute(ctx irc.ChatContextInterface)   {}
+func (c *testCommand) Name() string            { return c.name }
+func (c *testCommand) AdminOnly() bool         { return c.adminOnly }
+func (c *testCommand) Execute(turn *core.Turn) {}

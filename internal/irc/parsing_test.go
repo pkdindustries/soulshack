@@ -196,3 +196,49 @@ func findSubstring(s, substr string) bool {
 	}
 	return false
 }
+
+func TestCheckAdmin_Wildcards(t *testing.T) {
+	for _, tt := range []struct {
+		name, mask, source string
+		want               bool
+	}{
+		{"wildcard nick and ident", "*!*@trusted.example", "alex!~alex@trusted.example", true},
+		{"wildcard host", "alex!*@*", "alex!~alex@user/alex", true},
+		{"subdomain", "*!*@*.trusted.example", "alex!user@a.trusted.example", true},
+		{"wrong host", "*!*@trusted.example", "alex!user@evil.example", false},
+		{"suffix attack", "*!*@trusted.example", "alex!user@trusted.example.evil", false},
+		{"case insensitive", "Alex!User@TRUSTED.example", "alex!user@trusted.example", true},
+		{"single character", "alex?!*@*", "alex1!user@host", true},
+		{"single character required", "alex?!*@*", "alex!user@host", false},
+		{"single character only", "alex?!*@*", "alex12!user@host", false},
+		{"literal brackets", "[alex]!*@*", "[alex]!user@host", true},
+		{"brackets are not a character class", "[alex]!*@*", "a!user@host", false},
+		{"literal dot", "*!*@trusted.example", "alex!user@trustedXexample", false},
+		{"repeated wildcard does not overlap", "a*a!*@*", "a!user@host", false},
+		{"literal cloak", "*!*@user/alex", "alex!~alex@user/alex", true},
+		{"IPv6", "*!*@2001:db8::*", "alex!user@2001:db8::123", true},
+		{"missing identity", "*!*@*", "server.example", false},
+		{"empty identity component", "*!*@*", "alex!@host", false},
+		{"invalid configured mask", "*", "alex!user@host", false},
+		{"empty configured mask", "", "alex!user@host", false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := CheckAdmin(tt.source, []string{tt.mask}); got != tt.want {
+				t.Fatalf("CheckAdmin(%q, %q) = %v, want %v", tt.source, tt.mask, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestValidateAdminMask(t *testing.T) {
+	for _, mask := range []string{"alex!*@*", "*!*@*.trusted.example", "alex?!~*@user/alex", "[alex]!user@host", "*!*@2001:db8::*"} {
+		if err := ValidateAdminMask(mask); err != nil {
+			t.Errorf("valid mask %q: %v", mask, err)
+		}
+	}
+	for _, mask := range []string{"", "*", "alex@host", "alex!user", "!user@host", "alex!@host", "alex!user@", "alex@user!host", "alex!!user@host", "alex!user@@host", "alex!user@host\n", "alex!user@bad host"} {
+		if err := ValidateAdminMask(mask); err == nil {
+			t.Errorf("accepted invalid mask %q", mask)
+		}
+	}
+}

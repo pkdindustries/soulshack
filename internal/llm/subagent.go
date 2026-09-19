@@ -1,0 +1,105 @@
+package llm
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"strings"
+
+	"github.com/alexschlessinger/pollytool/llm"
+	"github.com/alexschlessinger/pollytool/messages"
+	"github.com/alexschlessinger/pollytool/subagent"
+	"github.com/alexschlessinger/pollytool/tools"
+
+	"pkdindustries/soulshack/internal/core"
+	"pkdindustries/soulshack/internal/irc"
+)
+
+// childMaxIterations bounds a child's tool loop. It is shorter than the
+// parent's: a child has one brief to answer, and a child that has not
+// finished by then is looping rather than working.
+const childMaxIterations = 8
+
+// childPrompt tells a child what it is. It replaces the bot's own prompt
+// rather than extending it: a child is not talking to the channel, it is
+// answering the coordinator that spawned it.
+const childPrompt = `You are a subagent of %s, an IRC bot. You were given one task and you have no other context; the conversation you were spawned from is not visible to you.
+
+Do the task and report the result. Your reply goes to the coordinating agent, not to the channel: write plain prose, no IRC formatting, no greeting, no sign-off. Lead with the answer. Say plainly what you could not determine rather than guessing.`
+
+// RunSubagent runs one child agent to completion over a narrowed view of the
+// parent's tools. It blocks for as long as the child runs, which is why its
+// caller gives it a context of its own rather than a turn's.
+func (p *PollyLLM) RunSubagent(ctx context.Context, spec core.SubagentSpec) (core.SubagentResult, error) {
+	cfg := spec.Config
+	if cfg == nil {
+		return core.SubagentResult{}, errors.New("subagent has no configuration")
+	}
+	if spec.Registry == nil {
+		return core.SubagentResult{}, errors.New("subagent has no tool registry")
+	}
+
+	registry, release, err := childRegistry(spec.Registry, spec.Tools)
+	if err != nil {
+		return core.SubagentResult{}, err
+	}
+	defer release()
+
+	agent := CreateAgent(p.client, registry, llm.AgentConfig{
+		MaxIterations: childMaxIterations,
+		ToolTimeout:   cfg.API.Timeout,
+	})
+	defer agent.Close()
+
+	req := NewCompletionRequest(cfg, []messages.ChatMessage{
+		{Role: messages.MessageRoleSystem, Content: fmt.Sprintf(childPrompt, cfg.Server.Nick)},
+		{Role: messages.MessageRoleUser, Content: spec.Task},
+	}, cfg.Session.MaxContext, registry.All())
+	if model := childModel(spec); model != "" {
+		req.Model = model
+	}
+	req.BaseURL = baseURLForModel(req.Model, cfg.API)
+
+	resp, err := agent.Run(ctx, req, nil)
+	if err != nil {
+		return core.SubagentResult{}, err
+	}
+	if resp == nil || resp.Message == nil {
+		return core.SubagentResult{}, errors.New("agent returned no reply")
+	}
+
+	result := core.SubagentResult{Text: strings.TrimSpace(resp.Message.GetContent())}
+	result.InputTokens, result.OutputTokens = resp.TokenUsage()
+	return result, nil
+}
+
+// childModel resolves which model a child runs on: what the brief asked for,
+// then the configured subagent model, then, by leaving it unset, the bot's own.
+func childModel(spec core.SubagentSpec) string {
+	if spec.Model != "" {
+		return spec.Model
+	}
+	return spec.Config.Bot.SubagentModel
+}
+
+// childRegistry narrows the parent's tools to what a child may use. Polly
+// drops nested spawning and the coordination tools that carry the parent's
+// identity; soulshack drops the IRC tools that act on the channel. The
+// returned release closes both views, innermost first, and leaves the
+// parent's registry and its MCP connections open.
+func childRegistry(parent *tools.ToolRegistry, allow []string) (*tools.ToolRegistry, func(), error) {
+	inherited := subagent.ChildRegistry(parent, allow)
+	// A child acts on a brief the parent model wrote, under the authority of
+	// an event that may be long past. It may look at the channel; it may not
+	// do anything to it.
+	child := inherited.Derive(tools.DenyTools(irc.ChannelWriteTools()...))
+	release := func() {
+		child.Close()
+		inherited.Close()
+	}
+	if err := subagent.CheckChildTools(allow, child); err != nil {
+		release()
+		return nil, nil, err
+	}
+	return child, release, nil
+}

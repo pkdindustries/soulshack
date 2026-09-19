@@ -1,8 +1,54 @@
 package irc
 
 import (
+	"strings"
 	"testing"
+	"unicode/utf8"
 )
+
+func TestChunkerPreservesUnicode(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		text     string
+		limit    int
+		bytewise bool
+	}{
+		{"complete CJK line", strings.Repeat("界", 134) + "\n", 400, false},
+		{"streamed emoji", strings.Repeat("🙂", 101), 350, false},
+		{"partial UTF-8 writes", strings.Repeat("界🙂", 9), 5, true},
+		{"small limit", "界🙂ab", 1, true},
+		{"flush", "界🙂", 20, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ch := make(chan string, len(tc.text)+1)
+			chunker := NewChunker(ch, tc.limit)
+			if tc.bytewise {
+				for i := range len(tc.text) {
+					chunker.Write(tc.text[i : i+1])
+				}
+			} else {
+				chunker.Write(tc.text)
+			}
+			chunker.Flush()
+			close(ch)
+			var joined strings.Builder
+			for chunk := range ch {
+				if chunk == "" || !utf8.ValidString(chunk) {
+					t.Fatalf("invalid chunk: %q", chunk)
+				}
+				// A single rune wider than the configured limit must still
+				// travel intact, even when chunkmax is only one byte.
+				if len(chunk) > tc.limit && utf8.RuneCountInString(chunk) != 1 {
+					t.Fatalf("chunk exceeds %d bytes: %q", tc.limit, chunk)
+				}
+				joined.WriteString(chunk)
+			}
+			if got, want := joined.String(), strings.TrimSuffix(tc.text, "\n"); got != want {
+				t.Fatalf("text changed: got %q, want %q", got, want)
+			}
+		})
+	}
+}
 
 func TestChunker_SingleLine(t *testing.T) {
 	ch := make(chan string, 10)

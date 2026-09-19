@@ -4,7 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"pkdindustries/soulshack/internal/irc"
+	"pkdindustries/soulshack/internal/config"
+	"pkdindustries/soulshack/internal/core"
 )
 
 // SetCommand handles the /set command for configuration changes
@@ -13,46 +14,52 @@ type SetCommand struct{}
 func (c *SetCommand) Name() string    { return "/set" }
 func (c *SetCommand) AdminOnly() bool { return true }
 
-func (c *SetCommand) Execute(ctx irc.ChatContextInterface) {
+func (c *SetCommand) Execute(turn *core.Turn) {
 	keys := getConfigKeys()
-	if len(ctx.GetArgs()) < 3 {
-		ctx.Reply(fmt.Sprintf("Usage: /set <key> <value>. Available keys: %s", strings.Join(keys, ", ")))
+	if len(turn.GetArgs()) < 3 {
+		turn.Reply(fmt.Sprintf("Usage: /set <key> <value>. Available keys: %s", strings.Join(keys, ", ")))
 		return
 	}
 
-	param, v := ctx.GetArgs()[1], ctx.GetArgs()[2:]
+	param, v := turn.GetArgs()[1], turn.GetArgs()[2:]
 	value := strings.Join(v, " ")
-	cfg := ctx.GetConfig()
-
-	ctx.GetLogger().Debug("config_change_requested", "param", param, "value", value)
+	turn.GetLogger().Debug("config_change_requested", "param", param, "value", value)
 
 	// Handle standard config fields
 	field, ok := configFields[param]
 	if !ok {
-		ctx.Reply(fmt.Sprintf("Unknown key. Available keys: %s", strings.Join(keys, ", ")))
+		turn.Reply(fmt.Sprintf("Unknown key. Available keys: %s", strings.Join(keys, ", ")))
 		return
 	}
 
-	if err := field.setter(cfg, value); err != nil {
-		ctx.Reply(err.Error())
+	// The change lands on the live configuration, and anything that holds a
+	// copy of the setting follows in the same step.
+	system := turn.GetSystem()
+	if err := system.UpdateConfig(func(live *config.Configuration) error {
+		if err := field.setter(live, value); err != nil {
+			return err
+		}
+		if field.apply != nil {
+			field.apply(live, system)
+		}
+		return nil
+	}); err != nil {
+		turn.Reply(fmt.Sprintf("invalid value for %s: %s", param, err))
 		return
 	}
+	cfg := turn.GetConfig()
 
 	// If an API key or URL was set, update the LLM client
 	if strings.Contains(param, "key") || strings.Contains(param, "url") || strings.Contains(param, "model") {
-		if err := ctx.GetSystem().UpdateLLM(*cfg.API); err != nil {
-			ctx.GetLogger().Error("llm_update_failed", "error", err)
-			ctx.Reply("Configuration saved, but failed to update LLM client")
+		if err := system.UpdateLLM(*cfg.API); err != nil {
+			turn.GetLogger().Error("llm_update_failed", "error", err)
+			turn.Reply("Configuration saved, but failed to update LLM client")
 		}
 	}
 
-	ctx.Reply(fmt.Sprintf("%s set to: %s", param, field.getter(cfg)))
-	ctx.GetSession().Clear()
+	turn.Reply(fmt.Sprintf("%s set to: %s", param, field.getter(cfg)))
 
-	// Update session store defaults if maxcontext was changed
-	if param == "maxcontext" {
-		metadata := ctx.GetSession().GetMetadata()
-		metadata.MaxHistoryTokens = cfg.Session.MaxContext
-		ctx.GetSession().SetMetadata(metadata)
-	}
+	// Any configuration change starts this conversation over: its transcript
+	// may describe a bot that no longer exists.
+	turn.Conversation.Clear()
 }

@@ -1,7 +1,6 @@
 package llm
 
 import (
-	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -12,82 +11,103 @@ import (
 
 	"pkdindustries/soulshack/internal/config"
 	"pkdindustries/soulshack/internal/core"
-	"pkdindustries/soulshack/internal/irc"
+	"pkdindustries/soulshack/internal/memory"
 )
+
+// turnMaxIterations bounds the bot's own tool loop for one turn. A child's is
+// shorter; see childMaxIterations.
+const turnMaxIterations = 10
 
 // PollyLLM wraps pollytool's MultiPass and Agent to implement soulshack's LLM interface
 type PollyLLM struct {
-	client *llm.MultiPass
+	client llm.LLM
 }
 
 // NewPollyLLM creates a new pollytool-based LLM client
 func NewPollyLLM(config config.APIConfig) *PollyLLM {
 	apiKeys := map[string]string{
-		"openai":    config.OpenAIKey,
-		"anthropic": config.AnthropicKey,
-		"gemini":    config.GeminiKey,
-		"ollama":    config.OllamaKey,
+		"openai":      config.OpenAIKey,
+		"anthropic":   config.AnthropicKey,
+		"gemini":      config.GeminiKey,
+		"ollama":      config.OllamaKey,
+		"deepseek":    config.DeepSeekKey,
+		"openrouter":  config.OpenRouterKey,
+		"huggingface": config.HuggingFaceKey,
 	}
 	return &PollyLLM{client: llm.NewMultiPass(apiKeys)}
 }
 
 // ChatCompletionStream returns a channel of string chunks for IRC output
-func (p *PollyLLM) ChatCompletionStream(chatCtx core.ChatContextInterface, req *CompletionRequest) <-chan string {
-	cfg := chatCtx.GetConfig()
-	// Only apply OllamaURL for ollama/ models
-	if strings.HasPrefix(req.Model, "ollama/") && cfg.API.OllamaURL != "" {
-		req.BaseURL = cfg.API.OllamaURL
-	}
-
-	maxChunkSize := 400
-	if cfg.Session.ChunkMax > 0 {
-		maxChunkSize = cfg.Session.ChunkMax
-	}
+func (p *PollyLLM) ChatCompletionStream(turn *core.Turn, req *CompletionRequest) <-chan string {
+	cfg := turn.GetConfig()
+	// A custom endpoint belongs only to the provider it was configured for;
+	// every other provider keeps polly's default base URL.
+	req.BaseURL = baseURLForModel(req.Model, cfg.API)
 
 	output := make(chan string, 10)
 
 	go func() {
 		defer close(output)
 
-		agent := llm.NewAgent(p.client, chatCtx.GetSystem().GetToolRegistry(), llm.AgentConfig{
-			MaxIterations: 10,
+		registry, release := offeredRegistry(turn.GetSystem().GetToolRegistry(), req.Tools)
+		defer release()
+
+		agent := CreateAgent(p.client, registry, llm.AgentConfig{
+			MaxIterations: turnMaxIterations,
 			ToolTimeout:   cfg.API.Timeout,
 		})
+		defer agent.Close()
 
-		chunker := irc.NewChunker(output, maxChunkSize)
-		cb := newCallbackHandler(chatCtx, chunker, cfg)
+		framer := turn.NewChunkWriter(output)
+		cb := newCallbackHandler(turn, framer, cfg)
 
-		resp, err := agent.Run(chatCtx, req, cb.build())
+		resp, err := agent.Run(turn, req, cb.build())
 
-		chunker.Flush()
+		framer.Flush()
 
 		if err != nil {
-			chatCtx.GetLogger().Error("agent_error", "error", err.Error())
+			turn.GetLogger().Error("agent_error", "error", err.Error())
 			return
 		}
-
-		for _, msg := range resp.AllMessages {
-			chatCtx.GetSession().AddMessage(msg)
+		usage := memory.ContextUsage{
+			EstimatedTokens:  resp.Projection.RequestEstimatedTokens,
+			Budget:           req.MaxContextTokens,
+			OmittedExchanges: resp.Projection.OmittedExchanges,
 		}
+		turn.Conversation.Append(resp.AllMessages)
+		checkContextUsage(turn, usage)
+		turn.Conversation.SetUsage(usage)
 	}()
 
 	return output
 }
 
+// baseURLForModel returns the configured endpoint override for a model's
+// provider, or "" to let polly use the provider's default.
+func baseURLForModel(model string, api *config.APIConfig) string {
+	switch {
+	case strings.HasPrefix(model, "ollama/"):
+		return api.OllamaURL
+	case strings.HasPrefix(model, "openai/"):
+		return api.OpenAIURL
+	}
+	return ""
+}
+
 // callbackHandler organizes callback construction
 type callbackHandler struct {
-	chatCtx          core.ChatContextInterface
-	chunker          *irc.Chunker
+	turn             *core.Turn
+	framer           core.ChunkWriter
 	cfg              *config.Configuration
 	startTime        time.Time
 	lastThinkingTime time.Time
 	toolCount        int
 }
 
-func newCallbackHandler(chatCtx core.ChatContextInterface, chunker *irc.Chunker, cfg *config.Configuration) *callbackHandler {
+func newCallbackHandler(turn *core.Turn, framer core.ChunkWriter, cfg *config.Configuration) *callbackHandler {
 	return &callbackHandler{
-		chatCtx:   chatCtx,
-		chunker:   chunker,
+		turn:      turn,
+		framer:    framer,
 		cfg:       cfg,
 		startTime: time.Now(),
 	}
@@ -95,13 +115,12 @@ func newCallbackHandler(chatCtx core.ChatContextInterface, chunker *irc.Chunker,
 
 func (h *callbackHandler) build() *llm.AgentCallbacks {
 	return &llm.AgentCallbacks{
-		OnReasoning:       h.onReasoning,
-		OnContent:         h.onContent,
-		BeforeToolExecute: h.beforeToolExecute,
-		OnToolStart:       h.onToolStart,
-		OnToolEnd:         h.onToolEnd,
-		OnComplete:        h.onComplete,
-		OnError:           h.onError,
+		OnReasoning: h.onReasoning,
+		OnContent:   h.onContent,
+		OnToolStart: h.onToolStart,
+		OnToolEnd:   h.onToolEnd,
+		OnComplete:  h.onComplete,
+		OnError:     h.onError,
 	}
 }
 
@@ -117,11 +136,11 @@ func (h *callbackHandler) onComplete(response *messages.ChatMessage) {
 	if h.toolCount > 0 {
 		fields = append(fields, "tool_count", h.toolCount)
 	}
-	h.chatCtx.GetLogger().Info("request_complete", fields...)
+	h.turn.GetLogger().Info("request_complete", fields...)
 }
 
 func (h *callbackHandler) onReasoning(content string) {
-	h.chatCtx.GetLogger().Debug("reasoning_chunk", "content", content)
+	h.turn.GetLogger().Debug("reasoning_chunk", "content", content)
 
 	if !h.cfg.Bot.ShowThinkingAction {
 		return
@@ -131,32 +150,28 @@ func (h *callbackHandler) onReasoning(content string) {
 	if now.Sub(h.startTime) > 30*time.Second {
 		if h.lastThinkingTime.IsZero() || now.Sub(h.lastThinkingTime) > 30*time.Second {
 			elapsed := now.Sub(h.startTime).Round(time.Second)
-			h.chatCtx.ReplyAction(fmt.Sprintf("is thinking... (%s)", elapsed))
+			h.turn.ReplyAction(fmt.Sprintf("is thinking... (%s)", elapsed))
 			h.lastThinkingTime = now
 		}
 	}
 }
 
 func (h *callbackHandler) onContent(content string) {
-	h.chatCtx.GetLogger().Debug("oncontent_callback",
+	h.turn.GetLogger().Debug("oncontent_callback",
 		"content", content,
 		"content_len", len(content),
 	)
-	h.chunker.Write(content)
-}
-
-func (h *callbackHandler) beforeToolExecute(ctx context.Context, tc messages.ChatMessageToolCall, args map[string]any) context.Context {
-	return irc.InjectContext(ctx, h.chatCtx)
+	h.framer.Write(content)
 }
 
 func (h *callbackHandler) onToolStart(calls []messages.ChatMessageToolCall) {
-	h.chunker.Flush()
+	h.framer.Flush()
 
 	h.toolCount += len(calls)
 
 	// Log each tool
 	for _, tc := range calls {
-		h.chatCtx.GetLogger().Info("tool_started", "tool", tc.Name)
+		h.turn.GetLogger().Info("tool_started", "tool", tc.Name)
 	}
 
 	if !h.cfg.Bot.ShowToolActions || len(calls) == 0 {
@@ -177,13 +192,13 @@ func (h *callbackHandler) onToolStart(calls []messages.ChatMessageToolCall) {
 	}
 
 	if len(names) > 0 {
-		h.chatCtx.ReplyAction(fmt.Sprintf("calling %s", strings.Join(names, ", ")))
+		h.turn.ReplyAction(fmt.Sprintf("calling %s", strings.Join(names, ", ")))
 	}
 }
 
 func (h *callbackHandler) onToolEnd(tc messages.ChatMessageToolCall, result string, duration time.Duration, toolErr error) {
 	if toolErr != nil {
-		h.chatCtx.GetLogger().Error("tool_failed",
+		h.turn.GetLogger().Error("tool_failed",
 			"tool", tc.Name,
 			"duration_ms", duration.Milliseconds(),
 			"error", toolErr.Error(),
@@ -195,7 +210,7 @@ func (h *callbackHandler) onToolEnd(tc messages.ChatMessageToolCall, result stri
 	if len(preview) > 60 && !h.cfg.Bot.Verbose {
 		preview = preview[:60] + "..."
 	}
-	h.chatCtx.GetLogger().Info("tool_completed",
+	h.turn.GetLogger().Info("tool_completed",
 		"tool", tc.Name,
 		"duration_ms", duration.Milliseconds(),
 		"result_size", len(result),
@@ -204,14 +219,48 @@ func (h *callbackHandler) onToolEnd(tc messages.ChatMessageToolCall, result stri
 }
 
 func (h *callbackHandler) onError(err error) {
-	h.chatCtx.GetLogger().Error("stream_error", "error", err.Error())
-	h.chunker.Write(fmt.Sprintf("Error: %v", err))
+	h.turn.GetLogger().Error("stream_error", "error", err.Error())
+	h.framer.Write(fmt.Sprintf("Error: %v", err))
 }
 
-// CreateAgentForRegistry creates an agent with the given registry for external use
-func CreateAgentForRegistry(client *llm.MultiPass, registry *tools.ToolRegistry, timeout time.Duration) *llm.Agent {
-	return llm.NewAgent(client, registry, llm.AgentConfig{
-		MaxIterations: 10,
-		ToolTimeout:   timeout,
-	})
+// CreateAgent shares the caller-owned configured tools, sandbox policy, and MCP
+// connections. Polly's private per-agent built-ins are dropped: an IRC turn has
+// nothing to do with artifacts or images, and its conversation is short enough
+// that paging a transcript only spends tokens. Removing them from the agent's
+// own registry leaves the caller's tools, which it inherits, untouched.
+func CreateAgent(client llm.LLM, registry *tools.ToolRegistry, config llm.AgentConfig) *llm.Agent {
+	agent := llm.NewAgent(client, registry, config)
+	for _, name := range llm.BuiltinToolNames() {
+		agent.ToolRegistry().Remove(name)
+	}
+	return agent
+}
+
+// offeredRegistry narrows what an agent may run to what the request offered
+// the model. An agent runs a call by looking the name up in its registry, not
+// in the request, so a turn that withheld a tool from the model would still
+// run that tool if the model named it anyway. Withholding has to mean both.
+// The returned release closes only what this call derived.
+func offeredRegistry(registry *tools.ToolRegistry, offered []tools.Tool) (*tools.ToolRegistry, func()) {
+	nothing := func() {}
+	if registry == nil {
+		return nil, nothing
+	}
+
+	present := make(map[string]bool, len(offered))
+	for _, tool := range offered {
+		present[tool.GetName()] = true
+	}
+	var withheld []string
+	for _, tool := range registry.All() {
+		if !present[tool.GetName()] {
+			withheld = append(withheld, tool.GetName())
+		}
+	}
+	if len(withheld) == 0 {
+		return registry, nothing
+	}
+
+	derived := registry.Derive(tools.DenyTools(withheld...))
+	return derived, func() { derived.Close() }
 }

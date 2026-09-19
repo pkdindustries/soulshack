@@ -5,35 +5,31 @@ import (
 	"strings"
 	"time"
 
-	"pkdindustries/soulshack/internal/irc"
+	"pkdindustries/soulshack/internal/core"
 
 	"github.com/alexschlessinger/pollytool/messages"
-	"github.com/alexschlessinger/pollytool/sessions"
 )
 
-// StatsCommand handles the /stats command for showing session statistics
+// StatsCommand handles the /stats command for showing conversation statistics
 type StatsCommand struct{}
 
 func (c *StatsCommand) Name() string    { return "/stats" }
 func (c *StatsCommand) AdminOnly() bool { return false }
 
-func (c *StatsCommand) Execute(ctx irc.ChatContextInterface) {
-	session := ctx.GetSession()
-	history := session.GetHistory()
-	metadata := session.GetMetadata()
-
-	// Get capacity percentage using the interface method
-	percentage := session.GetCapacityPercentage()
+func (c *StatsCommand) Execute(turn *core.Turn) {
+	history := turn.Conversation.Messages()
 
 	// Calculate token breakdown
 	totalInputTokens := 0
 	totalOutputTokens := 0
-	totalEstimated := 0
 
 	// Track participants (IRC-specific)
 	participants := make(map[string]bool)
+	counts := make(map[string]int)
 
 	for _, msg := range history {
+		counts[string(msg.Role)]++
+
 		// Token counting
 		input := msg.GetInputTokens()
 		output := msg.GetOutputTokens()
@@ -41,10 +37,6 @@ func (c *StatsCommand) Execute(ctx irc.ChatContextInterface) {
 		if input > 0 || output > 0 {
 			totalInputTokens += input
 			totalOutputTokens += output
-		} else {
-			// Using estimation fallback
-			estimated := sessions.EstimateTokens(msg)
-			totalEstimated += estimated
 		}
 
 		// Track participants from user messages
@@ -64,47 +56,41 @@ func (c *StatsCommand) Execute(ctx irc.ChatContextInterface) {
 		}
 	}
 
-	// Get message counts and tool calls using new interface methods
-	messageCounts := session.GetMessageCounts()
-
-	// Calculate TTL information
-	ttlStr := "unlimited"
-	if metadata.TTL > 0 {
-		timeRemaining := session.GetTimeToExpiry()
-
-		if timeRemaining > 0 {
-			ttlStr = fmt.Sprintf("expires in %s", formatDuration(timeRemaining))
-		} else {
-			ttlStr = "expired"
-		}
+	ttlStr := "disabled"
+	if ttl := turn.GetSystem().GetMemory().TTL(); ttl > 0 {
+		ttlStr = fmt.Sprintf("after %s idle", formatDuration(ttl))
 	}
-
-	// Format capacity
-	capacityStr := "unlimited"
-	if metadata.MaxHistoryTokens > 0 {
-		capacityStr = fmt.Sprintf("%.1f%% of %d", percentage, metadata.MaxHistoryTokens)
+	contextStr := "no completed request"
+	if usage, ok := turn.Conversation.Usage(); ok {
+		contextStr = fmt.Sprintf("~%d tokens (no configured limit)", usage.EstimatedTokens)
+		if usage.Budget > 0 {
+			contextStr = fmt.Sprintf("~%d/%d tokens", usage.EstimatedTokens, usage.Budget)
+		}
+		if usage.OmittedExchanges > 0 {
+			contextStr += fmt.Sprintf(" (%d older exchanges omitted)", usage.OmittedExchanges)
+		}
 	}
 
 	// Build response in simple format
 	response := fmt.Sprintf(
-		"token input: %d, "+
-			"token output: %d, "+
-			"context capacity: %s, "+
-			"messages: %d (user: %d, assistant: %d, tool: %d), "+
+		"total token input: %d, "+
+			"total token output: %d, "+
+			"last completed input: %s, "+
+			"stored messages: %d (user: %d, assistant: %d, tool: %d), "+
 			"participants: %d, "+
-			"ttl: %s",
+			"idle expiry: %s",
 		totalInputTokens,
 		totalOutputTokens,
-		capacityStr,
+		contextStr,
 		len(history),
-		messageCounts[string(messages.MessageRoleUser)],
-		messageCounts[string(messages.MessageRoleAssistant)],
-		messageCounts[string(messages.MessageRoleTool)],
+		counts[string(messages.MessageRoleUser)],
+		counts[string(messages.MessageRoleAssistant)],
+		counts[string(messages.MessageRoleTool)],
 		len(participants),
 		ttlStr,
 	)
 
-	ctx.Reply(response)
+	turn.Reply(response)
 }
 
 // formatDuration formats a duration into a human-readable string
