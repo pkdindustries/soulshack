@@ -57,7 +57,7 @@ func NewSystem(c *config.Configuration) (core.System, error) {
 	s := &SystemImpl{Config: config.NewStore(c)}
 
 	// Optionally enable platform sandboxing for shell/bash/MCP tools.
-	var regOpts []tools.RegistryOption
+	regOpts := []tools.RegistryOption{tools.WithNativeTools()}
 	if c.Bot.Sandbox {
 		baseCfg := sandbox.DefaultConfig()
 		if _, err := sandbox.New(baseCfg); err != nil {
@@ -102,12 +102,18 @@ func NewSystem(c *config.Configuration) (core.System, error) {
 		}
 	}
 
-	// Conversations live in this process only: an in-memory transcript with
-	// an idle expiry.
-	s.Memory = memory.New(memory.Config{
+	// Conversations are polly sessions, kept in the session database when
+	// one is configured and in memory otherwise.
+	mem, err := memory.New(memory.Config{
 		Budget: c.Session.MaxContext,
 		TTL:    c.Session.TTL,
+		Path:   c.Session.Path,
 	})
+	if err != nil {
+		_ = s.Tools.Close()
+		return nil, err
+	}
+	s.Memory = mem
 
 	// Initialize LLM
 	s.UpdateLLM(*c.API)
@@ -117,6 +123,7 @@ func NewSystem(c *config.Configuration) (core.System, error) {
 		"model", c.Model.Model,
 		"tools_loaded", len(s.Tools.All()),
 		"max_context", c.Session.MaxContext,
+		"session_db", c.Session.Path,
 	}
 	if toolErrors > 0 {
 		fields = append(fields, "tool_errors", toolErrors)

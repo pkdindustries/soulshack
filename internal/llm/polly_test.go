@@ -21,34 +21,47 @@ func (f completionFunc) ChatCompletionStream(ctx context.Context, req *polly.Com
 	input := make(chan messages.ChatMessage, 1)
 	input <- f(ctx, req)
 	close(input)
-	return processor.ProcessMessagesToEvents(input)
+	return processor.ProcessMessagesToEvents(ctx, input)
 }
 
-func TestCompletionOmissionDoesNotRecommendRemovedTools(t *testing.T) {
+// When a request omits older exchanges, the marker it leaves points the model
+// at read_transcript and the artifact readers, and a stored conversation's
+// agent offers exactly those tools.
+func TestCompletionOmissionRecommendsOfferedTools(t *testing.T) {
 	sys := mocktest.NewMockSystem(t)
-	sys.Memory.SetBudget(1000)
-	// The retained transcript fits, but the system prompt forces projection
-	// to omit an exchange from the request sent to the provider.
-	mocktest.SetConfig(t, sys, func(c *config.Configuration) { c.Bot.Prompt = strings.Repeat("a", 1800) })
+	sys.Memory.SetBudget(3000)
+	// The system prompt and the old exchange together overflow the budget,
+	// so projection omits the exchange from the request.
+	mocktest.SetConfig(t, sys, func(c *config.Configuration) { c.Bot.Prompt = strings.Repeat("a", 6000) })
 	ctx := mocktest.NewMockContext().WithSystem(sys)
 	modelCalls := 0
 	sys.LLM = &PollyLLM{client: completionFunc(func(_ context.Context, req *polly.CompletionRequest) messages.ChatMessage {
 		modelCalls++
+		offered := map[string]bool{}
 		for _, tool := range req.Tools {
-			if tool.GetName() == "read_transcript" {
-				t.Error("request offers removed read_transcript tool")
+			offered[tool.GetName()] = true
+		}
+		recommended := map[string]bool{}
+		for _, msg := range req.Messages {
+			for _, name := range polly.BuiltinToolNames() {
+				if strings.Contains(msg.Content, name) {
+					recommended[name] = true
+				}
 			}
 		}
-		for _, msg := range req.Messages {
-			if strings.Contains(msg.Content, "read_transcript") {
-				t.Error("projection recommends removed read_transcript tool")
+		for name := range recommended {
+			if !offered[name] {
+				t.Errorf("projection recommends %s, which the request does not offer", name)
 			}
+		}
+		if !recommended["read_transcript"] {
+			t.Error("projection does not point at read_transcript for the omitted exchange")
 		}
 		return messages.ChatMessage{Role: messages.MessageRoleAssistant, Content: "done", StopReason: messages.StopReasonEndTurn}
 	})}
 	core.WithConversation(ctx, "seed", func(turn *core.Turn) {
 		turn.Conversation.Append([]messages.ChatMessage{
-			{Role: messages.MessageRoleUser, Content: strings.Repeat("old", 800)},
+			{Role: messages.MessageRoleUser, Content: strings.Repeat("old", 1600)},
 			{Role: messages.MessageRoleAssistant, Content: "old answer"},
 		})
 	}, nil)
@@ -75,10 +88,10 @@ func TestCompletionOmissionDoesNotRecommendRemovedTools(t *testing.T) {
 	}
 }
 
-// The bot offers only the tools soulshack registered. Polly's private
-// built-ins (read_transcript, view_image, and the artifact readers) are
-// removed, and removing them must not disturb the caller's own tools.
-func TestCreateAgentDropsPollyBuiltins(t *testing.T) {
+// Without an artifact store, as for a child, the agent offers only the tools
+// soulshack registered. Polly's private built-ins are removed, and removing
+// them must not disturb the caller's own tools.
+func TestCreateAgentWithoutAStoreDropsPollyBuiltins(t *testing.T) {
 	registry := tools.NewToolRegistry([]tools.Tool{}, tools.WithUnsafeNoSandbox())
 	registry.Register(&tools.Func{
 		Name: "irc__action",
@@ -114,7 +127,38 @@ func TestCreateAgentDropsPollyBuiltins(t *testing.T) {
 	}
 }
 
-func TestPollyTrimsOldestExchangesAndKeepsFinalReply(t *testing.T) {
+// A stored conversation's agent gets polly's built-ins, so the model can open
+// the receipts projection leaves for stored tool output and read back the
+// exchanges its budget left out.
+func TestCreateAgentWithAStoreOffersPollyBuiltins(t *testing.T) {
+	sys := mocktest.NewMockSystem(t)
+	var offered []tools.Tool
+	client := completionFunc(func(_ context.Context, req *polly.CompletionRequest) messages.ChatMessage {
+		offered = req.Tools
+		return messages.ChatMessage{Role: messages.MessageRoleAssistant, Content: "done", StopReason: messages.StopReasonEndTurn}
+	})
+	conversation := sys.Conversation(t, "#chan")
+	agent := CreateAgent(client, sys.ToolRegistry, polly.AgentConfig{MaxIterations: turnMaxIterations, ArtifactStore: conversation.Artifacts()})
+	defer agent.Close()
+	if _, err := agent.Run(context.Background(), &polly.CompletionRequest{Messages: messages.User("hello")}, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	names := make(map[string]bool, len(offered))
+	for _, tool := range offered {
+		names[tool.GetName()] = true
+	}
+	for _, builtin := range polly.BuiltinToolNames() {
+		if !names[builtin] {
+			t.Errorf("agent did not offer polly built-in %s; got %v", builtin, names)
+		}
+	}
+}
+
+// A stored conversation keeps every exchange; the budget bounds only what a
+// request sends, so the oldest exchange stays in the transcript without
+// reaching the provider.
+func TestPollyOmitsOldestExchangesButKeepsThemStored(t *testing.T) {
 	sys := mocktest.NewMockSystem(t)
 	ctx := mocktest.NewMockContext().WithSystem(sys)
 	const budget = 2000
@@ -148,13 +192,14 @@ func TestPollyTrimsOldestExchangesAndKeepsFinalReply(t *testing.T) {
 	if modelCalls != 1 {
 		t.Fatalf("model calls = %d", modelCalls)
 	}
-	history := sys.Conversation(t, ctx.GetConversationKey()).Messages()
-	if len(history) == 0 || history[len(history)-1].Content != "final reply" {
-		t.Fatalf("final reply was lost: %d messages", len(history))
+	conversation := sys.Conversation(t, ctx.GetConversationKey())
+	history := conversation.Messages()
+	// The 16 seeded messages, the question, and the reply.
+	if len(history) != 18 || history[len(history)-1].Content != "final reply" {
+		t.Fatalf("stored transcript = %d messages, want 18 ending in the final reply", len(history))
 	}
-	// Trimmed to what the budget holds, not the 19 messages that were written.
-	if len(history) > 6 {
-		t.Fatalf("transcript grew past its budget: %d messages", len(history))
+	if !strings.Contains(history[0].Content, "OLDEST_PRIVATE_HISTORY") {
+		t.Fatal("the oldest exchange was dropped from the stored transcript")
 	}
 	// The question is written once: the turn appends the user message, then
 	// the messages the model generated.
@@ -167,20 +212,13 @@ func TestPollyTrimsOldestExchangesAndKeepsFinalReply(t *testing.T) {
 	if questions != 1 {
 		t.Fatalf("user message written %d times", questions)
 	}
-	for _, msg := range history {
-		if strings.Contains(msg.Content, "OLDEST_PRIVATE_HISTORY") {
-			t.Fatal("transcript kept an exchange the budget could not hold")
-		}
-	}
 
-	usage, ok := sys.Conversation(t, ctx.GetConversationKey()).Usage()
-	if !ok || usage.Budget != budget || usage.EstimatedTokens <= 0 {
+	usage, ok := conversation.Usage()
+	if !ok || usage.Budget != budget || usage.EstimatedTokens <= 0 || usage.EstimatedTokens > budget {
 		t.Fatalf("recorded projection = %+v, found=%v", usage, ok)
 	}
-	// The transcript is trimmed to the same number, so the projection has
-	// nothing left to omit.
-	if usage.OmittedExchanges != 0 {
-		t.Fatalf("request was over budget with a trimmed transcript: %+v", usage)
+	if usage.OmittedExchanges == 0 {
+		t.Fatalf("request fit the budget without omitting anything: %+v", usage)
 	}
 }
 

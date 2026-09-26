@@ -15,7 +15,9 @@ import (
 
 func TestCompletionWarnsWhenContextUsageIncreases(t *testing.T) {
 	sys := mocktest.NewMockSystem(t)
-	sys.Memory.SetBudget(1000)
+	// Large enough that polly's built-in tool schemas, about 600 tokens, stay
+	// well inside each step the prompt sizes below aim for.
+	sys.Memory.SetBudget(10000)
 	ctx := mocktest.NewMockContext().WithSystem(sys)
 	sys.LLM = &PollyLLM{client: completionFunc(func(context.Context, *polly.CompletionRequest) messages.ChatMessage {
 		return messages.ChatMessage{Role: messages.MessageRoleAssistant, Content: "done", StopReason: messages.StopReasonEndTurn}
@@ -25,11 +27,11 @@ func TestCompletionWarnsWhenContextUsageIncreases(t *testing.T) {
 		promptBytes int
 		want        string
 	}{
-		{2000, ""},
-		{3200, "Model input reached 75% of its context budget"},
-		{3200, ""},
-		{3600, "Model input reached 90% of its context budget"},
-		{3600, ""},
+		{16000, ""},
+		{30000, "Model input reached 75% of its context budget"},
+		{30000, ""},
+		{35600, "Model input reached 90% of its context budget"},
+		{35600, ""},
 	} {
 		mocktest.SetConfig(t, sys, func(c *config.Configuration) { c.Bot.Prompt = strings.Repeat("a", tc.promptBytes) })
 		ctx.Actions = nil

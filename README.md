@@ -155,8 +155,9 @@ docker build . -t soulshack:dev
 | `-V, --verbose` | false | Enable debug logging |
 | `--model` | ollama/llama3.2 | LLM model (`provider/name`) |
 | `--maxtokens` | 4096 | Max tokens per response |
-| `--maxcontext` | 0 | Token budget for a conversation: it bounds both what the model is sent and what is kept in memory (0 = unlimited) |
+| `--maxcontext` | 0 | Tokens a request may send from a conversation; older exchanges are left out of the request, not forgotten (0 = unlimited) |
 | `-S, --sessionduration` | 10m | A conversation is forgotten after this much inactivity (0 = no expiry) |
+| `--sessiondb` | | SQLite database that keeps conversations across restarts (empty: in memory) |
 | `--temperature` | 0.7 | Sampling temperature |
 | `-t, --apitimeout` | 5m | API request timeout |
 | `--openaikey` | | OpenAI API key |
@@ -183,7 +184,7 @@ docker build . -t soulshack:dev
 
 `/stats` shows the last completed model input separately from stored message counts and total provider token usage.
 
-Conversations live in memory, one per channel (`#chan`) or per correspondent in private messages, and are forgotten after `--sessionduration` of inactivity. With `--maxcontext` set, a conversation keeps only the newest exchanges that fit, so a long-lived channel cannot grow without bound; `maxcontext` also caps what a request may send. Anything that changes what the model sees (`/set` of any key) starts the conversation over as a side effect.
+Conversations are pollytool sessions, one per channel (`#chan`) or per correspondent in private messages, and are forgotten after `--sessionduration` of inactivity. They live in memory unless `--sessiondb` names a SQLite database, in which case they survive a restart. A conversation's transcript is kept whole; `--maxcontext` caps what a request may send, and when a request would exceed it the oldest exchanges are left out of it. The model can read those back with `read_transcript`, and large tool output is stored as an artifact it opens with `read_artifact` rather than pasted into every request. Those tools cost about 600 tokens of each request's budget. Anything that changes what the model sees (`/set` of any key) starts the conversation over as a side effect.
 
 ### YAML Configuration
 

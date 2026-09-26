@@ -18,7 +18,8 @@ type Turn struct {
 
 // WithConversation runs one turn against the conversation for ctx's key,
 // queueing behind any turn already running for it. onTimeout runs instead of
-// run when the queue has not cleared by the time ctx ends.
+// run when the turn cannot start: the queue has not cleared by the time ctx
+// ends, or, rarely, the stored conversation cannot be opened.
 func WithConversation(ctx ChatContextInterface, operation string, run func(*Turn), onTimeout func()) {
 	withConversation(ctx, operation, false, run, onTimeout)
 }
@@ -38,7 +39,7 @@ func withConversation(ctx ChatContextInterface, operation string, detached bool,
 	logger.Debug("turn_waiting", "conversation", key, "operation", operation)
 
 	turn := func(conversation *memory.Conversation) {
-		logger.Debug("turn_started", "conversation", key, "operation", operation)
+		logger.Debug("turn_started", "conversation", key, "operation", operation, "messages", conversation.Len())
 		run(&Turn{ChatContextInterface: ctx, Conversation: conversation})
 	}
 
@@ -46,8 +47,12 @@ func withConversation(ctx ChatContextInterface, operation string, detached bool,
 	if detached {
 		queued = mem.WithDetached
 	}
-	if !queued(ctx, key, turn) {
-		logger.Warn("turn_timeout", "conversation", key, "operation", operation)
+	if err := queued(ctx, key, turn); err != nil {
+		if ctx.Err() != nil {
+			logger.Warn("turn_timeout", "conversation", key, "operation", operation)
+		} else {
+			logger.Error("turn_failed", "conversation", key, "operation", operation, "error", err)
+		}
 		if onTimeout != nil {
 			onTimeout()
 		}

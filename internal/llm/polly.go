@@ -55,6 +55,7 @@ func (p *PollyLLM) ChatCompletionStream(turn *core.Turn, req *CompletionRequest)
 		agent := CreateAgent(p.client, registry, llm.AgentConfig{
 			MaxIterations: turnMaxIterations,
 			ToolTimeout:   cfg.API.Timeout,
+			ArtifactStore: turn.Conversation.Artifacts(),
 		})
 		defer agent.Close()
 
@@ -74,7 +75,9 @@ func (p *PollyLLM) ChatCompletionStream(turn *core.Turn, req *CompletionRequest)
 			Budget:           req.MaxContextTokens,
 			OmittedExchanges: resp.Projection.OmittedExchanges,
 		}
-		turn.Conversation.Append(resp.AllMessages)
+		if err := turn.Conversation.Append(resp.AllMessages); err != nil {
+			turn.GetLogger().Error("conversation_append_failed", "error", err)
+		}
 		checkContextUsage(turn, usage)
 		turn.Conversation.SetUsage(usage)
 	}()
@@ -224,16 +227,16 @@ func (h *callbackHandler) onError(err error) {
 }
 
 // CreateAgent shares the caller-owned configured tools, sandbox policy, and MCP
-// connections. Polly's private per-agent built-ins are dropped: an IRC turn has
-// nothing to do with artifacts or images, and its conversation is short enough
-// that paging a transcript only spends tokens. Removing them from the agent's
-// own registry leaves the caller's tools, which it inherits, untouched.
+// connections. Polly's private built-ins come with an artifact store: a stored
+// conversation keeps large tool output as artifacts the model reads back with
+// read_artifact and list_artifacts, and read_transcript reaches the exchanges
+// its context budget left out of the request. Without a store, as for a child,
+// the conversation is short and nothing was stored, so none are installed.
 func CreateAgent(client llm.LLM, registry *tools.ToolRegistry, config llm.AgentConfig) *llm.Agent {
-	agent := llm.NewAgent(client, registry, config)
-	for _, name := range llm.BuiltinToolNames() {
-		agent.ToolRegistry().Remove(name)
+	if config.ArtifactStore == nil {
+		config.Builtins = []string{}
 	}
-	return agent
+	return llm.NewAgent(client, registry, config)
 }
 
 // offeredRegistry narrows what an agent may run to what the request offered

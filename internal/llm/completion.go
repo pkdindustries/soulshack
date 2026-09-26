@@ -53,19 +53,17 @@ func NewCompletionRequest(config *config.Configuration, history []messages.ChatM
 		Model:     config.Model.Model,
 		MaxTokens: config.Model.MaxTokens,
 		Messages:  history,
-		// The budget the conversation is trimmed to, so the request and the
-		// transcript agree; polly omits the oldest exchanges if the request
-		// still estimates above it.
+		// maxcontext. The stored transcript is kept whole; polly omits its
+		// oldest exchanges from the request until it fits, and refuses a
+		// request that still cannot.
 		MaxContextTokens: budget,
 		Temperature:      llm.Float32Ptr(config.Model.Temperature),
 		Tools:            tools,
 		ThinkingEffort:   thinkingEffort,
 	}
 
-	// Set streaming mode (nil = streaming default, false = non-streaming)
 	if !config.Model.Stream {
-		stream := false
-		req.Stream = &stream
+		req.StreamMode = llm.Buffered
 	}
 
 	return req
@@ -115,7 +113,9 @@ func complete(turn *core.Turn, msg string, without string) <-chan string {
 		truncated = truncated[:100] + "..."
 	}
 	turn.GetLogger().Info("message_received", "message", truncated)
-	turn.Conversation.Append([]messages.ChatMessage{cmsg})
+	if err := turn.Conversation.Append([]messages.ChatMessage{cmsg}); err != nil {
+		turn.GetLogger().Error("conversation_append_failed", "error", err)
+	}
 
 	// The system prompt is the process's, not part of the transcript: it is
 	// rebuilt per request so /set prompt takes effect immediately.
