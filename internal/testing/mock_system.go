@@ -76,10 +76,13 @@ type MockSystem struct {
 
 // NewMockSystem creates a MockSystem with sensible defaults
 func NewMockSystem(t testing.TB) *MockSystem {
-	mem := memory.New(memory.Config{
+	mem, err := memory.New(memory.Config{
 		Budget: 100000,
 		TTL:    time.Minute * 10,
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	t.Cleanup(mem.Close)
 	return &MockSystem{
 		ToolRegistry: tools.NewToolRegistry([]tools.Tool{}),
@@ -149,12 +152,29 @@ func NewTurnContext(t testing.TB, sys *MockSystem, key string) *MockChatContext 
 }
 
 // Conversation supplies a conversation for command-level tests, keyed like a
-// turn's would be.
+// turn's would be. It holds that key's turn for the rest of the test, the way a
+// running turn holds its session, so a test that needs another turn on the
+// same key runs it through core.WithConversation instead.
 func (m *MockSystem) Conversation(t testing.TB, key string) *memory.Conversation {
 	t.Helper()
-	var conversation *memory.Conversation
-	if !m.Memory.With(context.Background(), key, func(c *memory.Conversation) { conversation = c }) {
-		t.Fatal("failed to open test conversation")
+	opened := make(chan *memory.Conversation, 1)
+	release := make(chan struct{})
+	finished := make(chan error, 1)
+	go func() {
+		finished <- m.Memory.With(context.Background(), key, func(c *memory.Conversation) {
+			opened <- c
+			<-release
+		})
+	}()
+	select {
+	case conversation := <-opened:
+		t.Cleanup(func() {
+			close(release)
+			<-finished
+		})
+		return conversation
+	case err := <-finished:
+		t.Fatalf("failed to open test conversation: %v", err)
+		return nil
 	}
-	return conversation
 }

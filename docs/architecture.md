@@ -51,17 +51,26 @@ conversation that is discarded with the turn.
 Holds the singleton components:
 -   `ToolRegistry`: Manages available tools.
 -   `Memory`: Holds every conversation (`internal/memory`) — the transcript, its
-    token budget, and its idle expiry.
+    artifacts, the request token budget, and its idle expiry.
 -   `Config`: The running settings (`config.Store`). Turns read a snapshot, so
     `/set` can change settings while other turns are reading them.
 -   `LLM`: The configured LLM client.
 
 ### Conversations
-pollytool's agent holds no transcript state across turns, so soulshack owns
-conversations itself: `internal/memory` keeps one `Conversation` per key, hands
-it to one turn at a time, trims it to `maxcontext` on append (via polly's
-`sessions.TrimHistory`), and drops its transcript after `--sessionduration`
-idle. Nothing is persisted: restarting the bot starts every conversation over.
+pollytool's agent holds no transcript state across turns, so soulshack keeps
+conversations as pollytool sessions: `internal/memory` keeps one `Conversation`
+per key and hands it to one turn at a time. The turn leases the key's session,
+loads its transcript, and appends what it generates; its agent stores large
+tool output in the session's artifact store. The store is the SQLite database
+named by `--sessiondb`, so conversations survive a restart, or an in-memory
+one when that is empty. A conversation idle past `--sessionduration` starts over
+on its next turn, and the store deletes abandoned ones.
+
+The transcript is never trimmed. `maxcontext` is the request's
+`MaxContextTokens`: polly projects each request to fit it, demoting old tool
+results to artifact receipts and omitting the oldest exchanges, and fails a
+request that still cannot fit. The agent's `read_transcript` reaches the
+omitted exchanges.
 
 ### `LLM`
 Abstracts the AI provider.

@@ -1,8 +1,12 @@
-github.com/alexschlessinger/pollytool v0.0.0-20260912054302-910050edf37e h1:vgknoim1oifOUYN6LiVQjqY/k9YR5SO5EVYN3wCD2Cg=
-github.com/alexschlessinger/pollytool v0.0.0-20260912054302-910050edf37e/go.mod h1:KSLPTVEKg74R6PWyIPrIQnQeDFsJWAG8cqI9lzSTqO0=
+github.com/alexschlessinger/pollytool v0.0.0-20260926233705-16cc2699a47a h1:kcRz1M7e2kaa9CB2UiQMkZ5aqI635ohmvA3Vr9uLHpk=
+github.com/alexschlessinger/pollytool v0.0.0-20260926233705-16cc2699a47a/go.mod h1:eiPnpJTKPqljbkHPxuE6ob1737JU5btci5fRXPEJDoM=
 github.com/creack/pty v1.1.9/go.mod h1:oKZEueFk5CKHvIhNR5MUki03XCEU+Q6VDXinZuGJ33E=
+github.com/danwakefield/fnmatch v0.0.0-20160403171240-cbb64ac3d964 h1:y5HC9v93H5EPKqaS1UYVg1uYah5Xf51mBfIoWehClUQ=
+github.com/danwakefield/fnmatch v0.0.0-20160403171240-cbb64ac3d964/go.mod h1:Xd9hchkHSWYkEqJwUGisez3G1QY8Ryz0sdWrLPMGjLk=
 github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc h1:U9qPSI2PIWSS1VwoXQT9A3Wy9MM3WgvqSxFWenqJduM=
 github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
+github.com/denormal/go-gitignore v0.0.0-20180930084346-ae8ad1d07817 h1:0nsrg//Dc7xC74H/TZ5sYR8uk4UQRNjsw8zejqH5a4Q=
+github.com/denormal/go-gitignore v0.0.0-20180930084346-ae8ad1d07817/go.mod h1:C/+sI4IFnEpCn6VQ3GIPEp+FrQnQw+YQP3+n+GdGq7o=
 github.com/dustin/go-humanize v1.0.1 h1:GzkhY7T5VNhEkwH0PVJgjz+fX1rhBrR7pRT3mDkpeCY=
 github.com/dustin/go-humanize v1.0.1/go.mod h1:Mu1zIs6XwVuF/gI1OepvI0qD18qycQx+mFykh5fBlto=
 github.com/golang-jwt/jwt/v5 v5.3.1 h1:kYf81DTWFe7t+1VvL7eS+jKFVWaUnK9cB1qbwn63YCY=

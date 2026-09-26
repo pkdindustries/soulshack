@@ -117,10 +117,10 @@ func TestConversationIdleExpiryStartsFresh(t *testing.T) {
 		turn.Conversation.Append([]messages.ChatMessage{{Role: messages.MessageRoleUser, Content: "expired"}})
 	}, nil)
 
-	// Expire by hand rather than sleeping: the TTL clock is the memory's.
+	// The next turn judges idleness by the live TTL, so there is no need to
+	// wait for the store's sweep.
 	sys.Memory.SetTTL(time.Nanosecond)
 	time.Sleep(time.Millisecond)
-	sys.Memory.Sweep()
 
 	core.WithConversation(ctx, "fresh", func(turn *core.Turn) {
 		for _, msg := range turn.Conversation.Messages() {

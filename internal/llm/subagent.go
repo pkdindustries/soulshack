@@ -69,7 +69,8 @@ func (p *PollyLLM) RunSubagent(ctx context.Context, spec core.SubagentSpec) (cor
 	}
 
 	result := core.SubagentResult{Text: strings.TrimSpace(resp.Message.GetContent())}
-	result.InputTokens, result.OutputTokens = resp.TokenUsage()
+	usage := resp.TokenUsage()
+	result.InputTokens, result.OutputTokens = usage.TotalInput, usage.TotalOutput
 	return result, nil
 }
 

@@ -3,7 +3,7 @@ module pkdindustries/soulshack
 go 1.27.0
 
 require (
-	github.com/alexschlessinger/pollytool v0.0.0-20260912054302-910050edf37e
+	github.com/alexschlessinger/pollytool v0.0.0-20260926233705-16cc2699a47a
 	github.com/lmittmann/tint v1.2.0
 	github.com/lrstanley/girc v1.1.1
 	github.com/mazznoer/colorgrad v0.11.1
@@ -14,7 +14,9 @@ require (
 //replace github.com/alexschlessinger/pollytool => ../polly
 
 require (
+	github.com/danwakefield/fnmatch v0.0.0-20160403171240-cbb64ac3d964 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
+	github.com/denormal/go-gitignore v0.0.0-20180930084346-ae8ad1d07817 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/google/jsonschema-go v0.4.3 // indirect
 	github.com/google/uuid v1.6.0 // indirect

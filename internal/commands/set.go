@@ -61,5 +61,7 @@ func (c *SetCommand) Execute(turn *core.Turn) {
 
 	// Any configuration change starts this conversation over: its transcript
 	// may describe a bot that no longer exists.
-	turn.Conversation.Clear()
+	if err := turn.Conversation.Clear(); err != nil {
+		turn.GetLogger().Error("conversation_clear_failed", "error", err)
+	}
 }
