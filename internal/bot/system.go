@@ -102,6 +102,13 @@ func NewSystem(c *config.Configuration) (core.System, error) {
 		}
 	}
 
+	// A maxcontext too small for this prompt and these tools would fail
+	// turns; refuse it now rather than at the first one.
+	if err := llm.CheckContextBudget(c, s.Tools); err != nil {
+		_ = s.Tools.Close()
+		return nil, err
+	}
+
 	// Conversations are polly sessions, kept in the session database when
 	// one is configured and in memory otherwise.
 	mem, err := memory.New(memory.Config{

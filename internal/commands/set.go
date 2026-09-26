@@ -6,6 +6,7 @@ import (
 
 	"pkdindustries/soulshack/internal/config"
 	"pkdindustries/soulshack/internal/core"
+	"pkdindustries/soulshack/internal/llm"
 )
 
 // SetCommand handles the /set command for configuration changes
@@ -36,9 +37,17 @@ func (c *SetCommand) Execute(turn *core.Turn) {
 	// copy of the setting follows in the same step.
 	system := turn.GetSystem()
 	if err := system.UpdateConfig(func(live *config.Configuration) error {
-		if err := field.setter(live, value); err != nil {
+		// The change is tried on a copy first: a setting that leaves
+		// maxcontext too small for the prompt and tools, whichever of them
+		// changed, is refused before it lands.
+		candidate := live.Clone()
+		if err := field.setter(candidate, value); err != nil {
 			return err
 		}
+		if err := llm.CheckContextBudget(candidate, system.GetToolRegistry()); err != nil {
+			return err
+		}
+		*live = *candidate
 		if field.apply != nil {
 			field.apply(live, system)
 		}

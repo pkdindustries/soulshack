@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/alexschlessinger/pollytool/artifacts"
 	"github.com/alexschlessinger/pollytool/llm"
 	"github.com/alexschlessinger/pollytool/tools"
 
@@ -123,6 +124,9 @@ type SubagentSpec struct {
 	Registry *tools.ToolRegistry
 	// Config is the snapshot the child runs under.
 	Config *config.Configuration
+	// Artifacts is where the child keeps large tool output out of its
+	// requests. Nil keeps none.
+	Artifacts artifacts.Store
 }
 
 // SubagentResult is what a child returned.

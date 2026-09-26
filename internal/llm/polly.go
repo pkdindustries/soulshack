@@ -1,6 +1,7 @@
 package llm
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -66,6 +67,14 @@ func (p *PollyLLM) ChatCompletionStream(turn *core.Turn, req *CompletionRequest)
 
 		framer.Flush()
 
+		// What the run generated is kept even when it ended early: the tool
+		// calls it made have happened, and polly hands back a transcript that
+		// ends at a boundary a provider accepts.
+		if resp != nil {
+			if err := turn.Conversation.Append(resp.AllMessages); err != nil {
+				turn.GetLogger().Error("conversation_append_failed", "error", err)
+			}
+		}
 		if err != nil {
 			turn.GetLogger().Error("agent_error", "error", err.Error())
 			return
@@ -74,9 +83,6 @@ func (p *PollyLLM) ChatCompletionStream(turn *core.Turn, req *CompletionRequest)
 			EstimatedTokens:  resp.Projection.RequestEstimatedTokens,
 			Budget:           req.MaxContextTokens,
 			OmittedExchanges: resp.Projection.OmittedExchanges,
-		}
-		if err := turn.Conversation.Append(resp.AllMessages); err != nil {
-			turn.GetLogger().Error("conversation_append_failed", "error", err)
 		}
 		checkContextUsage(turn, usage)
 		turn.Conversation.SetUsage(usage)
@@ -223,15 +229,23 @@ func (h *callbackHandler) onToolEnd(tc messages.ChatMessageToolCall, result stri
 
 func (h *callbackHandler) onError(err error) {
 	h.turn.GetLogger().Error("stream_error", "error", err.Error())
+	// MinContext leaves room for every turn, so this is an estimate falling
+	// short, or a model whose window is smaller than maxcontext. Either way
+	// it is a limit to report, not a fault.
+	var limit *llm.ContextLimitError
+	if errors.As(err, &limit) {
+		h.framer.Write(fmt.Sprintf("Stopped: this needs about %d tokens of context and only %d fit", limit.EstimatedTokens, limit.Limit))
+		return
+	}
 	h.framer.Write(fmt.Sprintf("Error: %v", err))
 }
 
 // CreateAgent shares the caller-owned configured tools, sandbox policy, and MCP
-// connections. Polly's private built-ins come with an artifact store: a stored
-// conversation keeps large tool output as artifacts the model reads back with
-// read_artifact and list_artifacts, and read_transcript reaches the exchanges
-// its context budget left out of the request. Without a store, as for a child,
-// the conversation is short and nothing was stored, so none are installed.
+// connections. Polly's private built-ins come with an artifact store, which
+// every turn and child has: large tool output is stored as artifacts the model
+// reads back with read_artifact and list_artifacts, and read_transcript reaches
+// the exchanges the context budget left out of the request. Without a store
+// there is nothing for them to read, so none are installed.
 func CreateAgent(client llm.LLM, registry *tools.ToolRegistry, config llm.AgentConfig) *llm.Agent {
 	if config.ArtifactStore == nil {
 		config.Builtins = []string{}

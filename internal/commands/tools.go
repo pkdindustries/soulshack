@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"pkdindustries/soulshack/internal/core"
+	"pkdindustries/soulshack/internal/llm"
 
 	"github.com/alexschlessinger/pollytool/tools"
 )
@@ -120,6 +121,18 @@ func (c *ToolsCommand) addTool(turn *core.Turn, toolPath string) {
 	result, err := registry.LoadToolAuto(toolPath)
 	if err != nil {
 		turn.Reply(fmt.Sprintf("Failed: %v", err))
+		return
+	}
+	// Every schema is part of every request, so tools can outgrow
+	// maxcontext as surely as a prompt can. Their size is only known once
+	// they are loaded, so a set that does not fit is unloaded again.
+	if err := llm.CheckContextBudget(turn.GetConfig(), registry); err != nil {
+		for _, server := range result.Servers {
+			for _, name := range server.ToolNames {
+				registry.Remove(name)
+			}
+		}
+		turn.Reply(fmt.Sprintf("Not added: %v", err))
 		return
 	}
 
