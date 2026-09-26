@@ -104,9 +104,14 @@ func complete(turn *core.Turn, msg string, without string) <-chan string {
 	cfg := turn.GetConfig()
 	history := turn.Conversation.Messages()
 
-	cmsg := messages.ChatMessage{
+	budget := turn.GetSystem().GetMemory().Budget()
+	cmsg, err := boundMessage(turn, turn.Conversation.Artifacts(), messages.ChatMessage{
 		Role:    messages.MessageRoleUser,
 		Content: msg,
+	}, budget)
+	if err != nil {
+		// The message goes as it is; the request may still fit.
+		turn.GetLogger().Error("message_bound_failed", "error", err)
 	}
 	truncated := msg
 	if len(truncated) > 100 {
@@ -135,6 +140,5 @@ func complete(turn *core.Turn, msg string, without string) <-chan string {
 		}
 	}
 
-	budget := turn.GetSystem().GetMemory().Budget()
 	return turn.GetSystem().GetLLM().ChatCompletionStream(turn, NewCompletionRequest(cfg, request, budget, allTools))
 }

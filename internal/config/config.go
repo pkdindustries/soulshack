@@ -198,7 +198,7 @@ func GetFlags() []cli.Flag {
 		// Timeouts and Behavior
 		&cli.BoolFlag{Name: "addressed", Aliases: []string{"a"}, Value: true, Usage: "require bot be addressed by nick for response", Sources: src("addressed", "SOULSHACK_ADDRESSED")},
 		&cli.DurationFlag{Name: "sessionduration", Aliases: []string{"S"}, Value: time.Minute * 10, Usage: "a conversation is forgotten after this duration of inactivity (0 = no expiry)", Sources: src("sessionduration", "SOULSHACK_SESSIONDURATION")},
-		&cli.IntFlag{Name: "maxcontext", Value: 0, Usage: "maximum tokens a request may send from a conversation; older exchanges are omitted from the request, not forgotten (0 = unlimited)", Sources: src("maxcontext", "SOULSHACK_MAXCONTEXT")},
+		&cli.IntFlag{Name: "maxcontext", Value: 0, Usage: "maximum tokens a request may send from a conversation; older exchanges are omitted from the request, not forgotten; refused below the least a turn always fits in (0 = unlimited)", Sources: src("maxcontext", "SOULSHACK_MAXCONTEXT")},
 		&cli.StringFlag{Name: "sessiondb", Usage: "SQLite database that keeps conversations across restarts (empty: in memory)", Sources: src("sessiondb", "SOULSHACK_SESSIONDB")},
 		&cli.IntFlag{Name: "chunkmax", Aliases: []string{"m"}, Value: 350, Usage: "maximum number of characters to send as a single message", Sources: src("chunkmax", "SOULSHACK_CHUNKMAX")},
 

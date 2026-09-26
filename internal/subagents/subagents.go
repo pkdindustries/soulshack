@@ -13,6 +13,7 @@ import (
 
 	"pkdindustries/soulshack/internal/core"
 	"pkdindustries/soulshack/internal/llm"
+	"pkdindustries/soulshack/internal/memory"
 )
 
 // defaultLabel names a child whose brief did not.
@@ -145,7 +146,17 @@ func run(chat core.ChatContextInterface, spec core.SubagentSpec) {
 	logger := chat.GetLogger().With("agent", spec.Label)
 	started := time.Now()
 
-	result, err := chat.GetSystem().GetLLM().RunSubagent(chat, spec)
+	// The child answers to no conversation, but it gets a scratch one for
+	// its artifacts, deleted when it is done, so it can keep large tool
+	// output out of its requests like any other turn.
+	var result core.SubagentResult
+	var err error
+	if scratchErr := chat.GetSystem().GetMemory().WithScratch(chat, func(scratch *memory.Conversation) {
+		spec.Artifacts = scratch.Artifacts()
+		result, err = chat.GetSystem().GetLLM().RunSubagent(chat, spec)
+	}); scratchErr != nil {
+		err = scratchErr
+	}
 	duration := time.Since(started)
 
 	if err != nil {

@@ -1,6 +1,7 @@
 package bot_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/alexschlessinger/pollytool/subagent"
@@ -70,5 +71,21 @@ func TestNewSystemOffersSpawningOnlyWhenEnabled(t *testing.T) {
 				t.Fatalf("subagents %v but the agent tracker = %v", enabled, agents)
 			}
 		})
+	}
+}
+
+// A maxcontext turns cannot fit in stops the bot at startup, with the
+// minimum in the error, rather than failing turns once it is running.
+func TestNewSystemRefusesMaxContextBelowTheMinimum(t *testing.T) {
+	cfg := mocktest.DefaultTestConfig()
+	cfg.Bot.Sandbox = false
+	cfg.Session.MaxContext = 1000
+	sys, err := bot.NewSystem(cfg)
+	if err == nil {
+		sys.GetMemory().Close()
+		t.Fatal("started with a maxcontext no turn fits in")
+	}
+	if !strings.Contains(err.Error(), "maxcontext 1000 is below") {
+		t.Fatalf("error = %v", err)
 	}
 }

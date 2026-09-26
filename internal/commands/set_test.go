@@ -1,11 +1,14 @@
 package commands
 
 import (
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"pkdindustries/soulshack/internal/config"
+	"pkdindustries/soulshack/internal/llm"
 	mocktest "pkdindustries/soulshack/internal/testing"
 )
 
@@ -342,4 +345,29 @@ func TestSetCommand_ConcurrentReadersSeeChanges(t *testing.T) {
 	}
 	close(stop)
 	readers.Wait()
+}
+
+// A maxcontext too small for the prompt and tools is refused, and so is a
+// prompt that would outgrow the maxcontext already set; neither lands.
+func TestSetCommand_RefusesBudgetsTurnsCannotFit(t *testing.T) {
+	mockSys := mocktest.NewMockSystem(t)
+	least := llm.MinContext(mockSys.GetConfig(), mockSys.GetToolRegistry())
+
+	ctx := mocktest.NewTurnContext(t, mockSys, "test").
+		WithAdmin(true).
+		WithArgs("/set", "maxcontext", strconv.Itoa(least-1))
+	(&SetCommand{}).Execute(ctx.Turn())
+	if !strings.Contains(ctx.LastReply(), "below") || mockSys.GetConfig().Session.MaxContext == least-1 {
+		t.Fatalf("maxcontext below the minimum was accepted: %q", ctx.LastReply())
+	}
+
+	mocktest.SetConfig(t, mockSys, func(c *config.Configuration) { c.Session.MaxContext = least })
+	prompt := mockSys.GetConfig().Bot.Prompt
+	ctx = mocktest.NewTurnContext(t, mockSys, "other").
+		WithAdmin(true).
+		WithArgs("/set", "prompt", strings.Repeat("be thorough ", 500))
+	(&SetCommand{}).Execute(ctx.Turn())
+	if !strings.Contains(ctx.LastReply(), "below") || mockSys.GetConfig().Bot.Prompt != prompt {
+		t.Fatalf("a prompt that outgrew maxcontext was accepted: %q", ctx.LastReply())
+	}
 }

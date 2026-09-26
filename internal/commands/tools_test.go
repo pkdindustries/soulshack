@@ -8,6 +8,8 @@ import (
 	"github.com/alexschlessinger/pollytool/schema"
 	"github.com/alexschlessinger/pollytool/tools"
 
+	"pkdindustries/soulshack/internal/config"
+	"pkdindustries/soulshack/internal/llm"
 	mocktest "pkdindustries/soulshack/internal/testing"
 )
 
@@ -102,3 +104,23 @@ func (t *mockTool) GetSource() string                                           
 func (t *mockTool) Execute(_ context.Context, _ map[string]any) (string, error) { return "", nil }
 
 var _ tools.Tool = (*mockTool)(nil)
+
+// Tools whose schemas would leave maxcontext too small are unloaded again.
+func TestToolsCommand_AddRefusesToolsThatOutgrowMaxContext(t *testing.T) {
+	mockSys := mocktest.NewMockSystem(t)
+	mockSys.ToolRegistry = tools.NewToolRegistry([]tools.Tool{}, tools.WithUnsafeNoSandbox(), tools.WithNativeTools())
+	least := llm.MinContext(mockSys.GetConfig(), mockSys.GetToolRegistry())
+	mocktest.SetConfig(t, mockSys, func(c *config.Configuration) { c.Session.MaxContext = least })
+
+	ctx := mocktest.NewTurnContext(t, mockSys, "test").
+		WithAdmin(true).
+		WithArgs("/tools", "add", "bash")
+	(&ToolsCommand{}).Execute(ctx.Turn())
+
+	if !strings.HasPrefix(ctx.LastReply(), "Not added:") {
+		t.Fatalf("reply = %q", ctx.LastReply())
+	}
+	if _, ok := mockSys.ToolRegistry.Get("bash"); ok {
+		t.Fatal("the refused tool stayed loaded")
+	}
+}

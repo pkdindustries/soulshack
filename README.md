@@ -155,7 +155,7 @@ docker build . -t soulshack:dev
 | `-V, --verbose` | false | Enable debug logging |
 | `--model` | ollama/llama3.2 | LLM model (`provider/name`) |
 | `--maxtokens` | 4096 | Max tokens per response |
-| `--maxcontext` | 0 | Tokens a request may send from a conversation; older exchanges are left out of the request, not forgotten (0 = unlimited) |
+| `--maxcontext` | 0 | Tokens a request may send from a conversation; older exchanges are left out of the request, not forgotten. Refused below the least a turn always fits in (0 = unlimited) |
 | `-S, --sessionduration` | 10m | A conversation is forgotten after this much inactivity (0 = no expiry) |
 | `--sessiondb` | | SQLite database that keeps conversations across restarts (empty: in memory) |
 | `--temperature` | 0.7 | Sampling temperature |
@@ -184,7 +184,9 @@ docker build . -t soulshack:dev
 
 `/stats` shows the last completed model input separately from stored message counts and total provider token usage.
 
-Conversations are pollytool sessions, one per channel (`#chan`) or per correspondent in private messages, and are forgotten after `--sessionduration` of inactivity. They live in memory unless `--sessiondb` names a SQLite database, in which case they survive a restart. A conversation's transcript is kept whole; `--maxcontext` caps what a request may send, and when a request would exceed it the oldest exchanges are left out of it. The model can read those back with `read_transcript`, and large tool output is stored as an artifact it opens with `read_artifact` rather than pasted into every request. Those tools cost about 600 tokens of each request's budget. Anything that changes what the model sees (`/set` of any key) starts the conversation over as a side effect.
+Conversations are pollytool sessions, one per channel (`#chan`) or per correspondent in private messages, and are forgotten after `--sessionduration` of inactivity. They live in memory unless `--sessiondb` names a SQLite database, in which case they survive a restart. A conversation's transcript is kept whole; `--maxcontext` caps what a request may send, and when a request would exceed it the oldest exchanges are left out of it. The model can read those back with `read_transcript`, and large tool output is stored as an artifact it opens with `read_artifact` rather than pasted into every request. A long incoming message, such as a child agent's report, is stored the same way once it passes a quarter of the budget, and the model sees its head, its tail and a receipt.
+
+A turn under `--maxcontext` never runs out of room: the bot refuses, at startup, on `/set` and on `/tools add`, any `maxcontext` smaller than what the prompt, the tool schemas (about 600 tokens are polly's own readers), a quarter of the budget for the message and a quarter for a page of recalled output need. The error names that minimum; a default bot needs about 6,000 tokens. The one thing it cannot see is a model whose context window is smaller than `maxcontext`: a turn that does not fit then ends with a `Stopped:` line, keeping what it did. Anything that changes what the model sees (`/set` of any key) starts the conversation over as a side effect.
 
 ### YAML Configuration
 
