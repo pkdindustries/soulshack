@@ -8,7 +8,6 @@ import (
 
 	"pkdindustries/soulshack/internal/core"
 	"pkdindustries/soulshack/internal/irc"
-	"pkdindustries/soulshack/internal/llm"
 )
 
 var urlPattern = regexp.MustCompile(`^https?://[^\s]+`)
@@ -40,35 +39,33 @@ func (b *URLBehavior) Check(ctx irc.ChatContextInterface, event *girc.Event) boo
 }
 
 func (b *URLBehavior) Execute(ctx irc.ChatContextInterface, event *girc.Event) {
-	core.WithRequestLock(ctx, ctx.GetLockKey(), "url", func() {
-		cfg := ctx.GetConfig()
-		prompt := fmt.Sprintf("(nick:%s) %s", ctx.GetSource(), event.Last())
+	b.execute(ctx, event)
+}
 
-		silent := cfg.Bot.URLWatcherSilent
-		execCtx := irc.ChatContextInterface(ctx)
-		if silent {
-			dctx, cleanup, err := newDetachedContext(ctx)
-			if err != nil {
-				ctx.GetLogger().Error("url_behavior_error", "error", err)
-				return
-			}
-			defer cleanup()
-			execCtx = dctx
-		}
+// execute runs the observation in the background and returns at once. Nobody
+// asked for this turn, so nobody should be kept waiting on it: the event
+// handler returns while the link is still being read, and the observation gets
+// a lifetime of its own rather than the event's. The channel returned is
+// closed when the observation has finished, which is what a test waits on.
+func (b *URLBehavior) execute(ctx irc.ChatContextInterface, event *girc.Event) <-chan struct{} {
+	cfg := ctx.GetConfig()
+	silent := cfg.Bot.URLWatcherSilent
+	withConversation := core.WithConversation
+	if silent {
+		withConversation = core.WithDetachedConversation
+	}
 
-		outch, err := llm.Complete(execCtx, prompt)
-		if err != nil {
-			ctx.GetLogger().Error("url_behavior_error", "error", err)
-			if !silent {
-				ctx.Reply(err.Error())
-			}
-			return
-		}
+	// Read the event before the handler that owns it returns.
+	prompt := fmt.Sprintf("(nick:%s) %s", ctx.GetSource(), event.Last())
 
-		for res := range outch {
-			if !silent {
-				ctx.Reply(res)
-			}
-		}
-	}, nil)
+	background, cancel := ctx.Background(cfg.API.Timeout)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		defer cancel()
+		withConversation(background, "url", func(turn *core.Turn) {
+			observe(turn, prompt, silent)
+		}, nil)
+	}()
+	return done
 }

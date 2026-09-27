@@ -1,10 +1,19 @@
 package behaviors
 
 import (
+	"github.com/alexschlessinger/pollytool/messages"
+	"pkdindustries/soulshack/internal/core"
 	"testing"
+	"time"
 
 	"github.com/lrstanley/girc"
 
+	pollyllm "github.com/alexschlessinger/pollytool/llm"
+	"github.com/alexschlessinger/pollytool/subagent"
+
+	"pkdindustries/soulshack/internal/subagents"
+
+	"pkdindustries/soulshack/internal/config"
 	mocktest "pkdindustries/soulshack/internal/testing"
 )
 
@@ -125,4 +134,115 @@ func TestURLBehavior_Name(t *testing.T) {
 	if behavior.Name() != "url" {
 		t.Errorf("URLBehavior.Name() = %q, want %q", behavior.Name(), "url")
 	}
+}
+
+// settled waits for a background observation, with a bound so a broken one
+// fails the test instead of hanging it.
+func settled(t *testing.T, done <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the observation never finished")
+	}
+}
+
+func TestSilentURLUsesTemporaryConversation(t *testing.T) {
+	sys := mocktest.NewMockSystem(t)
+	model := &mocktest.MockLLM{Responses: []string{"silent result"}}
+	sys.LLM = model
+	ctx := mocktest.NewMockContext().WithSystem(sys).WithAddressed(false)
+	mocktest.SetConfig(t, sys, func(c *config.Configuration) { c.Bot.URLWatcherSilent = true })
+	core.WithConversation(ctx, "seed", func(turn *core.Turn) {
+		turn.Conversation.Append([]messages.ChatMessage{{Role: messages.MessageRoleUser, Content: "channel history"}})
+	}, nil)
+	behavior := &URLBehavior{}
+	settled(t, behavior.execute(ctx, &girc.Event{Command: girc.PRIVMSG, Params: []string{"#test", "https://example.com"}}))
+	if model.LastRequest == nil {
+		t.Fatal("silent URL did not run")
+	}
+	for _, msg := range model.LastRequest.Messages {
+		if msg.Content == "channel history" {
+			t.Fatal("silent URL received channel history")
+		}
+	}
+	if ctx.ReplyCount() != 0 {
+		t.Fatalf("silent URL replied: %v", ctx.Replies)
+	}
+	keys := sys.Memory.Keys()
+	if len(keys) != 1 || keys[0] != ctx.GetConversationKey() {
+		t.Fatalf("temporary conversation leaked: %v", keys)
+	}
+	core.WithConversation(ctx, "verify", func(turn *core.Turn) {
+		history := turn.Conversation.Messages()
+		if len(history) != 1 || history[0].Content != "channel history" {
+			t.Fatalf("silent URL changed channel history: %v", history)
+		}
+	}, nil)
+}
+
+// Nobody asked the bot to read the link, so the turn that reads it cannot
+// decide to spend more on it. It is also the one turn that may be running on a
+// scratch transcript, where a child's report would have nowhere to go but the
+// channel it was supposed to stay out of.
+func TestURLObservationCannotDelegate(t *testing.T) {
+	for _, silent := range []bool{true, false} {
+		sys := mocktest.NewMockSystem(t)
+		model := &mocktest.MockLLM{Responses: []string{"that link is about birds"}}
+		sys.LLM = model
+		subagents.Register(sys.ToolRegistry, subagents.NewTracker())
+		ctx := mocktest.NewMockContext().WithSystem(sys).WithAddressed(false)
+		mocktest.SetConfig(t, sys, func(c *config.Configuration) { c.Bot.URLWatcherSilent = silent })
+
+		behavior := &URLBehavior{}
+		settled(t, behavior.execute(ctx, &girc.Event{Command: girc.PRIVMSG, Params: []string{"#test", "https://example.com"}}))
+
+		if model.LastRequest == nil {
+			t.Fatalf("silent=%v: the observation did not run", silent)
+		}
+		for _, tool := range model.LastRequest.Tools {
+			if tool.GetName() == subagent.ToolName {
+				t.Fatalf("silent=%v: a URL observation was offered the spawning tool", silent)
+			}
+		}
+	}
+}
+
+// The event handler must not wait on the reading. A link someone pasted is not
+// a reason for the bot to stop answering the channel.
+func TestURLObservationDoesNotHoldTheHandler(t *testing.T) {
+	sys := mocktest.NewMockSystem(t)
+	reading := make(chan struct{})
+	release := make(chan struct{})
+	sys.LLM = &blockingLLM{reading: reading, release: release}
+	ctx := mocktest.NewMockContext().WithSystem(sys).WithAddressed(false)
+
+	behavior := &URLBehavior{}
+	done := behavior.execute(ctx, &girc.Event{Command: girc.PRIVMSG, Params: []string{"#test", "https://example.com"}})
+
+	// execute has already returned while the model is still reading.
+	<-reading
+	select {
+	case <-done:
+		t.Fatal("the observation finished before the model did")
+	default:
+	}
+	close(release)
+	settled(t, done)
+}
+
+// blockingLLM holds a completion open until it is released.
+type blockingLLM struct {
+	mocktest.MockLLM
+	reading, release chan struct{}
+}
+
+func (b *blockingLLM) ChatCompletionStream(turn *core.Turn, req *pollyllm.CompletionRequest) <-chan string {
+	out := make(chan string)
+	go func() {
+		defer close(out)
+		close(b.reading)
+		<-b.release
+	}()
+	return out
 }

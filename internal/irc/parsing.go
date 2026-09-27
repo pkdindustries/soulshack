@@ -5,7 +5,22 @@ import (
 	"net"
 	"regexp"
 	"strings"
+	"unicode"
+
+	"github.com/lrstanley/girc"
 )
+
+// FoldNick normalizes an IRC nickname using the server's CASEMAPPING.
+func FoldNick(nick, caseMapping string) string {
+	switch caseMapping {
+	case "ascii":
+		return strings.ToLower(nick)
+	case "rfc1459-strict", "strict-rfc1459":
+		return strings.NewReplacer("[", "{", "]", "}", "\\", "|").Replace(strings.ToLower(nick))
+	default:
+		return girc.ToRFC1459(nick)
+	}
+}
 
 // CheckAddressed returns true if message starts with botNick followed by a separator or end of string.
 func CheckAddressed(message, botNick string) bool {
@@ -24,18 +39,44 @@ func CheckAddressed(message, botNick string) bool {
 	return next == ' ' || next == ':' || next == ','
 }
 
-// CheckAdmin returns true if hostmask matches any admin in the list.
+// CheckAdmin matches full hostmasks against case-insensitive admin masks.
+// Only * (zero or more characters) and ? (one character) are wildcards.
 // WARNING: Returns true if adminList is empty (legacy behavior - everyone is admin).
 func CheckAdmin(hostmask string, adminList []string) bool {
 	if len(adminList) == 0 {
 		return true
 	}
+	if ValidateAdminMask(hostmask) != nil {
+		return false
+	}
 	for _, admin := range adminList {
-		if admin == hostmask {
+		if ValidateAdminMask(admin) != nil {
+			continue
+		}
+		pattern := strings.NewReplacer(`\*`, `[^!@]*`, `\?`, `[^!@]`).Replace(regexp.QuoteMeta(admin))
+		matched, _ := regexp.MatchString("(?i)^"+pattern+"$", hostmask)
+		if matched {
 			return true
 		}
 	}
 	return false
+}
+
+// ValidateAdminMask accepts nick!user@host masks, including wildcard patterns
+// and server-provided cloaks. Brackets and other regexp syntax are literals.
+func ValidateAdminMask(mask string) error {
+	if strings.Count(mask, "!") != 1 || strings.Count(mask, "@") != 1 {
+		return errors.New("admin mask must use nick!user@host format")
+	}
+	nick, rest, _ := strings.Cut(mask, "!")
+	user, host, _ := strings.Cut(rest, "@")
+	if nick == "" || user == "" || host == "" || strings.Contains(nick, "@") {
+		return errors.New("admin mask must have a non-empty nick, user, and host")
+	}
+	if strings.IndexFunc(mask, func(r rune) bool { return unicode.IsSpace(r) || unicode.IsControl(r) }) >= 0 {
+		return errors.New("admin mask cannot contain whitespace or control characters")
+	}
+	return nil
 }
 
 // CheckPrivate returns true if target is not a channel (doesn't start with #).

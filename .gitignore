@@ -11,3 +11,4 @@ play.json
 examples/tools/url
 examples/tools/mcp.json
 .gocache/
+.zvec-grep/
