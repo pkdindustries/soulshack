@@ -211,9 +211,9 @@ func TestTurnAtMinContextNeverRunsOutOfRoom(t *testing.T) {
 	}
 }
 
-// When a request cannot fit anyway, as with a model window smaller than
-// maxcontext, the channel hears a plain account of it and what the turn did is
-// kept.
+// When a request cannot fit anyway, as when the prompt and tools alone
+// outgrow maxcontext, the channel hears a plain account of it and what the
+// turn did is kept.
 func TestContextLimitIsReportedAndTheTurnKept(t *testing.T) {
 	sys := mocktest.NewMockSystem(t)
 	sys.Memory.SetBudget(2500)
@@ -241,6 +241,65 @@ func TestContextLimitIsReportedAndTheTurnKept(t *testing.T) {
 			t.Fatalf("stored transcript = %+v", history)
 		}
 	}, nil)
+}
+
+// windowClient is a provider whose context window is smaller than maxcontext:
+// it rejects a request it counts over the window, in DeepSeek's words, and
+// answers the rest.
+type windowClient struct {
+	window          int
+	calls, rejected int
+}
+
+func (c *windowClient) ChatCompletionStream(ctx context.Context, req *polly.CompletionRequest, processor polly.EventStreamProcessor) <-chan *messages.StreamEvent {
+	c.calls++
+	input := 0
+	for _, msg := range req.Messages {
+		input += polly.EstimateMessageTokens(msg)
+	}
+	if input+req.MaxTokens > c.window {
+		c.rejected++
+		events := make(chan *messages.StreamEvent, 1)
+		events <- &messages.StreamEvent{Type: messages.EventTypeError, Error: fmt.Errorf("openai api error 400 (invalid_request_error): This model's maximum context length is %d tokens. However, you requested %d tokens (%d in the messages, %d in the completion).", c.window, input+req.MaxTokens, input, req.MaxTokens)}
+		close(events)
+		return events
+	}
+	return completionFunc(func(context.Context, *polly.CompletionRequest) messages.ChatMessage {
+		return messages.ChatMessage{Role: messages.MessageRoleAssistant, Content: "final answer", StopReason: messages.StopReasonEndTurn}
+	}).ChatCompletionStream(ctx, req, processor)
+}
+
+// A model whose window is smaller than maxcontext rejects the request, and
+// the turn still gets its answer from a smaller one.
+func TestSmallerModelWindowIsAnsweredWithASmallerRequest(t *testing.T) {
+	sys := mocktest.NewMockSystem(t)
+	sys.Memory.SetBudget(40_000)
+	ctx := mocktest.NewMockContext().WithSystem(sys)
+	client := &windowClient{window: 6_000}
+	sys.LLM = &PollyLLM{client: client}
+
+	core.WithConversation(ctx, "seed", func(turn *core.Turn) {
+		for i := range 20 {
+			turn.Conversation.Append([]messages.ChatMessage{
+				{Role: messages.MessageRoleUser, Content: fmt.Sprintf("(nick:alice) message %d %s", i, strings.Repeat("words ", 400))},
+				{Role: messages.MessageRoleAssistant, Content: strings.Repeat("reply ", 200)},
+			})
+		}
+	}, nil)
+
+	var chunks []string
+	core.WithConversation(ctx, "complete", func(turn *core.Turn) {
+		for chunk := range Complete(turn, "(nick:alice) and now?") {
+			chunks = append(chunks, chunk)
+		}
+	}, nil)
+
+	if got := strings.Join(chunks, " "); !strings.Contains(got, "final answer") || strings.Contains(got, "Stopped") || strings.Contains(got, "Error") {
+		t.Fatalf("reply = %q", got)
+	}
+	if client.calls != 2 || client.rejected != 1 {
+		t.Fatalf("%d requests, %d rejected; want the first rejected and one retry", client.calls, client.rejected)
+	}
 }
 
 // A turn that runs out of iterations keeps the tool calls it made.

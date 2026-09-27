@@ -22,6 +22,10 @@ const turnMaxIterations = 10
 // PollyLLM wraps pollytool's MultiPass and Agent to implement soulshack's LLM interface
 type PollyLLM struct {
 	client llm.LLM
+	// calibration is what providers have reported about each model's
+	// requests, shared by every turn and child, so each sizes its first
+	// request by the last one's count rather than by the estimate alone.
+	calibration *llm.Calibration
 }
 
 // NewPollyLLM creates a new pollytool-based LLM client
@@ -35,7 +39,7 @@ func NewPollyLLM(config config.APIConfig) *PollyLLM {
 		"openrouter":  config.OpenRouterKey,
 		"huggingface": config.HuggingFaceKey,
 	}
-	return &PollyLLM{client: llm.NewMultiPass(apiKeys)}
+	return &PollyLLM{client: llm.NewMultiPass(apiKeys), calibration: llm.NewCalibration()}
 }
 
 // ChatCompletionStream returns a channel of string chunks for IRC output
@@ -57,6 +61,7 @@ func (p *PollyLLM) ChatCompletionStream(turn *core.Turn, req *CompletionRequest)
 			MaxIterations: turnMaxIterations,
 			ToolTimeout:   cfg.API.Timeout,
 			ArtifactStore: turn.Conversation.Artifacts(),
+			Calibration:   p.calibration,
 		})
 		defer agent.Close()
 
@@ -230,12 +235,23 @@ func (h *callbackHandler) onToolEnd(tc messages.ChatMessageToolCall, result stri
 func (h *callbackHandler) onError(err error) {
 	h.turn.GetLogger().Error("stream_error", "error", err.Error())
 	// Polly keeps a turn's tool loop within the budget once its first
-	// request fits, and MinContext makes room for that, so this is a model
-	// whose window is smaller than maxcontext. It is a limit to report, not a
-	// fault.
+	// request fits, in the provider's count, and MinContext makes room for
+	// that; it answers a provider's rejection as too long with smaller
+	// requests. What still ends a turn is a limit to report, not a fault: a
+	// turn whose own input outgrows maxcontext in the provider's count, or a
+	// model whose window cannot hold even the answer without tools.
 	var limit *llm.ContextLimitError
 	if errors.As(err, &limit) {
 		h.framer.Write(fmt.Sprintf("Stopped: this needs about %d tokens of context and only %d fit", limit.EstimatedTokens, limit.Limit))
+		return
+	}
+	var overflow *llm.ContextOverflowError
+	if errors.As(err, &overflow) {
+		if overflow.Window > 0 {
+			h.framer.Write(fmt.Sprintf("Stopped: this does not fit the model's %d-token context window", overflow.Window))
+		} else {
+			h.framer.Write("Stopped: this does not fit the model's context window")
+		}
 		return
 	}
 	h.framer.Write(fmt.Sprintf("Error: %v", err))
