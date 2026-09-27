@@ -1,5 +1,5 @@
-github.com/alexschlessinger/pollytool v0.0.0-20260927024006-569c459fcc93 h1:ye9j1T8mM7R3FndinBxlzJaF1eld64/BLDEFylzs7ao=
-github.com/alexschlessinger/pollytool v0.0.0-20260927024006-569c459fcc93/go.mod h1:eiPnpJTKPqljbkHPxuE6ob1737JU5btci5fRXPEJDoM=
+github.com/alexschlessinger/pollytool v0.0.0-20260927031749-dec5aeba6478 h1:9pcdOyQ8Jop7OGiWNPh2ffLHjGmSUZj+xkFLjTxrBEg=
+github.com/alexschlessinger/pollytool v0.0.0-20260927031749-dec5aeba6478/go.mod h1:eiPnpJTKPqljbkHPxuE6ob1737JU5btci5fRXPEJDoM=
 github.com/creack/pty v1.1.9/go.mod h1:oKZEueFk5CKHvIhNR5MUki03XCEU+Q6VDXinZuGJ33E=
 github.com/danwakefield/fnmatch v0.0.0-20160403171240-cbb64ac3d964 h1:y5HC9v93H5EPKqaS1UYVg1uYah5Xf51mBfIoWehClUQ=
 github.com/danwakefield/fnmatch v0.0.0-20160403171240-cbb64ac3d964/go.mod h1:Xd9hchkHSWYkEqJwUGisez3G1QY8Ryz0sdWrLPMGjLk=
