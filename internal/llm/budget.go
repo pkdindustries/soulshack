@@ -2,9 +2,9 @@ package llm
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"unicode/utf8"
 
 	"github.com/alexschlessinger/pollytool/artifacts"
@@ -16,33 +16,37 @@ import (
 )
 
 // A request under maxcontext carries some things whole: the tool schemas, the
-// system prompt, polly's omission marker, and the part of the turn's tool loop
-// polly cannot shrink. Two things vary and are bounded to a share of the
-// budget each: the incoming message (boundMessage) and the newest page a tool
-// returned, which polly keeps verbatim until the model has read it and bounds
-// to the same share. MinContext is the budget at which all of it fits, so a
-// turn under at least that much never fails for want of room.
+// system prompt and polly's omission marker, which together are polly's
+// context floor, and the part of a turn's tool loop polly cannot shrink. What
+// the budget holds beyond that is room, and two things share it: the incoming
+// message (boundMessage) and the pages tools return, which polly sizes to
+// whatever room the request has left when it runs them. Each has a floor below
+// which it stops being useful and a ceiling above which it only costs more.
+// MinContext is the budget in which the floors fit, so a turn under at least
+// that much never fails for want of room.
 const (
-	// budgetShareDivisor gives the incoming message a quarter of the budget,
-	// the share polly gives a tool's page.
-	budgetShareDivisor = 4
 	// loopReserve holds what a turn's tool loop adds that polly cannot
-	// shrink: the model's own calls and the receipts standing in for the
-	// results it stored.
+	// shrink: the model's own calls and the receipts and stubs standing in
+	// for results it has read.
 	loopReserve = 1024
-	// markerReserve holds polly's omission marker.
-	markerReserve = 100
+	// messageFloorTokens is what an incoming message may always take
+	// whole: a couple of IRC lines, so an ordinary message is never cut.
+	messageFloorTokens = 256
 )
 
 // MinContext is the smallest maxcontext a turn always fits in with this
-// configuration's prompts and these tools: the parts carried whole take half
-// the budget at most, leaving a quarter each for the message and for a page.
+// configuration's prompts and these tools: polly's floor for them, the loop
+// reserve, and a floor-sized message and page.
 func MinContext(cfg *config.Configuration, registry *tools.ToolRegistry) int {
-	prompt := promptTokens(cfg.Bot.Prompt)
-	if cfg.Bot.Subagents {
-		prompt = max(prompt, promptTokens(fmt.Sprintf(childPrompt, cfg.Server.Nick)))
+	var offered []tools.Tool
+	if registry != nil {
+		offered = registry.All()
 	}
-	return 2 * (toolSchemaTokens(registry) + prompt + markerReserve + loopReserve)
+	floor := contextFloor(cfg.Bot.Prompt, offered)
+	if cfg.Bot.Subagents {
+		floor = max(floor, contextFloor(fmt.Sprintf(childPrompt, cfg.Server.Nick), offered))
+	}
+	return floor + loopReserve + messageFloorTokens + llm.PageFloorTokens
 }
 
 // CheckContextBudget refuses a maxcontext below MinContext. Unlimited (zero)
@@ -58,47 +62,51 @@ func CheckContextBudget(cfg *config.Configuration, registry *tools.ToolRegistry)
 	return nil
 }
 
-func promptTokens(prompt string) int {
-	prompt = strings.TrimSpace(prompt)
-	if prompt == "" {
-		return 0
+// contextFloor is polly's context floor for a request with this system prompt
+// offering these tools, polly's own readers included, as every agent here has
+// an artifact store.
+func contextFloor(prompt string, offered []tools.Tool) int {
+	req := &llm.CompletionRequest{Tools: append(append([]tools.Tool(nil), offered...), builtinTools()...)}
+	if prompt = strings.TrimSpace(prompt); prompt != "" {
+		req.Messages = []messages.ChatMessage{{Role: messages.MessageRoleSystem, Content: prompt}}
 	}
-	return messages.EstimateMessageTokens(messages.ChatMessage{Role: messages.MessageRoleSystem, Content: prompt})
+	return llm.ContextFloorTokens(req)
 }
 
 // schemaOnly stands in for an artifact store when all that is wanted is the
-// tools an agent would offer: an agent with a store installs polly's artifact
-// readers. Nothing reads or writes it.
+// tools an agent with one installs. Nothing reads or writes it.
 type schemaOnly struct{ artifacts.Store }
 
-// toolSchemaTokens estimates what the tool schemas an agent over registry
-// offers cost a request, polly's built-ins included, the way polly estimates
-// them when it takes them out of the budget.
-func toolSchemaTokens(registry *tools.ToolRegistry) int {
-	agent := llm.NewAgent(nil, registry, llm.AgentConfig{ArtifactStore: schemaOnly{}})
+// builtinTools are polly's private readers, which an agent with an artifact
+// store adds to what it offers.
+var builtinTools = sync.OnceValue(func() []tools.Tool {
+	agent := llm.NewAgent(nil, nil, llm.AgentConfig{ArtifactStore: schemaOnly{}})
 	defer agent.Close()
-	total := 0
-	for _, tool := range agent.ToolRegistry().All() {
-		schema := tool.GetSchema()
-		if schema == nil {
-			continue
-		}
-		total += 8
-		if raw, err := json.Marshal(schema.Raw); err == nil {
-			total += messages.EstimatedJSONTokens(string(raw))
-		}
+	return agent.ToolRegistry().All()
+})
+
+// messageShare is how much of a request under budget the incoming message may
+// take, given polly's floor for the request. It gets half the room, less any
+// that would leave no floor-sized page, between its own floor and a ceiling:
+// the size at which polly stores tool output rather than sending it, since a
+// longer message costs the same on every request without fitting any better.
+// Without a budget only the ceiling applies.
+func messageShare(budget, floor int) int {
+	ceiling := llm.DefaultInlineToolResultTokens
+	if budget <= 0 {
+		return ceiling
 	}
-	return total
+	room := budget - floor - loopReserve
+	return min(ceiling, max(messageFloorTokens, min(room/2, room-llm.PageFloorTokens)))
 }
 
-// boundMessage keeps an incoming message within its share of the budget. A
-// longer one, such as a child's report, is stored whole as an artifact and
-// stands in the request as its head and tail and a receipt, which the model
-// opens with read_artifact: polly authorizes an artifact any transcript
-// message refers to. Without a budget or a store the message is left as it is.
-func boundMessage(ctx context.Context, store artifacts.Store, msg messages.ChatMessage, budget int) (messages.ChatMessage, error) {
-	share := budget / budgetShareDivisor
-	if budget <= 0 || store == nil || messages.EstimateMessageTokens(msg) <= share {
+// boundMessage keeps an incoming message within share tokens. A longer one,
+// such as a child's report, is stored whole as an artifact and stands in the
+// request as its head and tail and a receipt, which the model opens with
+// read_artifact: polly authorizes an artifact any transcript message refers
+// to. Without a store the message is left as it is.
+func boundMessage(ctx context.Context, store artifacts.Store, msg messages.ChatMessage, share int) (messages.ChatMessage, error) {
+	if store == nil || messages.EstimateMessageTokens(msg) <= share {
 		return msg, nil
 	}
 	ref, err := store.Put(ctx, artifacts.Blob{Kind: artifacts.KindText, MIMEType: "text/plain", Name: "message", Data: []byte(msg.Content)})

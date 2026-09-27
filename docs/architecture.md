@@ -72,11 +72,14 @@ results to artifact receipts and omitting the oldest exchanges, and fails a
 request that still cannot fit. The agent's `read_transcript` reaches the
 omitted exchanges.
 
-What polly cannot shrink is bounded instead (`internal/llm/budget.go`): the tool
-schemas, the system prompt, the omission marker and a reserve for the tool
-loop are carried whole; the incoming message is stored as an artifact past a
-quarter of the budget; and polly pages tool output into another quarter.
-`llm.MinContext` is the budget all of that fits in, and startup, `/set` and
+What polly cannot shrink is bounded instead (`internal/llm/budget.go`). Polly's
+context floor (the tool schemas, the system prompt and the omission marker) and
+a reserve for the tool loop are carried whole; the rest of the budget is room.
+The incoming message takes up to half of it (`messageShare`), never so much
+that no floor-sized page is left, and is stored as an artifact beyond that.
+Polly sizes each batch's pages to the room the request has left when it runs
+them, and refuses recall calls beyond it. Both have a floor and a ceiling.
+`llm.MinContext` is the budget the floors fit in, and startup, `/set` and
 `/tools add` refuse a `maxcontext` below it. Every agent has an artifact store
 for this: detached turns and child agents get a scratch session from
 `Memory.WithScratch`, deleted when they finish. A turn that fails anyway, as

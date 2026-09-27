@@ -21,8 +21,8 @@ func TestMinContextGrowsWithPromptAndTools(t *testing.T) {
 	cfg := mocktest.DefaultTestConfig()
 	registry := tools.NewToolRegistry([]tools.Tool{}, tools.WithUnsafeNoSandbox())
 	base := MinContext(cfg, registry)
-	if base <= 2*(loopReserve+markerReserve) {
-		t.Fatalf("minimum %d leaves out polly's built-in schemas", base)
+	if base <= loopReserve+messageFloorTokens+polly.PageFloorTokens {
+		t.Fatalf("minimum %d leaves out polly's floor for the prompt and tools", base)
 	}
 
 	cfg.Bot.Prompt = strings.Repeat("be terse. ", 400)
@@ -54,31 +54,49 @@ func TestCheckContextBudget(t *testing.T) {
 	}
 }
 
+// The message's share of the room has a floor and a ceiling in every case:
+// half the room in between, never so much that no floor-sized page is left.
+func TestMessageShare(t *testing.T) {
+	const floor = 3000
+	least := floor + loopReserve + messageFloorTokens + polly.PageFloorTokens
+	for name, tc := range map[string]struct{ budget, want int }{
+		"unlimited":      {0, polly.DefaultInlineToolResultTokens},
+		"huge":           {1_000_000, polly.DefaultInlineToolResultTokens},
+		"at the minimum": {least, messageFloorTokens},
+		"below it":       {least - 500, messageFloorTokens},
+		"in between":     {floor + loopReserve + 8000, 4000},
+		"just above":     {least + 100, messageFloorTokens + 100},
+	} {
+		if got := messageShare(tc.budget, floor); got != tc.want {
+			t.Errorf("%s: share of a %d budget = %d, want %d", name, tc.budget, got, tc.want)
+		}
+	}
+}
+
 func TestBoundMessageStoresWhatExceedsItsShare(t *testing.T) {
 	sys := mocktest.NewMockSystem(t)
 	store := sys.Conversation(t, "#chan").Artifacts()
-	const budget = 4000
 	short := messages.ChatMessage{Role: messages.MessageRoleUser, Content: "(nick:alice) hello"}
 	long := messages.ChatMessage{Role: messages.MessageRoleUser, Content: "HEAD " + strings.Repeat("report line\n", 3000) + " TAIL"}
 
 	for name, tc := range map[string]struct {
 		store   bool
-		budget  int
+		share   int
 		msg     messages.ChatMessage
 		bounded bool
 	}{
-		"short":       {true, budget, short, false},
-		"no budget":   {true, 0, long, false},
-		"no store":    {false, budget, long, false},
-		"long":        {true, budget, long, true},
-		"tiny budget": {true, 400, long, true},
+		"short":         {true, 1000, short, false},
+		"no store":      {false, 1000, long, false},
+		"long":          {true, 1000, long, true},
+		"at the floor":  {true, messageFloorTokens, long, true},
+		"under ceiling": {true, polly.DefaultInlineToolResultTokens, long, false},
 	} {
 		t.Run(name, func(t *testing.T) {
 			s := store
 			if !tc.store {
 				s = nil
 			}
-			got, err := boundMessage(context.Background(), s, tc.msg, tc.budget)
+			got, err := boundMessage(context.Background(), s, tc.msg, tc.share)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -88,8 +106,8 @@ func TestBoundMessageStoresWhatExceedsItsShare(t *testing.T) {
 				}
 				return
 			}
-			if tokens := messages.EstimateMessageTokens(got); tokens > tc.budget/budgetShareDivisor {
-				t.Fatalf("bounded message is %d tokens, over its share of %d", tokens, tc.budget/budgetShareDivisor)
+			if tokens := messages.EstimateMessageTokens(got); tokens > tc.share {
+				t.Fatalf("bounded message is %d tokens, over its share of %d", tokens, tc.share)
 			}
 			if !strings.HasPrefix(got.Content, "HEAD") || !strings.Contains(got.Content, "TAIL") || !strings.Contains(got.Content, "read_artifact") {
 				t.Fatalf("bounded message lost its head, tail or receipt: %q", got.Content)
@@ -113,7 +131,8 @@ var artifactID = regexp.MustCompile(`sha256:[0-9a-f]{64}`)
 
 // At exactly MinContext, the worst a turn can bring still fits: a long history
 // the budget cannot hold, an incoming message far over its share, and the
-// model paging back through both at full page size before answering.
+// model paging back through both, in parallel and one at a time, before
+// answering. Reads beyond the room are refused, not overflowed.
 func TestTurnAtMinContextNeverRunsOutOfRoom(t *testing.T) {
 	sys := mocktest.NewMockSystem(t)
 	cfg := sys.GetConfig()
@@ -133,7 +152,12 @@ func TestTurnAtMinContextNeverRunsOutOfRoom(t *testing.T) {
 		}
 		switch calls {
 		case 1:
-			return call("read_transcript", `{}`)
+			batch := call("read_transcript", `{}`)
+			batch.ToolCalls = append(batch.ToolCalls,
+				messages.ChatMessageToolCall{ID: "call1b", Name: "read_transcript", Arguments: `{"offset":60}`},
+				messages.ChatMessageToolCall{ID: "call1c", Name: "read_transcript", Arguments: `{"offset":120}`},
+			)
+			return batch
 		case 2:
 			return call("read_transcript", `{"offset":150}`)
 		case 3:
