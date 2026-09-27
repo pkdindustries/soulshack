@@ -52,12 +52,14 @@ func (p *PollyLLM) RunSubagent(ctx context.Context, spec core.SubagentSpec) (cor
 	})
 	defer agent.Close()
 
-	task, err := boundMessage(ctx, spec.Artifacts, messages.ChatMessage{Role: messages.MessageRoleUser, Content: spec.Task}, cfg.Session.MaxContext)
+	prompt := fmt.Sprintf(childPrompt, cfg.Server.Nick)
+	share := messageShare(cfg.Session.MaxContext, contextFloor(prompt, registry.All()))
+	task, err := boundMessage(ctx, spec.Artifacts, messages.ChatMessage{Role: messages.MessageRoleUser, Content: spec.Task}, share)
 	if err != nil {
 		return core.SubagentResult{}, err
 	}
 	req := NewCompletionRequest(cfg, []messages.ChatMessage{
-		{Role: messages.MessageRoleSystem, Content: fmt.Sprintf(childPrompt, cfg.Server.Nick)},
+		{Role: messages.MessageRoleSystem, Content: prompt},
 		task,
 	}, cfg.Session.MaxContext, registry.All())
 	if model := childModel(spec); model != "" {

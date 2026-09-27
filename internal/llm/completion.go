@@ -104,11 +104,21 @@ func complete(turn *core.Turn, msg string, without string) <-chan string {
 	cfg := turn.GetConfig()
 	history := turn.Conversation.Messages()
 
+	var allTools []tools.Tool
+	if registry := turn.GetSystem().GetToolRegistry(); registry != nil {
+		for _, tool := range registry.All() {
+			if tool.GetName() != without {
+				allTools = append(allTools, tool)
+			}
+		}
+	}
+
 	budget := turn.GetSystem().GetMemory().Budget()
+	share := messageShare(budget, contextFloor(cfg.Bot.Prompt, allTools))
 	cmsg, err := boundMessage(turn, turn.Conversation.Artifacts(), messages.ChatMessage{
 		Role:    messages.MessageRoleUser,
 		Content: msg,
-	}, budget)
+	}, share)
 	if err != nil {
 		// The message goes as it is; the request may still fit.
 		turn.GetLogger().Error("message_bound_failed", "error", err)
@@ -130,15 +140,6 @@ func complete(turn *core.Turn, msg string, without string) <-chan string {
 	}
 	request = append(request, history...)
 	request = append(request, cmsg)
-
-	var allTools []tools.Tool
-	if registry := turn.GetSystem().GetToolRegistry(); registry != nil {
-		for _, tool := range registry.All() {
-			if tool.GetName() != without {
-				allTools = append(allTools, tool)
-			}
-		}
-	}
 
 	return turn.GetSystem().GetLLM().ChatCompletionStream(turn, NewCompletionRequest(cfg, request, budget, allTools))
 }
