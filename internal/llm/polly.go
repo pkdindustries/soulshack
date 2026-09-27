@@ -229,9 +229,10 @@ func (h *callbackHandler) onToolEnd(tc messages.ChatMessageToolCall, result stri
 
 func (h *callbackHandler) onError(err error) {
 	h.turn.GetLogger().Error("stream_error", "error", err.Error())
-	// MinContext leaves room for every turn, so this is an estimate falling
-	// short, or a model whose window is smaller than maxcontext. Either way
-	// it is a limit to report, not a fault.
+	// Polly keeps a turn's tool loop within the budget once its first
+	// request fits, and MinContext makes room for that, so this is a model
+	// whose window is smaller than maxcontext. It is a limit to report, not a
+	// fault.
 	var limit *llm.ContextLimitError
 	if errors.As(err, &limit) {
 		h.framer.Write(fmt.Sprintf("Stopped: this needs about %d tokens of context and only %d fit", limit.EstimatedTokens, limit.Limit))

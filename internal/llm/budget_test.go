@@ -21,7 +21,7 @@ func TestMinContextGrowsWithPromptAndTools(t *testing.T) {
 	cfg := mocktest.DefaultTestConfig()
 	registry := tools.NewToolRegistry([]tools.Tool{}, tools.WithUnsafeNoSandbox())
 	base := MinContext(cfg, registry)
-	if base <= loopReserve+messageFloorTokens+polly.PageFloorTokens {
+	if base <= messageFloorTokens+polly.PageFloorTokens {
 		t.Fatalf("minimum %d leaves out polly's floor for the prompt and tools", base)
 	}
 
@@ -58,13 +58,13 @@ func TestCheckContextBudget(t *testing.T) {
 // half the room in between, never so much that no floor-sized page is left.
 func TestMessageShare(t *testing.T) {
 	const floor = 3000
-	least := floor + loopReserve + messageFloorTokens + polly.PageFloorTokens
+	least := floor + messageFloorTokens + polly.PageFloorTokens
 	for name, tc := range map[string]struct{ budget, want int }{
 		"unlimited":      {0, polly.DefaultInlineToolResultTokens},
 		"huge":           {1_000_000, polly.DefaultInlineToolResultTokens},
 		"at the minimum": {least, messageFloorTokens},
 		"below it":       {least - 500, messageFloorTokens},
-		"in between":     {floor + loopReserve + 8000, 4000},
+		"in between":     {floor + 8000, 4000},
 		"just above":     {least + 100, messageFloorTokens + 100},
 	} {
 		if got := messageShare(tc.budget, floor); got != tc.want {
@@ -144,6 +144,11 @@ func TestTurnAtMinContextNeverRunsOutOfRoom(t *testing.T) {
 	calls := 0
 	sys.LLM = &PollyLLM{client: completionFunc(func(_ context.Context, req *polly.CompletionRequest) messages.ChatMessage {
 		calls++
+		// Polly finishes a turn whose next batch has no room without
+		// tools; the answer is all there is to give then.
+		if len(req.Tools) == 0 {
+			return messages.ChatMessage{Role: messages.MessageRoleAssistant, Content: "final answer", StopReason: messages.StopReasonEndTurn}
+		}
 		call := func(name, args string) messages.ChatMessage {
 			return messages.ChatMessage{
 				Role: messages.MessageRoleAssistant, StopReason: messages.StopReasonToolUse,
@@ -198,8 +203,8 @@ func TestTurnAtMinContextNeverRunsOutOfRoom(t *testing.T) {
 		}
 	}, nil)
 
-	if calls != 4 {
-		t.Fatalf("model calls = %d, want 4; replies %q", calls, chunks)
+	if calls < 2 || calls > 5 {
+		t.Fatalf("model calls = %d; replies %q", calls, chunks)
 	}
 	if got := strings.Join(chunks, " "); !strings.Contains(got, "final answer") || strings.Contains(got, "Stopped") || strings.Contains(got, "Error") {
 		t.Fatalf("turn did not finish cleanly: %q", got)
@@ -272,4 +277,46 @@ func TestTurnThatRunsOutOfIterationsKeepsItsWork(t *testing.T) {
 			t.Fatalf("kept %d of %d tool results", results, turnMaxIterations)
 		}
 	}, nil)
+}
+
+// However the model runs its tool loop, a turn at MinContext answers: it may
+// keep calling tools with ever larger arguments and ever more to say, and
+// polly refuses or drops what the budget cannot take.
+func TestToolLoopAtMinContextAlwaysAnswers(t *testing.T) {
+	sys := mocktest.NewMockSystem(t)
+	sys.ToolRegistry.Register(&tools.Func{
+		Name: "lookup",
+		Desc: "look something up",
+		Run:  func(context.Context, tools.Args) (string, error) { return strings.Repeat("result ", 2000), nil },
+	})
+	budget := MinContext(sys.GetConfig(), sys.GetToolRegistry())
+	sys.Memory.SetBudget(budget)
+	ctx := mocktest.NewMockContext().WithSystem(sys)
+
+	calls := 0
+	sys.LLM = &PollyLLM{client: completionFunc(func(_ context.Context, req *polly.CompletionRequest) messages.ChatMessage {
+		calls++
+		if len(req.Tools) == 0 {
+			return messages.ChatMessage{Role: messages.MessageRoleAssistant, Content: "final answer", StopReason: messages.StopReasonEndTurn}
+		}
+		response := messages.ChatMessage{Role: messages.MessageRoleAssistant, StopReason: messages.StopReasonToolUse, Content: strings.Repeat("still working ", 20*calls)}
+		for i := range 3 {
+			name, args := "lookup", fmt.Sprintf(`{"q":%q}`, strings.Repeat("q", 100*calls))
+			if i == 1 {
+				name, args = "read_transcript", `{}`
+			}
+			response.ToolCalls = append(response.ToolCalls, messages.ChatMessageToolCall{ID: fmt.Sprintf("c%d_%d", calls, i), Name: name, Arguments: args})
+		}
+		return response
+	})}
+
+	var chunks []string
+	core.WithConversation(ctx, "complete", func(turn *core.Turn) {
+		for chunk := range Complete(turn, "(nick:alice) dig into this") {
+			chunks = append(chunks, chunk)
+		}
+	}, nil)
+	if got := strings.Join(chunks, " "); !strings.Contains(got, "final answer") || strings.Contains(got, "Stopped") || strings.Contains(got, "Error") {
+		t.Fatalf("turn at the minimum (%d tokens) did not answer cleanly after %d model calls: %q", budget, calls, got)
+	}
 }
