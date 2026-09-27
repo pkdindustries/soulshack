@@ -17,26 +17,23 @@ import (
 
 // A request under maxcontext carries some things whole: the tool schemas, the
 // system prompt and polly's omission marker, which together are polly's
-// context floor, and the part of a turn's tool loop polly cannot shrink. What
-// the budget holds beyond that is room, and two things share it: the incoming
-// message (boundMessage) and the pages tools return, which polly sizes to
-// whatever room the request has left when it runs them. Each has a floor below
-// which it stops being useful and a ceiling above which it only costs more.
-// MinContext is the budget in which the floors fit, so a turn under at least
-// that much never fails for want of room.
-const (
-	// loopReserve holds what a turn's tool loop adds that polly cannot
-	// shrink: the model's own calls and the receipts and stubs standing in
-	// for results it has read.
-	loopReserve = 1024
-	// messageFloorTokens is what an incoming message may always take
-	// whole: a couple of IRC lines, so an ordinary message is never cut.
-	messageFloorTokens = 256
-)
+// context floor. What the budget holds beyond that is room, and two things
+// share it: the incoming message (boundMessage), and the tool loop, whose
+// pages polly sizes to the room left when it runs them. Polly never lets the
+// loop outgrow the budget: before each batch it checks that the next request
+// fits and that the turn could still be answered without tools, and drops a
+// batch that fails either check. So once the first request fits, a turn does.
+// The message has a floor below which it would cut ordinary lines and a
+// ceiling above which it only costs more. MinContext is the budget in which
+// the message's floor and one useful page fit.
+//
+// messageFloorTokens is what an incoming message may always take whole: a
+// couple of IRC lines, so an ordinary message is never cut.
+const messageFloorTokens = 256
 
 // MinContext is the smallest maxcontext a turn always fits in with this
-// configuration's prompts and these tools: polly's floor for them, the loop
-// reserve, and a floor-sized message and page.
+// configuration's prompts and these tools, able to read a page: polly's floor
+// for them, and a floor-sized message and page.
 func MinContext(cfg *config.Configuration, registry *tools.ToolRegistry) int {
 	var offered []tools.Tool
 	if registry != nil {
@@ -46,7 +43,7 @@ func MinContext(cfg *config.Configuration, registry *tools.ToolRegistry) int {
 	if cfg.Bot.Subagents {
 		floor = max(floor, contextFloor(fmt.Sprintf(childPrompt, cfg.Server.Nick), offered))
 	}
-	return floor + loopReserve + messageFloorTokens + llm.PageFloorTokens
+	return floor + messageFloorTokens + llm.PageFloorTokens
 }
 
 // CheckContextBudget refuses a maxcontext below MinContext. Unlimited (zero)
@@ -96,7 +93,7 @@ func messageShare(budget, floor int) int {
 	if budget <= 0 {
 		return ceiling
 	}
-	room := budget - floor - loopReserve
+	room := budget - floor
 	return min(ceiling, max(messageFloorTokens, min(room/2, room-llm.PageFloorTokens)))
 }
 
