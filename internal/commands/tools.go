@@ -5,6 +5,7 @@ import (
 	"path"
 	"strings"
 
+	"pkdindustries/soulshack/internal/config"
 	"pkdindustries/soulshack/internal/core"
 	"pkdindustries/soulshack/internal/llm"
 
@@ -117,22 +118,40 @@ func (c *ToolsCommand) addTool(turn *core.Turn, toolPath string) {
 		return
 	}
 
-	registry := turn.GetSystem().GetToolRegistry()
-	result, err := registry.LoadToolAuto(toolPath)
-	if err != nil {
+	system := turn.GetSystem()
+	registry := system.GetToolRegistry()
+	// Reloading in place can replace working tools and close their MCP
+	// clients before we know whether the schemas fit. A derived registry
+	// shadows them privately; closing it releases only the trial's clients.
+	candidate := registry.Derive()
+	defer candidate.Close()
+	if _, err := candidate.LoadToolAuto(toolPath); err != nil {
 		turn.Reply(fmt.Sprintf("Failed: %v", err))
 		return
 	}
-	// Every schema is part of every request, so tools can outgrow
-	// maxcontext as surely as a prompt can. Their size is only known once
-	// they are loaded, so a set that does not fit is unloaded again.
-	if err := llm.CheckContextBudget(turn.GetConfig(), registry); err != nil {
-		for _, server := range result.Servers {
-			for _, name := range server.ToolNames {
-				registry.Remove(name)
-			}
+
+	var result tools.LoadResult
+	failure := "Not added"
+	// Check the current configuration and parent tools, including changes
+	// made while loading. Serialize admission with /set and other adds.
+	if err := system.UpdateConfig(func(live *config.Configuration) error {
+		if err := llm.CheckContextBudget(live, candidate); err != nil {
+			return err
 		}
-		turn.Reply(fmt.Sprintf("Not added: %v", err))
+		// Polly has no API to adopt a derived registry's loaded tools and
+		// MCP clients. A successful add must load again through the normal
+		// owner; this preflight cannot make changing external schemas atomic.
+		// Release trial clients first so they do not compete with the live
+		// load for resources such as a server's lock file or listening port.
+		failure = "Failed"
+		if err := candidate.Close(); err != nil {
+			return err
+		}
+		var err error
+		result, err = registry.LoadToolAuto(toolPath)
+		return err
+	}); err != nil {
+		turn.Reply(fmt.Sprintf("%s: %v", failure, err))
 		return
 	}
 
