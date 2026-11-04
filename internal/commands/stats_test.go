@@ -17,11 +17,11 @@ func TestStatsSeparatesProjectedInputFromRetainedHistory(t *testing.T) {
 	generated[0].SetTokenUsage(12345, 42)
 	conversation.Append([]messages.ChatMessage{{Role: messages.MessageRoleUser, Content: strings.Repeat("old history ", 1000)}})
 	conversation.Append(generated)
-	conversation.SetUsage(memory.ContextUsage{EstimatedTokens: 800, Budget: 1000, OmittedExchanges: 3})
+	conversation.SetUsage(memory.ContextUsage{EstimatedTokens: 800, Budget: 1000, Compacted: true})
 
 	cmd := &StatsCommand{}
 	cmd.Execute(ctx.Turn())
-	for _, want := range []string{"total token input: 12345", "total token output: 42", "last completed input: ~800/1000 tokens (3 older exchanges omitted)", "stored messages: 2", "idle expiry: after 10m idle"} {
+	for _, want := range []string{"total token input: 12345", "total token output: 42", "last completed input: ~800/1000 tokens (older exchanges compacted)", "stored messages: 2", "idle expiry: after 10m idle"} {
 		if !ctx.HasReply(want) {
 			t.Errorf("stats missing %q: %v", want, ctx.Replies)
 		}

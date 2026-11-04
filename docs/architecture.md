@@ -67,23 +67,24 @@ one when that is empty. A conversation idle past `--sessionduration` starts over
 on its next turn, and the store deletes abandoned ones.
 
 The transcript is never trimmed. `maxcontext` is the request's
-`MaxContextTokens`: polly projects each request to fit it, demoting old tool
-results to artifact receipts and omitting the oldest exchanges, and fails a
-request that still cannot fit. The agent's `read_transcript` reaches the
-omitted exchanges.
+`MaxContextTokens`: polly compacts each request to stay within it, clearing the
+tool results the model has already read and, when that is not enough, replacing
+the older exchanges with a summary, and fails a request no compaction can bring
+within the budget. The markers it leaves are internal messages in the
+transcript, so a conversation's requests keep a stable prefix between
+compactions and `read_transcript` still reaches everything a summary left out.
 
 What polly cannot shrink is bounded instead (`internal/llm/budget.go`). Polly's
-context floor (the tool schemas, the system prompt and the omission marker) is
-carried whole; the rest of the budget is room. The incoming message takes up to
-half of it (`messageShare`), never so much that no useful page is left, and is
-stored as an artifact beyond that. Polly keeps the tool loop inside the rest
-without any reserve: before each batch it checks that the next request fits
-and that the turn could still be answered without tools, refuses calls that do
-not fit, drops a batch that cannot fit at all and answers without it, and sizes
-pages to the room left. So a turn whose first request fits never runs out of
-room. `llm.MinContext` is polly's floor plus the message floor and one useful
-page, and startup, `/set` and `/tools add` refuse a `maxcontext` below it. Every agent has an artifact store
-for this: detached turns and child agents get a scratch session from
+context floor (the tool schemas and the system prompt) is carried whole; the
+rest of the budget is room. The incoming message takes up to half of it
+(`messageShare`), never so much that no useful page is left, and is stored as
+an artifact beyond that. Pages of recalled output are sized by polly to the
+room left, and a turn that outgrows the budget is compacted rather than cut
+off. `llm.MinContext` is polly's floor plus the message floor and one useful
+page, and startup, `/set` and `/tools add` refuse a `maxcontext` below it;
+polly keeps its floor estimate private, so `contextFloor` repeats it from the
+same primitives and a test holds the two together. Every agent has an artifact
+store for this: detached turns and child agents get a scratch session from
 `Memory.WithScratch`, deleted when they finish. A turn that fails anyway, as
 under a model window smaller than `maxcontext`, keeps what it generated and
 replies with a plain `Stopped:` line.

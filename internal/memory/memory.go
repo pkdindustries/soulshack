@@ -9,9 +9,9 @@
 // restart, or an in-memory one that goes with the process.
 //
 // A stored transcript is never trimmed. The token budget (maxcontext) bounds
-// what a request sends, not what is kept: polly projects each request down to
-// the budget, omitting the oldest exchanges, and the agent's read_transcript
-// can reach back past them.
+// what a request sends, not what is kept: polly compacts each request down to
+// the budget, replacing the exchanges before its summary marker with that
+// summary, and the agent's read_transcript can reach back past it.
 package memory
 
 import (
@@ -48,9 +48,13 @@ const scratchPrefix = "%scratch-"
 
 // ContextUsage describes the last provider request a conversation completed.
 type ContextUsage struct {
-	EstimatedTokens  int
-	Budget           int
-	OmittedExchanges int
+	// EstimatedTokens is the request's size, in the provider's count where one
+	// covers it.
+	EstimatedTokens int
+	Budget          int
+	// Compacted reports that the conversation's requests carry a summary in
+	// place of the exchanges before it.
+	Compacted bool
 }
 
 // Config configures a Memory.

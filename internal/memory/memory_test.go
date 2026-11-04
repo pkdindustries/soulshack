@@ -266,12 +266,12 @@ func TestClearForgetsTranscriptArtifactsAndUsage(t *testing.T) {
 			t.Fatal(err)
 		}
 		appendOrFail(t, c, user("question"))
-		c.SetUsage(memory.ContextUsage{EstimatedTokens: 800, Budget: 1000, OmittedExchanges: 3})
+		c.SetUsage(memory.ContextUsage{EstimatedTokens: 800, Budget: 1000, Compacted: true})
 	})
 
 	with(t, mem, "#chan", func(c *memory.Conversation) {
 		got, ok := c.Usage()
-		if !ok || got != (memory.ContextUsage{EstimatedTokens: 800, Budget: 1000, OmittedExchanges: 3}) {
+		if !ok || got != (memory.ContextUsage{EstimatedTokens: 800, Budget: 1000, Compacted: true}) {
 			t.Fatalf("usage = %+v, found=%v", got, ok)
 		}
 		if r, err := c.Artifacts().Open(context.Background(), ref.ID); err != nil {

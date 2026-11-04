@@ -60,8 +60,8 @@ func TestContextUsageWarningsFollowProjection(t *testing.T) {
 		{"90 percent", memory.ContextUsage{EstimatedTokens: 760, Budget: 1000}, memory.ContextUsage{EstimatedTokens: 910, Budget: 1000}, "Model input reached 90% of its context budget"},
 		{"no repeat", memory.ContextUsage{EstimatedTokens: 760, Budget: 1000}, memory.ContextUsage{EstimatedTokens: 800, Budget: 1000}, ""},
 		{"unlimited", memory.ContextUsage{}, memory.ContextUsage{EstimatedTokens: 100000}, ""},
-		{"omitted history", memory.ContextUsage{}, memory.ContextUsage{EstimatedTokens: 500, Budget: 1000, OmittedExchanges: 4}, "Model input omitted 4 older exchanges"},
-		{"no repeated omission", memory.ContextUsage{EstimatedTokens: 500, Budget: 1000, OmittedExchanges: 4}, memory.ContextUsage{EstimatedTokens: 500, Budget: 1000, OmittedExchanges: 5}, ""},
+		{"compacted history", memory.ContextUsage{}, memory.ContextUsage{EstimatedTokens: 500, Budget: 1000, Compacted: true}, "Model input compacted: older exchanges are now a summary"},
+		{"no repeated compaction", memory.ContextUsage{EstimatedTokens: 500, Budget: 1000, Compacted: true}, memory.ContextUsage{EstimatedTokens: 500, Budget: 1000, Compacted: true}, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			sys := mocktest.NewMockSystem(t)
