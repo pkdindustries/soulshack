@@ -14,6 +14,22 @@ type Turn struct {
 
 	// Conversation is the transcript this turn reads and appends to.
 	Conversation *memory.Conversation
+
+	// Silent discards completion replies and announcements for observations
+	// that must not speak. It does not change the permissions of IRC tools.
+	Silent bool
+}
+
+func (t *Turn) Reply(message string) {
+	if !t.Silent {
+		t.ChatContextInterface.Reply(message)
+	}
+}
+
+func (t *Turn) ReplyAction(message string) {
+	if !t.Silent {
+		t.ChatContextInterface.ReplyAction(message)
+	}
 }
 
 // WithConversation runs one turn against the conversation for ctx's key,
