@@ -21,7 +21,7 @@ func TestMinContextGrowsWithPromptAndTools(t *testing.T) {
 	cfg := mocktest.DefaultTestConfig()
 	registry := tools.NewToolRegistry([]tools.Tool{}, tools.WithUnsafeNoSandbox())
 	base := MinContext(cfg, registry)
-	if base <= messageFloorTokens+polly.PageFloorTokens {
+	if base <= messageFloorTokens+pageFloorTokens {
 		t.Fatalf("minimum %d leaves out polly's floor for the prompt and tools", base)
 	}
 
@@ -41,6 +41,44 @@ func TestMinContextGrowsWithPromptAndTools(t *testing.T) {
 	}
 }
 
+// Polly sizes a request by an estimate of its system prompt and tool schemas,
+// which it keeps private; contextFloor repeats that estimate, so MinContext has
+// to agree with what polly charges for the same request. A floor below polly's
+// would let a turn at mincontext fail for want of room.
+func TestContextFloorMatchesWhatPollyCharges(t *testing.T) {
+	sys := mocktest.NewMockSystem(t)
+	sys.ToolRegistry.Register(&tools.Func{
+		Name: "lookup",
+		Desc: strings.Repeat("looks something up. ", 20),
+		Run:  func(context.Context, tools.Args) (string, error) { return "", nil },
+	})
+	const prompt = "You are a bot. Be terse."
+	client := completionFunc(func(context.Context, *polly.CompletionRequest) messages.ChatMessage {
+		return messages.ChatMessage{Role: messages.MessageRoleAssistant, Content: "ok", StopReason: messages.StopReasonEndTurn}
+	})
+	agent := CreateAgent(client, sys.ToolRegistry, polly.AgentConfig{ArtifactStore: sys.Conversation(t, "#chan").Artifacts()})
+	defer agent.Close()
+
+	question := messages.ChatMessage{Role: messages.MessageRoleUser, Content: "hi"}
+	resp, err := agent.Run(context.Background(), &polly.CompletionRequest{
+		Messages: []messages.ChatMessage{{Role: messages.MessageRoleSystem, Content: prompt}, question},
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	charged := resp.Projection.RequestEstimatedTokens - messages.EstimateMessageTokens(question)
+	if floor := contextFloor(prompt, sys.ToolRegistry.All()); abs(charged-floor) > 8 {
+		t.Fatalf("polly charges %d for the prompt and tools, contextFloor estimates %d", charged, floor)
+	}
+}
+
+func abs(n int) int {
+	if n < 0 {
+		return -n
+	}
+	return n
+}
+
 func TestCheckContextBudget(t *testing.T) {
 	cfg := mocktest.DefaultTestConfig()
 	registry := tools.NewToolRegistry([]tools.Tool{}, tools.WithUnsafeNoSandbox())
@@ -58,10 +96,10 @@ func TestCheckContextBudget(t *testing.T) {
 // half the room in between, never so much that no floor-sized page is left.
 func TestMessageShare(t *testing.T) {
 	const floor = 3000
-	least := floor + messageFloorTokens + polly.PageFloorTokens
+	least := floor + messageFloorTokens + pageFloorTokens
 	for name, tc := range map[string]struct{ budget, want int }{
-		"unlimited":      {0, polly.DefaultInlineToolResultTokens},
-		"huge":           {1_000_000, polly.DefaultInlineToolResultTokens},
+		"unlimited":      {0, inlineCeilingTokens},
+		"huge":           {1_000_000, inlineCeilingTokens},
 		"at the minimum": {least, messageFloorTokens},
 		"below it":       {least - 500, messageFloorTokens},
 		"in between":     {floor + 8000, 4000},
@@ -89,7 +127,7 @@ func TestBoundMessageStoresWhatExceedsItsShare(t *testing.T) {
 		"no store":      {false, 1000, long, false},
 		"long":          {true, 1000, long, true},
 		"at the floor":  {true, messageFloorTokens, long, true},
-		"under ceiling": {true, polly.DefaultInlineToolResultTokens, long, false},
+		"under ceiling": {true, inlineCeilingTokens, long, false},
 	} {
 		t.Run(name, func(t *testing.T) {
 			s := store
@@ -297,8 +335,10 @@ func TestSmallerModelWindowIsAnsweredWithASmallerRequest(t *testing.T) {
 	if got := strings.Join(chunks, " "); !strings.Contains(got, "final answer") || strings.Contains(got, "Stopped") || strings.Contains(got, "Error") {
 		t.Fatalf("reply = %q", got)
 	}
-	if client.calls != 2 || client.rejected != 1 {
-		t.Fatalf("%d requests, %d rejected; want the first rejected and one retry", client.calls, client.rejected)
+	// The request the window rejected, the summary that made room for a
+	// smaller one, and the retry it was sized for.
+	if client.rejected != 1 || client.calls != 3 {
+		t.Fatalf("%d requests, %d rejected; want the first rejected, then a summary and one retry", client.calls, client.rejected)
 	}
 }
 
@@ -339,9 +379,10 @@ func TestTurnThatRunsOutOfIterationsKeepsItsWork(t *testing.T) {
 }
 
 // However the model runs its tool loop, a turn at MinContext answers: it may
-// keep calling tools with ever larger arguments and ever more to say, and
-// polly refuses or drops what the budget cannot take.
-func TestToolLoopAtMinContextAlwaysAnswers(t *testing.T) {
+// keep calling tools with ever larger arguments and ever more to say, and polly
+// keeps the requests within the budget by compacting them, which the turn then
+// answers from.
+func TestToolLoopAtMinContextIsCompactedIntoRoom(t *testing.T) {
 	sys := mocktest.NewMockSystem(t)
 	sys.ToolRegistry.Register(&tools.Func{
 		Name: "lookup",
@@ -353,10 +394,19 @@ func TestToolLoopAtMinContextAlwaysAnswers(t *testing.T) {
 	ctx := mocktest.NewMockContext().WithSystem(sys)
 
 	calls := 0
+	compacted := false
 	sys.LLM = &PollyLLM{client: completionFunc(func(_ context.Context, req *polly.CompletionRequest) messages.ChatMessage {
+		if isSummaryRequest(req) {
+			return messages.ChatMessage{Role: messages.MessageRoleAssistant, Content: "a summary of the work so far", StopReason: messages.StopReasonEndTurn}
+		}
 		calls++
-		if len(req.Tools) == 0 {
-			return messages.ChatMessage{Role: messages.MessageRoleAssistant, Content: "final answer", StopReason: messages.StopReasonEndTurn}
+		// The model answers once polly has made room for the answer by
+		// compacting what the loop has said so far.
+		for _, msg := range req.Messages {
+			if strings.Contains(msg.Content, "was compacted into the summary below") {
+				compacted = true
+				return messages.ChatMessage{Role: messages.MessageRoleAssistant, Content: "final answer", StopReason: messages.StopReasonEndTurn}
+			}
 		}
 		response := messages.ChatMessage{Role: messages.MessageRoleAssistant, StopReason: messages.StopReasonToolUse, Content: strings.Repeat("still working ", 20*calls)}
 		for i := range 3 {
@@ -375,7 +425,11 @@ func TestToolLoopAtMinContextAlwaysAnswers(t *testing.T) {
 			chunks = append(chunks, chunk)
 		}
 	}, nil)
-	if got := strings.Join(chunks, " "); !strings.Contains(got, "final answer") || strings.Contains(got, "Stopped") || strings.Contains(got, "Error") {
-		t.Fatalf("turn at the minimum (%d tokens) did not answer cleanly after %d model calls: %q", budget, calls, got)
+	got := strings.Join(chunks, " ")
+	if !strings.Contains(got, "final answer") || strings.Contains(got, "Stopped") || strings.Contains(got, "Error") {
+		t.Fatalf("turn at the minimum (%d tokens) did not answer cleanly after %d model calls: %.300q", budget, calls, got)
+	}
+	if !compacted {
+		t.Fatalf("the loop outgrew the %d-token budget without a summary: %d model calls", budget, calls)
 	}
 }

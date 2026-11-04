@@ -22,10 +22,6 @@ const turnMaxIterations = 10
 // PollyLLM wraps pollytool's MultiPass and Agent to implement soulshack's LLM interface
 type PollyLLM struct {
 	client llm.LLM
-	// calibration is what providers have reported about each model's
-	// requests, shared by every turn and child, so each sizes its first
-	// request by the last one's count rather than by the estimate alone.
-	calibration *llm.Calibration
 }
 
 // NewPollyLLM creates a new pollytool-based LLM client
@@ -39,7 +35,7 @@ func NewPollyLLM(config config.APIConfig) *PollyLLM {
 		"openrouter":  config.OpenRouterKey,
 		"huggingface": config.HuggingFaceKey,
 	}
-	return &PollyLLM{client: llm.NewMultiPass(apiKeys), calibration: llm.NewCalibration()}
+	return &PollyLLM{client: llm.NewMultiPass(apiKeys)}
 }
 
 // ChatCompletionStream returns a channel of string chunks for IRC output
@@ -61,7 +57,6 @@ func (p *PollyLLM) ChatCompletionStream(turn *core.Turn, req *CompletionRequest)
 			MaxIterations: turnMaxIterations,
 			ToolTimeout:   cfg.API.Timeout,
 			ArtifactStore: turn.Conversation.Artifacts(),
-			Calibration:   p.calibration,
 		})
 		defer agent.Close()
 
@@ -84,10 +79,20 @@ func (p *PollyLLM) ChatCompletionStream(turn *core.Turn, req *CompletionRequest)
 			turn.GetLogger().Error("agent_error", "error", err.Error())
 			return
 		}
+		// Polly reports the request it last sent, sized in the provider's count
+		// where one covers it and by its own estimate until then; it compacts
+		// at 90% of the budget in that count. A summary marker among what the
+		// turn generated means requests now carry a summary in place of the
+		// exchanges before it, and they keep doing so.
+		tokens := resp.Projection.RequestEstimatedTokens
+		if resp.Projection.Counted {
+			tokens = resp.Projection.CountedTokens
+		}
+		previous, _ := turn.Conversation.Usage()
 		usage := memory.ContextUsage{
-			EstimatedTokens:  resp.Projection.RequestEstimatedTokens,
-			Budget:           req.MaxContextTokens,
-			OmittedExchanges: resp.Projection.OmittedExchanges,
+			EstimatedTokens: tokens,
+			Budget:          req.MaxContextTokens,
+			Compacted:       previous.Compacted || summarized(resp.AllMessages),
 		}
 		checkContextUsage(turn, usage)
 		turn.Conversation.SetUsage(usage)
@@ -234,12 +239,11 @@ func (h *callbackHandler) onToolEnd(tc messages.ChatMessageToolCall, result stri
 
 func (h *callbackHandler) onError(err error) {
 	h.turn.GetLogger().Error("stream_error", "error", err.Error())
-	// Polly keeps a turn's tool loop within the budget once its first
-	// request fits, in the provider's count, and MinContext makes room for
-	// that; it answers a provider's rejection as too long with smaller
-	// requests. What still ends a turn is a limit to report, not a fault: a
-	// turn whose own input outgrows maxcontext in the provider's count, or a
-	// model whose window cannot hold even the answer without tools.
+	// Polly compacts a request to keep it within maxcontext, in the
+	// provider's count, and answers a provider's rejection as too long with a
+	// smaller one. What still ends a turn is a limit to report, not a fault: a
+	// request no compaction can bring within the budget, or a model whose
+	// window cannot hold it.
 	var limit *llm.ContextLimitError
 	if errors.As(err, &limit) {
 		h.framer.Write(fmt.Sprintf("Stopped: this needs about %d tokens of context and only %d fit", limit.EstimatedTokens, limit.Limit))

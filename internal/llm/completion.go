@@ -16,13 +16,26 @@ import (
 
 type CompletionRequest = llm.CompletionRequest
 
-// Warn from the request Polly actually projected, independently of the
-// transcript we keep and of cumulative provider billing. The previous turn
-// supplies the warning state, so no second cache is needed.
+// summarized reports whether these generated messages include a summary, which
+// is how polly records that requests carry one in place of the exchanges before
+// it. Clearing tool results leaves no summary and needs no notice: the model
+// still reads their receipts.
+func summarized(msgs []messages.ChatMessage) bool {
+	for _, msg := range msgs {
+		if c, ok := msg.Compaction(); ok && c.Summary != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// Warn from the request Polly actually sent, independently of the transcript we
+// keep and of cumulative provider billing. The previous turn supplies the
+// warning state, so no second cache is needed.
 func checkContextUsage(turn *core.Turn, usage memory.ContextUsage) {
 	previous, _ := turn.Conversation.Usage()
-	if usage.OmittedExchanges > 0 && previous.OmittedExchanges == 0 {
-		turn.ReplyAction(fmt.Sprintf("Model input omitted %d older exchanges", usage.OmittedExchanges))
+	if usage.Compacted && !previous.Compacted {
+		turn.ReplyAction("Model input compacted: older exchanges are now a summary")
 		return
 	}
 	level := func(u memory.ContextUsage) int {
@@ -53,9 +66,9 @@ func NewCompletionRequest(config *config.Configuration, history []messages.ChatM
 		Model:     config.Model.Model,
 		MaxTokens: config.Model.MaxTokens,
 		Messages:  history,
-		// maxcontext. The stored transcript is kept whole; polly omits its
-		// oldest exchanges from the request until it fits, and refuses a
-		// request that still cannot.
+		// maxcontext. The stored transcript is kept whole; polly compacts the
+		// request within this budget before it is sent, and refuses a request
+		// no compaction can bring within it.
 		MaxContextTokens: budget,
 		Temperature:      llm.Float32Ptr(config.Model.Temperature),
 		Tools:            tools,

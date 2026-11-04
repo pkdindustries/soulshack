@@ -49,7 +49,6 @@ func (p *PollyLLM) RunSubagent(ctx context.Context, spec core.SubagentSpec) (cor
 		MaxIterations: childMaxIterations,
 		ToolTimeout:   cfg.API.Timeout,
 		ArtifactStore: spec.Artifacts,
-		Calibration:   p.calibration,
 	})
 	defer agent.Close()
 

@@ -2,6 +2,7 @@ package llm
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
@@ -16,20 +17,29 @@ import (
 )
 
 // A request under maxcontext carries some things whole: the tool schemas, the
-// system prompt and polly's omission marker, which together are polly's
-// context floor. What the budget holds beyond that is room, and two things
-// share it: the incoming message (boundMessage), and the tool loop, whose
-// pages polly sizes to the room left when it runs them. Polly never lets the
-// loop outgrow the budget: before each batch it checks that the next request
-// fits and that the turn could still be answered without tools, and drops a
-// batch that fails either check. So once the first request fits, a turn does.
-// The message has a floor below which it would cut ordinary lines and a
-// ceiling above which it only costs more. MinContext is the budget in which
-// the message's floor and one useful page fit.
+// system prompt and polly's own notes, which together are polly's floor for a
+// request. What the budget holds beyond that is room, and two things share it:
+// the incoming message (boundMessage) and the turn's work. Polly keeps the
+// rest within the budget by compacting: before a request outgrows
+// CompactionPoint(budget) it clears the tool results the model has read and,
+// failing that, replaces the older exchanges with a summary, and a request no
+// compaction can bring within the budget fails as a ContextLimitError. So the
+// message must leave room for a turn: a floor-sized message, and a page of
+// tool output. MinContext is the budget in which both fit beside polly's own
+// floor.
 //
 // messageFloorTokens is what an incoming message may always take whole: a
 // couple of IRC lines, so an ordinary message is never cut.
 const messageFloorTokens = 256
+
+// pageFloorTokens is the least a tool's page may take: polly sizes a page to
+// the budget, but never below two previews of the result.
+const pageFloorTokens = 1_000
+
+// inlineCeilingTokens is the size past which a message costs every request the
+// same without fitting any better, the size at which polly stores tool output
+// as an artifact rather than sending it.
+const inlineCeilingTokens = 10_000
 
 // MinContext is the smallest maxcontext a turn always fits in with this
 // configuration's prompts and these tools, able to read a page: polly's floor
@@ -43,7 +53,7 @@ func MinContext(cfg *config.Configuration, registry *tools.ToolRegistry) int {
 	if cfg.Bot.Subagents {
 		floor = max(floor, contextFloor(fmt.Sprintf(childPrompt, cfg.Server.Nick), offered))
 	}
-	return floor + messageFloorTokens + llm.PageFloorTokens
+	return floor + messageFloorTokens + pageFloorTokens
 }
 
 // CheckContextBudget refuses a maxcontext below MinContext. Unlimited (zero)
@@ -59,15 +69,34 @@ func CheckContextBudget(cfg *config.Configuration, registry *tools.ToolRegistry)
 	return nil
 }
 
-// contextFloor is polly's context floor for a request with this system prompt
+// contextFloor is polly's floor for a request with this system prompt
 // offering these tools, polly's own readers included, as every agent here has
-// an artifact store.
+// an artifact store. Polly sizes a request by the same estimate and keeps it
+// private, so this repeats it: the system message's estimate, and per tool a
+// fixed envelope around its schema, as polly charges them.
 func contextFloor(prompt string, offered []tools.Tool) int {
-	req := &llm.CompletionRequest{Tools: append(append([]tools.Tool(nil), offered...), builtinTools()...)}
+	floor := 0
 	if prompt = strings.TrimSpace(prompt); prompt != "" {
-		req.Messages = []messages.ChatMessage{{Role: messages.MessageRoleSystem, Content: prompt}}
+		floor = messages.EstimateMessageTokens(messages.ChatMessage{Role: messages.MessageRoleSystem, Content: prompt})
 	}
-	return llm.ContextFloorTokens(req)
+	for _, tool := range append(append([]tools.Tool(nil), offered...), builtinTools()...) {
+		floor += toolSchemaTokens(tool)
+	}
+	return floor
+}
+
+// toolSchemaTokens estimates one tool's share of a request: the envelope polly
+// wraps a schema in, and the JSON it sends.
+func toolSchemaTokens(tool tools.Tool) int {
+	schema := tool.GetSchema()
+	if schema == nil {
+		return 0
+	}
+	tokens := 8
+	if raw, err := json.Marshal(schema.Raw); err == nil {
+		tokens += messages.EstimatedJSONTokens(string(raw))
+	}
+	return tokens
 }
 
 // schemaOnly stands in for an artifact store when all that is wanted is the
@@ -85,16 +114,14 @@ var builtinTools = sync.OnceValue(func() []tools.Tool {
 // messageShare is how much of a request under budget the incoming message may
 // take, given polly's floor for the request. It gets half the room, less any
 // that would leave no floor-sized page, between its own floor and a ceiling:
-// the size at which polly stores tool output rather than sending it, since a
-// longer message costs the same on every request without fitting any better.
+// the size at which a longer message costs more without fitting any better.
 // Without a budget only the ceiling applies.
 func messageShare(budget, floor int) int {
-	ceiling := llm.DefaultInlineToolResultTokens
 	if budget <= 0 {
-		return ceiling
+		return inlineCeilingTokens
 	}
 	room := budget - floor
-	return min(ceiling, max(messageFloorTokens, min(room/2, room-llm.PageFloorTokens)))
+	return min(inlineCeilingTokens, max(messageFloorTokens, min(room/2, room-pageFloorTokens)))
 }
 
 // boundMessage keeps an incoming message within share tokens. A longer one,

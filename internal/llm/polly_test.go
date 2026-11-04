@@ -24,17 +24,17 @@ func (f completionFunc) ChatCompletionStream(ctx context.Context, req *polly.Com
 	return processor.ProcessMessagesToEvents(ctx, input)
 }
 
-// When a request omits older exchanges, the marker it leaves points the model
-// at read_transcript and the artifact readers, and a stored conversation's
-// agent offers exactly those tools.
-func TestCompletionOmissionRecommendsOfferedTools(t *testing.T) {
+// When a request carries a summary in place of older exchanges, the marker that
+// introduces it points the model at read_transcript, and a stored conversation's
+// agent offers exactly the tools it names.
+func TestCompletionSummaryRecommendsOfferedTools(t *testing.T) {
 	sys := mocktest.NewMockSystem(t)
 	sys.Memory.SetBudget(3000)
-	// The system prompt and the old exchange together overflow the budget,
-	// so projection omits the exchange from the request.
+	// The system prompt and the old exchange together outgrow what the budget
+	// can hold, so polly compacts the conversation into a summary.
 	mocktest.SetConfig(t, sys, func(c *config.Configuration) { c.Bot.Prompt = strings.Repeat("a", 6000) })
 	ctx := mocktest.NewMockContext().WithSystem(sys)
-	modelCalls := 0
+	modelCalls, summarized := 0, 0
 	sys.LLM = &PollyLLM{client: completionFunc(func(_ context.Context, req *polly.CompletionRequest) messages.ChatMessage {
 		modelCalls++
 		offered := map[string]bool{}
@@ -42,6 +42,16 @@ func TestCompletionOmissionRecommendsOfferedTools(t *testing.T) {
 			offered[tool.GetName()] = true
 		}
 		recommended := map[string]bool{}
+		transcript := ""
+		for _, msg := range req.Messages {
+			transcript += msg.Content
+		}
+		if isSummaryRequest(req) {
+			return messages.ChatMessage{Role: messages.MessageRoleAssistant, Content: "a summary of the old exchange", StopReason: messages.StopReasonEndTurn}
+		}
+		if strings.Contains(transcript, "call read_transcript") {
+			summarized++
+		}
 		for _, msg := range req.Messages {
 			for _, name := range polly.BuiltinToolNames() {
 				if strings.Contains(msg.Content, name) {
@@ -51,11 +61,8 @@ func TestCompletionOmissionRecommendsOfferedTools(t *testing.T) {
 		}
 		for name := range recommended {
 			if !offered[name] {
-				t.Errorf("projection recommends %s, which the request does not offer", name)
+				t.Errorf("the summary recommends %s, which the request does not offer", name)
 			}
-		}
-		if !recommended["read_transcript"] {
-			t.Error("projection does not point at read_transcript for the omitted exchange")
 		}
 		return messages.ChatMessage{Role: messages.MessageRoleAssistant, Content: "done", StopReason: messages.StopReasonEndTurn}
 	})}
@@ -71,21 +78,36 @@ func TestCompletionOmissionRecommendsOfferedTools(t *testing.T) {
 			for range Complete(turn, "new question") {
 			}
 			usage, ok := turn.Conversation.Usage()
-			if !ok || usage.OmittedExchanges != 1 {
+			if !ok || !usage.Compacted {
 				t.Fatalf("usage = %+v, recorded=%v", usage, ok)
 			}
 		}, nil)
 		if i == 0 {
-			if len(ctx.Actions) != 1 || ctx.Actions[0] != "Model input omitted 1 older exchanges" {
-				t.Fatalf("omission warning = %v", ctx.Actions)
+			if len(ctx.Actions) != 1 || ctx.Actions[0] != "Model input compacted: older exchanges are now a summary" {
+				t.Fatalf("compaction notice = %v", ctx.Actions)
 			}
 		} else if len(ctx.Actions) != 0 {
-			t.Fatalf("omission warning repeated: %v", ctx.Actions)
+			t.Fatalf("compaction notice repeated: %v", ctx.Actions)
 		}
 	}
-	if modelCalls != 2 {
-		t.Fatalf("model calls = %d, want 2", modelCalls)
+	if summarized == 0 {
+		t.Error("no request carried a summary pointing at read_transcript")
 	}
+	// Two turns, and the summary the first one needed.
+	if modelCalls != 3 {
+		t.Fatalf("model calls = %d, want 3", modelCalls)
+	}
+}
+
+// isSummaryRequest reports whether req asks the model to summarize the
+// conversation rather than to continue it, in either of polly's forms.
+func isSummaryRequest(req *polly.CompletionRequest) bool {
+	for _, msg := range req.Messages {
+		if strings.Contains(msg.Content, "Summarize the conversation above") {
+			return true
+		}
+	}
+	return false
 }
 
 // Without an artifact store, as for a child, the agent offers only the tools
@@ -156,9 +178,9 @@ func TestCreateAgentWithAStoreOffersPollyBuiltins(t *testing.T) {
 }
 
 // A stored conversation keeps every exchange; the budget bounds only what a
-// request sends, so the oldest exchange stays in the transcript without
-// reaching the provider.
-func TestPollyOmitsOldestExchangesButKeepsThemStored(t *testing.T) {
+// request sends, so the oldest exchange stays in the transcript once polly has
+// compacted it into a summary.
+func TestPollyCompactsOldestExchangesButKeepsThemStored(t *testing.T) {
 	sys := mocktest.NewMockSystem(t)
 	ctx := mocktest.NewMockContext().WithSystem(sys)
 	const budget = 2000
@@ -166,9 +188,12 @@ func TestPollyOmitsOldestExchangesButKeepsThemStored(t *testing.T) {
 	modelCalls := 0
 	sys.LLM = &PollyLLM{client: completionFunc(func(_ context.Context, req *polly.CompletionRequest) messages.ChatMessage {
 		modelCalls++
+		if isSummaryRequest(req) {
+			return messages.ChatMessage{Role: messages.MessageRoleAssistant, Content: "a summary of the old exchanges", StopReason: messages.StopReasonEndTurn}
+		}
 		for _, msg := range req.Messages {
 			if strings.Contains(msg.Content, "OLDEST_PRIVATE_HISTORY") {
-				t.Error("oldest exchange was still sent to the provider")
+				t.Error("oldest exchange was still sent verbatim to the provider")
 			}
 		}
 		return messages.ChatMessage{Role: messages.MessageRoleAssistant, Content: "final reply", StopReason: messages.StopReasonEndTurn}
@@ -189,36 +214,44 @@ func TestPollyOmitsOldestExchangesButKeepsThemStored(t *testing.T) {
 		}
 	}, nil)
 
-	if modelCalls != 1 {
-		t.Fatalf("model calls = %d", modelCalls)
-	}
 	conversation := sys.Conversation(t, ctx.GetConversationKey())
 	history := conversation.Messages()
-	// The 16 seeded messages, the question, and the reply.
-	if len(history) != 18 || history[len(history)-1].Content != "final reply" {
-		t.Fatalf("stored transcript = %d messages, want 18 ending in the final reply", len(history))
+	// The 16 seeded messages, the question, the summary's usage record, the
+	// summary marker and the reply.
+	if len(history) != 20 || history[len(history)-1].Content != "final reply" {
+		t.Fatalf("stored transcript = %d messages, want 20 ending in the final reply", len(history))
 	}
 	if !strings.Contains(history[0].Content, "OLDEST_PRIVATE_HISTORY") {
 		t.Fatal("the oldest exchange was dropped from the stored transcript")
 	}
 	// The question is written once: the turn appends the user message, then
 	// the messages the model generated.
-	questions := 0
+	questions, summaries := 0, 0
 	for _, msg := range history {
 		if msg.Content == "new question" {
 			questions++
+		}
+		if c, ok := msg.Compaction(); ok && c.Summary != "" {
+			summaries++
 		}
 	}
 	if questions != 1 {
 		t.Fatalf("user message written %d times", questions)
 	}
+	if summaries != 1 {
+		t.Fatalf("stored %d summary markers, want the one the turn compacted into", summaries)
+	}
 
 	usage, ok := conversation.Usage()
 	if !ok || usage.Budget != budget || usage.EstimatedTokens <= 0 || usage.EstimatedTokens > budget {
-		t.Fatalf("recorded projection = %+v, found=%v", usage, ok)
+		t.Fatalf("recorded usage = %+v, found=%v", usage, ok)
 	}
-	if usage.OmittedExchanges == 0 {
-		t.Fatalf("request fit the budget without omitting anything: %+v", usage)
+	if !usage.Compacted {
+		t.Fatalf("request fit the budget without compacting: %+v", usage)
+	}
+	// The summary, and the answer it made room for.
+	if modelCalls != 2 {
+		t.Fatalf("model calls = %d, want 2", modelCalls)
 	}
 }
 

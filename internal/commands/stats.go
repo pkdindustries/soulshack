@@ -66,8 +66,8 @@ func (c *StatsCommand) Execute(turn *core.Turn) {
 		if usage.Budget > 0 {
 			contextStr = fmt.Sprintf("~%d/%d tokens", usage.EstimatedTokens, usage.Budget)
 		}
-		if usage.OmittedExchanges > 0 {
-			contextStr += fmt.Sprintf(" (%d older exchanges omitted)", usage.OmittedExchanges)
+		if usage.Compacted {
+			contextStr += " (older exchanges compacted)"
 		}
 	}
 
