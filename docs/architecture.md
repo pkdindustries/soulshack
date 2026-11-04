@@ -64,7 +64,9 @@ loads its transcript, and appends what it generates; its agent stores large
 tool output in the session's artifact store. The store is the SQLite database
 named by `--sessiondb`, so conversations survive a restart, or an in-memory
 one when that is empty. A conversation idle past `--sessionduration` starts over
-on its next turn, and the store deletes abandoned ones.
+on its next turn, and memory sweeps abandoned ones using the current TTL. New
+named sessions have no storage-level TTL, so later TTL changes take effect before
+expiry; scratch sessions keep their independent expiry.
 
 The transcript is never trimmed. `maxcontext` is the request's
 `MaxContextTokens`: polly compacts each request to stay within it, clearing the
