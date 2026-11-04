@@ -27,7 +27,7 @@ func TestComplete_ContextCancellation(t *testing.T) {
 		WithArgs("hello")
 
 	// Start completion
-	outch := Complete(mockCtx.Turn(), "test message")
+	outch := Complete(mockCtx.Turn(), "test message").Chunks
 
 	// Read first response
 	firstResp := <-outch
@@ -71,7 +71,7 @@ func TestComplete_Timeout(t *testing.T) {
 		WithArgs("hello")
 
 	// Start completion
-	outch := Complete(mockCtx.Turn(), "test message")
+	outch := Complete(mockCtx.Turn(), "test message").Chunks
 
 	// Collect all responses
 	var responses []string
@@ -95,7 +95,7 @@ func TestComplete_SetsProjectionBudget(t *testing.T) {
 		WithConversation(mockSys.Conversation(t, "test")).
 		WithArgs("hello")
 
-	for range Complete(mockCtx.Turn(), "test message") {
+	for range Complete(mockCtx.Turn(), "test message").Chunks {
 	}
 
 	// maxcontext reaches the request as the projection budget, and is the same
@@ -121,7 +121,7 @@ func TestComplete_NoLeakedGoroutines(t *testing.T) {
 		WithArgs("hello")
 
 	// Run completion and drain the channel completely
-	for range Complete(mockCtx.Turn(), "test message") {
+	for range Complete(mockCtx.Turn(), "test message").Chunks {
 	}
 
 	// If we reach here without hanging, goroutines cleaned up properly

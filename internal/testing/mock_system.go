@@ -34,30 +34,38 @@ func (m *MockLLM) RunSubagent(ctx context.Context, spec core.SubagentSpec) (core
 }
 
 // ChatCompletionStream implements core.LLM
-func (m *MockLLM) ChatCompletionStream(turn *core.Turn, req *llm.CompletionRequest) <-chan string {
+func (m *MockLLM) ChatCompletionStream(turn *core.Turn, req *llm.CompletionRequest) core.CompletionStream {
 	m.LastRequest = req
 	ch := make(chan string, len(m.Responses)+1)
+	done := make(chan error, 1)
 	go func() {
-		defer close(ch)
+		err := m.Error
+		defer func() {
+			close(ch)
+			done <- err
+			close(done)
+		}()
 		for _, resp := range m.Responses {
 			if m.Delay > 0 {
 				select {
 				case <-time.After(m.Delay):
 				case <-turn.Done():
+					err = turn.Err()
 					return
 				}
 			}
 			select {
 			case <-turn.Done():
+				err = turn.Err()
 				return
 			case ch <- resp:
 			}
 		}
-		if m.Error != nil {
-			ch <- "Error: " + m.Error.Error()
+		if err != nil {
+			ch <- "Error: " + err.Error()
 		}
 	}()
-	return ch
+	return core.CompletionStream{Chunks: ch, Done: done}
 }
 
 // Verify MockLLM implements core.LLM

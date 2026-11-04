@@ -38,17 +38,23 @@ func NewPollyLLM(config config.APIConfig) *PollyLLM {
 	return &PollyLLM{client: llm.NewMultiPass(apiKeys)}
 }
 
-// ChatCompletionStream returns a channel of string chunks for IRC output
-func (p *PollyLLM) ChatCompletionStream(turn *core.Turn, req *CompletionRequest) <-chan string {
+// ChatCompletionStream returns IRC output and the completion's final outcome.
+func (p *PollyLLM) ChatCompletionStream(turn *core.Turn, req *CompletionRequest) core.CompletionStream {
 	cfg := turn.GetConfig()
 	// A custom endpoint belongs only to the provider it was configured for;
 	// every other provider keeps polly's default base URL.
 	req.BaseURL = baseURLForModel(req.Model, cfg.API)
 
 	output := make(chan string, 10)
+	done := make(chan error, 1)
 
 	go func() {
-		defer close(output)
+		var err error
+		defer func() {
+			close(output)
+			done <- err
+			close(done)
+		}()
 
 		registry, release := offeredRegistry(turn.GetSystem().GetToolRegistry(), req.Tools)
 		defer release()
@@ -98,7 +104,7 @@ func (p *PollyLLM) ChatCompletionStream(turn *core.Turn, req *CompletionRequest)
 		turn.Conversation.SetUsage(usage)
 	}()
 
-	return output
+	return core.CompletionStream{Chunks: output, Done: done}
 }
 
 // baseURLForModel returns the configured endpoint override for a model's

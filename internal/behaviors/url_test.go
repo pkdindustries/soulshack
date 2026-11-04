@@ -237,12 +237,15 @@ type blockingLLM struct {
 	reading, release chan struct{}
 }
 
-func (b *blockingLLM) ChatCompletionStream(turn *core.Turn, req *pollyllm.CompletionRequest) <-chan string {
+func (b *blockingLLM) ChatCompletionStream(turn *core.Turn, req *pollyllm.CompletionRequest) core.CompletionStream {
 	out := make(chan string)
+	done := make(chan error, 1)
 	go func() {
+		defer close(done)
 		defer close(out)
 		close(b.reading)
 		<-b.release
+		done <- nil
 	}()
-	return out
+	return core.CompletionStream{Chunks: out, Done: done}
 }

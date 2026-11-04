@@ -93,4 +93,6 @@ replies with a plain `Stopped:` line.
 
 ### `LLM`
 Abstracts the AI provider.
--   `ChatCompletionStream`: Takes a turn and request, returns a stream of strings.
+-   `ChatCompletionStream`: Takes a turn and request, returns `CompletionStream`.
+    Drain its `Chunks` before receiving the final error from `Done`; error notices
+    are output, not evidence that the completion succeeded.

@@ -36,7 +36,7 @@ func TestCompletionWarnsWhenContextUsageIncreases(t *testing.T) {
 		mocktest.SetConfig(t, sys, func(c *config.Configuration) { c.Bot.Prompt = strings.Repeat("a", tc.promptBytes) })
 		ctx.Actions = nil
 		core.WithConversation(ctx, "complete", func(turn *core.Turn) {
-			for range Complete(turn, "hello") {
+			for range Complete(turn, "hello").Chunks {
 			}
 		}, nil)
 		if tc.want == "" {
