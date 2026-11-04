@@ -110,10 +110,16 @@ func (p *PollyLLM) ChatCompletionStream(turn *core.Turn, req *CompletionRequest)
 // baseURLForModel returns the configured endpoint override for a model's
 // provider, or "" to let polly use the provider's default.
 func baseURLForModel(model string, api *config.APIConfig) string {
-	switch {
-	case strings.HasPrefix(model, "ollama/"):
+	provider, _, ok := strings.Cut(model, "/")
+	if !ok {
+		return ""
+	}
+	// Match Polly's case-insensitive provider routing, without changing the
+	// model name (which may be case-sensitive).
+	switch strings.ToLower(provider) {
+	case "ollama":
 		return api.OllamaURL
-	case strings.HasPrefix(model, "openai/"):
+	case "openai":
 		return api.OpenAIURL
 	}
 	return ""
