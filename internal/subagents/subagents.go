@@ -218,11 +218,11 @@ func deliver(chat core.ChatContextInterface, spec core.SubagentSpec, text string
 			return
 		}
 		answered := llm.Drain(llm.CompleteWithoutDelegating(turn, fmt.Sprintf("(agent:%s) %s", label, text)), turn.Reply)
-		// The bot had nothing to say, which at this point means the
-		// completion failed rather than that the report was not worth
-		// answering. Either way the channel is owed the report.
+		// A failed relay may already have sent an error notice or partial
+		// answer. Neither replaces the successful child's report; a silent
+		// completion also owes the channel that report.
 		if !answered {
-			chat.GetLogger().Warn("agent_relay_silent", "agent", label)
+			chat.GetLogger().Warn("agent_relay_incomplete", "agent", label)
 			turn.Reply(verbatim(label, text))
 		}
 	}, func() {

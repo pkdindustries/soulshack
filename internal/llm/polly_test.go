@@ -75,7 +75,7 @@ func TestCompletionSummaryRecommendsOfferedTools(t *testing.T) {
 	for i := range 2 {
 		ctx.Actions = nil
 		core.WithConversation(ctx, "complete", func(turn *core.Turn) {
-			for range Complete(turn, "new question") {
+			for range Complete(turn, "new question").Chunks {
 			}
 			usage, ok := turn.Conversation.Usage()
 			if !ok || !usage.Compacted {
@@ -210,7 +210,7 @@ func TestPollyCompactsOldestExchangesButKeepsThemStored(t *testing.T) {
 				{Role: messages.MessageRoleAssistant, Content: "old reply"},
 			})
 		}
-		for range Complete(turn, "new question") {
+		for range Complete(turn, "new question").Chunks {
 		}
 	}, nil)
 

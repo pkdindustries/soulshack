@@ -232,7 +232,7 @@ func TestTurnAtMinContextNeverRunsOutOfRoom(t *testing.T) {
 	var chunks []string
 	core.WithConversation(ctx, "complete", func(turn *core.Turn) {
 		report := "(agent:research) " + strings.Repeat("finding with a long explanation\n", 4000)
-		for chunk := range Complete(turn, report) {
+		for chunk := range Complete(turn, report).Chunks {
 			chunks = append(chunks, chunk)
 		}
 		usage, ok := turn.Conversation.Usage()
@@ -265,7 +265,7 @@ func TestContextLimitIsReportedAndTheTurnKept(t *testing.T) {
 
 	var chunks []string
 	core.WithConversation(ctx, "complete", func(turn *core.Turn) {
-		for chunk := range Complete(turn, "(nick:alice) hello") {
+		for chunk := range Complete(turn, "(nick:alice) hello").Chunks {
 			chunks = append(chunks, chunk)
 		}
 	}, nil)
@@ -327,7 +327,7 @@ func TestSmallerModelWindowIsAnsweredWithASmallerRequest(t *testing.T) {
 
 	var chunks []string
 	core.WithConversation(ctx, "complete", func(turn *core.Turn) {
-		for chunk := range Complete(turn, "(nick:alice) and now?") {
+		for chunk := range Complete(turn, "(nick:alice) and now?").Chunks {
 			chunks = append(chunks, chunk)
 		}
 	}, nil)
@@ -361,7 +361,7 @@ func TestTurnThatRunsOutOfIterationsKeepsItsWork(t *testing.T) {
 	})}
 
 	core.WithConversation(ctx, "complete", func(turn *core.Turn) {
-		for range Complete(turn, "(nick:alice) keep looking") {
+		for range Complete(turn, "(nick:alice) keep looking").Chunks {
 		}
 	}, nil)
 
@@ -421,7 +421,7 @@ func TestToolLoopAtMinContextIsCompactedIntoRoom(t *testing.T) {
 
 	var chunks []string
 	core.WithConversation(ctx, "complete", func(turn *core.Turn) {
-		for chunk := range Complete(turn, "(nick:alice) dig into this") {
+		for chunk := range Complete(turn, "(nick:alice) dig into this").Chunks {
 			chunks = append(chunks, chunk)
 		}
 	}, nil)

@@ -96,10 +96,17 @@ func ChatFromContext(ctx context.Context) (ChatContextInterface, bool) {
 	return chat, ok
 }
 
+// CompletionStream separates IRC output (including error notices) from the
+// outcome of the completion. Drain Chunks before receiving the single result
+// from Done; both channels close after the turn's history has been saved.
+type CompletionStream struct {
+	Chunks <-chan string
+	Done   <-chan error
+}
+
 // LLM defines the interface for the language model client
 type LLM interface {
-	// ChatCompletionStream returns IRC output and closes after history saving finishes.
-	ChatCompletionStream(*Turn, *llm.CompletionRequest) <-chan string
+	ChatCompletionStream(*Turn, *llm.CompletionRequest) CompletionStream
 	// RunSubagent runs one child agent to completion and returns its reply.
 	// It blocks, so callers that must not block run it on their own
 	// goroutine.

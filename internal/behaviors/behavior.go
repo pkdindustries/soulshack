@@ -74,7 +74,7 @@ func observe(turn *core.Turn, prompt string, silent bool) {
 
 // drain replies with each chunk unless the turn is only being recorded (a
 // silent URL observation, say).
-func drain(turn *core.Turn, chunks <-chan string, silent bool) {
+func drain(turn *core.Turn, chunks core.CompletionStream, silent bool) {
 	llm.Drain(chunks, func(chunk string) {
 		if !silent {
 			turn.Reply(chunk)

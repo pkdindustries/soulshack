@@ -85,7 +85,7 @@ func NewCompletionRequest(config *config.Configuration, history []messages.ChatM
 // Complete appends the user message to the turn's conversation and returns the
 // stream of response chunks. The stream also appends the finished turn, so
 // callers must drain it.
-func Complete(turn *core.Turn, msg string) <-chan string {
+func Complete(turn *core.Turn, msg string) core.CompletionStream {
 	return complete(turn, msg, "")
 }
 
@@ -95,25 +95,25 @@ func Complete(turn *core.Turn, msg string) <-chan string {
 // a turn the bot took on its own initiative, watching what people post, would
 // be spending on work nobody requested. Both are turns where the bot is
 // talking to itself, and delegation is for what someone asked for.
-func CompleteWithoutDelegating(turn *core.Turn, msg string) <-chan string {
+func CompleteWithoutDelegating(turn *core.Turn, msg string) core.CompletionStream {
 	return complete(turn, msg, subagent.ToolName)
 }
 
-// Drain replies with each chunk a completion stream emits, as the caller's
-// reply function says, and reports whether the completion produced anything.
-// The stream is always drained: that is what finishes the turn and stores it,
-// whatever the reply function does.
-func Drain(chunks <-chan string, reply func(string)) bool {
+// Drain replies with each chunk, including error notices, and reports whether
+// the completion succeeded with a nonempty reply. An error notice or partial
+// reply from a failed run is not a successful answer. The stream is always
+// drained so that the turn finishes saving its history.
+func Drain(stream core.CompletionStream, reply func(string)) bool {
 	answered := false
-	for chunk := range chunks {
-		answered = true
+	for chunk := range stream.Chunks {
+		answered = answered || strings.TrimSpace(chunk) != ""
 		reply(chunk)
 	}
-	return answered
+	return <-stream.Done == nil && answered
 }
 
 // complete runs the turn, offering every tool but the one named in without.
-func complete(turn *core.Turn, msg string, without string) <-chan string {
+func complete(turn *core.Turn, msg string, without string) core.CompletionStream {
 	cfg := turn.GetConfig()
 	history := turn.Conversation.Messages()
 
