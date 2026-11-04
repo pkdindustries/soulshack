@@ -161,6 +161,7 @@ type System interface {
 	// GetConfig returns the settings this turn runs with: a snapshot, so
 	// reading them is safe while another turn changes them.
 	GetConfig() *config.Configuration
-	// UpdateConfig changes the running configuration under the write lock.
+	// UpdateConfig serializes changes and publishes them on success. Readers
+	// keep using the previous snapshot while an update is in progress.
 	UpdateConfig(func(*config.Configuration) error) error
 }

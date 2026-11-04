@@ -3,14 +3,15 @@ package config
 import (
 	"slices"
 	"sync"
+	"sync/atomic"
 )
 
 // Store holds the configuration a running bot reads its settings from. Readers
 // get a snapshot, so a turn can rely on one consistent configuration while
 // another turn changes settings with /set.
 type Store struct {
-	mu  sync.RWMutex
-	cfg *Configuration
+	mu  sync.Mutex // serializes updates, not snapshot readers
+	cfg atomic.Pointer[Configuration]
 }
 
 // NewStore returns a Store holding cfg.
@@ -18,22 +19,28 @@ func NewStore(cfg *Configuration) *Store {
 	if cfg == nil {
 		cfg = &Configuration{}
 	}
-	return &Store{cfg: cfg}
+	s := &Store{}
+	s.cfg.Store(cfg.Clone())
+	return s
 }
 
-// Snapshot returns an independent copy of the current configuration: changing
-// the copy does not change the store.
+// Snapshot returns an independent copy of the last completed configuration.
+// Readers never wait for external work in an update, such as a tool reload.
 func (s *Store) Snapshot() *Configuration {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.cfg.Clone()
+	return s.cfg.Load().Clone()
 }
 
-// Update applies fn to the live configuration while holding the write lock.
+// Update serializes writers and publishes a complete configuration only when
+// fn succeeds. fn owns its candidate; it must not recursively call Update.
 func (s *Store) Update(fn func(*Configuration) error) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return fn(s.cfg)
+	candidate := s.Snapshot()
+	if err := fn(candidate); err != nil {
+		return err
+	}
+	s.cfg.Store(candidate.Clone())
+	return nil
 }
 
 // Clone returns a deep copy, nested sections included, so a reader can hold a
