@@ -3,6 +3,7 @@ package memory_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -158,6 +159,49 @@ func TestConversationsSurviveARestart(t *testing.T) {
 	})
 }
 
+// The current policy must win before SQLite has a chance to discard a
+// transcript using the TTL from its previous turn (or previous process).
+func TestExtendedTTLAppliesBeforeOpeningConversation(t *testing.T) {
+	for _, restart := range []bool{false, true} {
+		for _, ttl := range []time.Duration{0, time.Hour} {
+			t.Run(fmt.Sprintf("restart=%t/ttl=%s", restart, ttl), func(t *testing.T) {
+				cfg := memory.Config{TTL: 100 * time.Millisecond}
+				if restart {
+					cfg.Path = filepath.Join(t.TempDir(), "sessions.db")
+				}
+				mem := newMemory(t, cfg)
+				var ref artifacts.Ref
+				with(t, mem, "#chan", func(c *memory.Conversation) {
+					appendOrFail(t, c, user("keep me"))
+					var err error
+					ref, err = c.Artifacts().Put(context.Background(), artifacts.Blob{Kind: artifacts.KindText, Data: []byte("keep this too")})
+					if err != nil {
+						t.Fatal(err)
+					}
+				})
+				if restart {
+					mem.Close()
+					cfg.TTL = ttl
+					mem = newMemory(t, cfg)
+				} else {
+					mem.SetTTL(ttl)
+				}
+				time.Sleep(150 * time.Millisecond)
+				with(t, mem, "#chan", func(c *memory.Conversation) {
+					if got := c.Messages(); len(got) != 1 || got[0].Content != "keep me" {
+						t.Fatalf("history after TTL change = %+v", got)
+					}
+					reader, err := c.Artifacts().Open(context.Background(), ref.ID)
+					if err != nil {
+						t.Fatalf("artifact lost after TTL change: %v", err)
+					}
+					reader.Close()
+				})
+			})
+		}
+	}
+}
+
 func TestIdleConversationIsForgotten(t *testing.T) {
 	now := time.Now()
 	mem := newMemory(t, memory.Config{
@@ -189,7 +233,7 @@ func TestIdleConversationIsForgotten(t *testing.T) {
 }
 
 // A TTL shortened while a conversation exists applies to it on its next turn,
-// even though the store judged it by the TTL it was given before.
+// without rewriting every stored session's metadata.
 func TestShortenedTTLAppliesToStoredConversations(t *testing.T) {
 	mem := newMemory(t, memory.Config{TTL: time.Hour})
 

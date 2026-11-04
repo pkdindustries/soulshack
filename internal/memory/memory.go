@@ -31,9 +31,9 @@ import (
 	"github.com/alexschlessinger/pollytool/sessions"
 )
 
-// cleanupInterval is how often the store deletes conversations idle past their
-// TTL. A conversation is also expired when its next turn starts, so this only
-// bounds how long an abandoned one stays stored.
+// cleanupInterval is how often idle conversations and abandoned scratch
+// sessions are deleted. A conversation is also expired when its next turn
+// starts, so this only bounds how long an abandoned one stays stored.
 const cleanupInterval = time.Minute
 
 // scratchTTL expires a scratch session its turn did not delete, as when the
@@ -82,6 +82,13 @@ type Memory struct {
 
 	budget atomic.Int64
 	ttlNS  atomic.Int64
+
+	// expiryMu orders TTL changes, turn acquisition and cleanup. A sweep
+	// cannot delete a conversation that has been used since its snapshot,
+	// or apply an old TTL after SetTTL returns. It is never held for a turn.
+	expiryMu sync.RWMutex
+	cancel   context.CancelFunc
+	done     chan struct{}
 }
 
 // New opens the session store and returns a Memory over it.
@@ -98,18 +105,24 @@ func New(cfg Config) (*Memory, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open conversation store: %w", err)
 	}
+	ctx, cancel := context.WithCancel(context.Background())
 	m := &Memory{
-		store: store,
-		convs: make(map[string]*Conversation),
-		now:   now,
+		store:  store,
+		convs:  make(map[string]*Conversation),
+		now:    now,
+		cancel: cancel,
+		done:   make(chan struct{}),
 	}
 	m.SetBudget(cfg.Budget)
 	m.SetTTL(cfg.TTL)
+	go m.cleanupLoop(ctx)
 	return m, nil
 }
 
 // Close closes the session store. Stored conversations stay on disk.
 func (m *Memory) Close() {
+	m.cancel()
+	<-m.done
 	_ = m.store.Close()
 }
 
@@ -123,9 +136,13 @@ func (m *Memory) SetBudget(tokens int) { m.budget.Store(int64(tokens)) }
 // TTL returns how long a conversation survives inactivity.
 func (m *Memory) TTL() time.Duration { return time.Duration(m.ttlNS.Load()) }
 
-// SetTTL changes the idle expiry for every conversation. A stored conversation
-// takes the new TTL on its next turn.
-func (m *Memory) SetTTL(d time.Duration) { m.ttlNS.Store(int64(d)) }
+// SetTTL changes the idle expiry for every conversation. Its next turn or
+// cleanup uses the new TTL, including for conversations loaded after a restart.
+func (m *Memory) SetTTL(d time.Duration) {
+	m.expiryMu.Lock()
+	defer m.expiryMu.Unlock()
+	m.ttlNS.Store(int64(d))
+}
 
 // Keys returns the conversations this process has run turns on, for
 // inspection and tests.
@@ -240,6 +257,8 @@ type Conversation struct {
 // it has been idle past the TTL, and loads its transcript.
 func (c *Conversation) open(ctx context.Context, key string) error {
 	m := c.owner
+	m.expiryMu.RLock()
+	defer m.expiryMu.RUnlock()
 	session, err := m.store.Acquire(ctx, sessionName(key), sessions.AcquireOptions{})
 	if err != nil {
 		return fmt.Errorf("open conversation %s: %w", key, err)
@@ -260,9 +279,9 @@ func (c *Conversation) open(ctx context.Context, key string) error {
 	return nil
 }
 
-// prepare expires a leased session idle past ttl and gives it the current TTL,
-// then returns its transcript. The store expires sessions on the TTL each one
-// was last given, so a TTL shortened since is judged here, by the live one.
+// prepare expires a leased session using the current policy, then returns its
+// transcript. Named sessions always have a zero storage TTL: SQLite's startup,
+// Acquire and background expiry cannot be allowed to use an obsolete policy.
 func prepare(ctx context.Context, session sessions.Session, ttl time.Duration, now time.Time) ([]messages.ChatMessage, error) {
 	metadata, err := session.GetMetadata(ctx)
 	if err != nil {
@@ -270,12 +289,6 @@ func prepare(ctx context.Context, session sessions.Session, ttl time.Duration, n
 	}
 	if ttl > 0 && now.Sub(metadata.LastUsed) > ttl {
 		if err := session.Clear(ctx); err != nil {
-			return nil, err
-		}
-	}
-	if metadata.TTL != ttl {
-		metadata.TTL = ttl
-		if err := session.SetMetadata(ctx, metadata); err != nil {
 			return nil, err
 		}
 	}
