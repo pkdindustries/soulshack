@@ -3,28 +3,20 @@ package irc
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/alexschlessinger/pollytool/schema"
 	"github.com/alexschlessinger/pollytool/tools"
+
+	"pkdindustries/soulshack/internal/core"
 )
 
-type contextKey string
-
-const kContextKey contextKey = "irc_context"
-
 func GetIRCContext(ctx context.Context) (ChatContextInterface, error) {
-	if chatCtx, ok := ctx.Value(kContextKey).(ChatContextInterface); ok {
+	if chatCtx, ok := core.ChatFromContext(ctx); ok {
 		return chatCtx, nil
 	}
 	return nil, fmt.Errorf("no IRC context available")
-}
-
-// InjectContext stores the IRC context for tools to retrieve.
-// This must be used (rather than direct context.WithValue) to ensure
-// the correct key type is used.
-func InjectContext(ctx context.Context, chatCtx ChatContextInterface) context.Context {
-	return context.WithValue(ctx, kContextKey, chatCtx)
 }
 
 func isBotOpped(ctx ChatContextInterface) bool {
@@ -75,43 +67,87 @@ func validateContext(ctx context.Context) (ChatContextInterface, error) {
 	return chatCtx, nil
 }
 
+// ircTool is one native IRC tool: how to build it, and whether it acts on the
+// channel rather than only reading state the client already has. The
+// classification lives here, beside the definitions, so that adding a tool
+// forces the question at the point where the answer is obvious. Anything that
+// acts is withheld from child agents, and a list of names kept in another
+// package would drift the first time a tool was added, silently and in the
+// direction of granting authority.
+type ircTool struct {
+	new  func() tools.Tool
+	acts bool
+}
+
+var ircTools = map[string]ircTool{
+	"irc__op":         {newIrcOpTool, true},
+	"irc__kick":       {newIrcKickTool, true},
+	"irc__ban":        {newIrcBanTool, true},
+	"irc__topic":      {newIrcTopicTool, true},
+	"irc__action":     {newIrcActionTool, true},
+	"irc__mode_set":   {newIrcModeSetTool, true},
+	"irc__invite":     {newIrcInviteTool, true},
+	"irc__mode_query": {newIrcModeQueryTool, false},
+	"irc__names":      {newIrcNamesTool, false},
+	"irc__whois":      {newIrcWhoisTool, false},
+}
+
+// ChannelWriteTools names the IRC tools that act on the channel, in a stable
+// order.
+func ChannelWriteTools() []string {
+	names := make([]string, 0, len(ircTools))
+	for name, tool := range ircTools {
+		if tool.acts {
+			names = append(names, name)
+		}
+	}
+	slices.Sort(names)
+	return names
+}
+
 // RegisterIRCTools registers IRC tools as native tools with polly's registry
 func RegisterIRCTools(registry *tools.ToolRegistry) {
-	factories := map[string]func() tools.Tool{
-		"irc__op":         newIrcOpTool,
-		"irc__kick":       newIrcKickTool,
-		"irc__ban":        newIrcBanTool,
-		"irc__topic":      newIrcTopicTool,
-		"irc__action":     newIrcActionTool,
-		"irc__mode_set":   newIrcModeSetTool,
-		"irc__mode_query": newIrcModeQueryTool,
-		"irc__invite":     newIrcInviteTool,
-		"irc__names":      newIrcNamesTool,
-		"irc__whois":      newIrcWhoisTool,
-	}
-	for name, f := range factories {
-		registry.RegisterNative(name, f)
+	for name, tool := range ircTools {
+		// The factory makes the tool loadable by name; registering the
+		// instance is what puts it in registry.All(), which is the list the
+		// model is offered.
+		registry.RegisterNative(name, tool.new)
+		registry.Register(tool.new())
 	}
 }
 
 func newIrcOpTool() tools.Tool {
 	return &tools.Func{
 		Name: "irc__op",
-		Desc: "Grant or revoke IRC operator status for one or more users",
+		Desc: "Grant or revoke IRC operator status. Anyone may op or deop themselves; honor explicit self-service requests by calling this tool. Configured bot admins may op or deop anyone. The requester is identified from the IRC event, not from tool arguments. The tool checks permissions and whether the bot is opped; report any denial it returns.",
 		Params: schema.Params{
 			"users": schema.Strings("List of user nicknames to op/deop"),
 			"grant": schema.Bool("true to grant op, false to revoke"),
 		},
 		Required: []string{"users", "grant"},
 		Run: func(ctx context.Context, args tools.Args) (string, error) {
-			chatCtx, msg, err := validateAdminOp(ctx)
-			if err != nil || msg != "" {
-				return msg, err
+			chatCtx, err := validateContext(ctx)
+			if err != nil {
+				return "", err
 			}
-
 			users := args.StringSlice("users")
 			if len(users) == 0 {
 				return "", fmt.Errorf("users must be a non-empty array of strings")
+			}
+			cfg := chatCtx.GetConfig()
+			// Empty admin lists historically make IsAdmin true. For this tool,
+			// changing other users requires an explicitly configured admin.
+			if len(cfg.Bot.Admins) == 0 || !chatCtx.IsAdmin() {
+				caseMapping, _ := chatCtx.GetServerOption("CASEMAPPING")
+				requester := FoldNick(chatCtx.GetSource(), caseMapping)
+				for _, nick := range users {
+					if requester == "" || FoldNick(nick, caseMapping) != requester {
+						return "Only configured admins may change other users' operator status; you may op or deop yourself", nil
+					}
+				}
+			}
+			if !isBotOpped(chatCtx) {
+				return "Bot does not have operator status in the channel", nil
 			}
 
 			mode := "-o"
@@ -119,7 +155,7 @@ func newIrcOpTool() tools.Tool {
 				mode = "+o"
 			}
 
-			channel := chatCtx.GetConfig().Server.Channel
+			channel := cfg.Server.Channel
 			for _, nick := range users {
 				if err := ctx.Err(); err != nil {
 					return "", err

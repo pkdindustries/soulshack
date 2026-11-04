@@ -8,15 +8,10 @@ import (
 
 	"pkdindustries/soulshack/internal/core"
 	"pkdindustries/soulshack/internal/irc"
-	"pkdindustries/soulshack/internal/llm"
 )
 
-const opWatcherPrefixes = "(qaohv)~&%@+"
-
 // OpBehavior responds when the bot receives +o or -o (operator status change)
-type OpBehavior struct {
-	BotNick string
-}
+type OpBehavior struct{}
 
 func (b *OpBehavior) Name() string {
 	return "op"
@@ -27,67 +22,39 @@ func (b *OpBehavior) Events() []string {
 }
 
 func (b *OpBehavior) Check(ctx irc.ChatContextInterface, event *girc.Event) bool {
-	cfg := ctx.GetConfig()
-	if !cfg.Bot.OpWatcher {
+	if !ctx.GetConfig().Bot.OpWatcher || len(event.Params) < 3 || !girc.IsValidChannel(event.Params[0]) {
 		return false
 	}
 
-	_, ok := opActionForNick(event, b.BotNick)
-	return ok
+	// Parameter modes and membership prefixes vary by server. Their argument
+	// rules determine which nickname belongs to each +o or -o in a MODE line.
+	channelModes := girc.NewCModes(
+		serverOption(ctx, "CHANMODES", girc.ModeDefaults),
+		serverOption(ctx, "PREFIX", girc.DefaultPrefixes),
+	)
+	caseMapping := serverOption(ctx, "CASEMAPPING", "rfc1459")
+	nick := irc.FoldNick(ctx.GetBotNick(), caseMapping)
+	for _, mode := range channelModes.Parse(event.Params[1], event.Params[2:]) {
+		if mode.Short() != "+o" && mode.Short() != "-o" {
+			continue
+		}
+		_, target, ok := strings.Cut(mode.String(), " ")
+		if ok && irc.FoldNick(target, caseMapping) == nick {
+			return true
+		}
+	}
+	return false
 }
 
 func (b *OpBehavior) Execute(ctx irc.ChatContextInterface, event *girc.Event) {
-	core.WithRequestLock(ctx, ctx.GetLockKey(), "op", func() {
-		cfg := ctx.GetConfig()
-		changedBy := event.Source.Name
-
-		action, ok := opActionForNick(event, b.BotNick)
-		if !ok {
-			return
-		}
-
-		prompt := fmt.Sprintf(cfg.Bot.OpWatcherTemplate, action, changedBy)
-		outch, err := llm.Complete(ctx, prompt)
-
-		if err != nil {
-			ctx.GetLogger().Error("op_behavior_error", "error", err)
-			ctx.Reply(err.Error())
-			return
-		}
-
-		for res := range outch {
-			ctx.Reply(res)
-		}
+	core.WithConversation(ctx, "op", func(turn *core.Turn) {
+		complete(turn, fmt.Sprintf("(nick:%s) %s %s", turn.GetSource(), event.Command, strings.Join(event.Params, " ")), false)
 	}, nil)
 }
 
-func opActionForNick(event *girc.Event, nick string) (string, bool) {
-	if len(event.Params) < 3 {
-		return "", false
+func serverOption(ctx irc.ChatContextInterface, key, fallback string) string {
+	if value, ok := ctx.GetServerOption(key); ok {
+		return value
 	}
-
-	channelModes := girc.NewCModes(girc.ModeDefaults, opWatcherPrefixes)
-	modes := channelModes.Parse(event.Params[1], event.Params[2:])
-	for _, mode := range modes {
-		switch mode.Short() {
-		case "+o":
-			if modeTarget(mode) == nick {
-				return "opped", true
-			}
-		case "-o":
-			if modeTarget(mode) == nick {
-				return "deopped", true
-			}
-		}
-	}
-
-	return "", false
-}
-
-func modeTarget(mode girc.CMode) string {
-	parts := strings.SplitN(mode.String(), " ", 2)
-	if len(parts) != 2 {
-		return ""
-	}
-	return parts[1]
+	return fallback
 }

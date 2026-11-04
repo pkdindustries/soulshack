@@ -25,6 +25,9 @@ func DefaultTestConfig() *config.Configuration {
 			Tools:              []string{},
 			ShowThinkingAction: false,
 			ShowToolActions:    false,
+			SubagentTimeout:    time.Minute * 15,
+			SubagentMax:        4,
+			SubagentMaxPerChat: 2,
 		},
 		Model: &config.ModelConfig{
 			Model:          "test/model",
@@ -42,30 +45,4 @@ func DefaultTestConfig() *config.Configuration {
 			Timeout: time.Second * 30,
 		},
 	}
-}
-
-// KickCall records a Kick() invocation
-type KickCall struct {
-	Channel string
-	Nick    string
-	Reason  string
-}
-
-// ModeCall records a Mode() invocation
-type ModeCall struct {
-	Channel string
-	Mode    string
-	Target  string
-}
-
-// TopicCall records a Topic() invocation
-type TopicCall struct {
-	Channel string
-	Topic   string
-}
-
-// OperCall records an Oper() invocation
-type OperCall struct {
-	Channel string
-	Nick    string
 }
