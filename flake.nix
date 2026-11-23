@@ -18,9 +18,7 @@
       packages = nixpkgs.lib.genAttrs systems (
         system:
         let
-          soulshack = nixpkgs.legacyPackages.${system}.callPackage ./nix/package.nix {
-            rev = self.shortRev or self.dirtyShortRev or "dirty";
-          };
+          soulshack = nixpkgs.legacyPackages.${system}.callPackage ./nix/package.nix { };
         in
         {
           inherit soulshack;

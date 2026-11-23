@@ -2,12 +2,14 @@
   lib,
   buildGoModule,
   bash,
-  rev,
 }:
 
 buildGoModule {
   pname = "soulshack";
-  version = rev;
+  # A constant, not the commit: the version is part of this derivation's
+  # name and of its dependency fetch's, so a commit hash here would download
+  # every dependency again and rebuild on every commit, source changed or not.
+  version = "0";
 
   src = lib.fileset.toSource {
     root = ../.;
