@@ -1,0 +1,30 @@
+---
+name: Nix
+# Builds every package in flake.nix (`nix flake check`). It goes red when the
+# flake no longer builds, which is most often vendorHash in nix/package.nix
+# no longer matching go.sum: the log then prints the hash to put there.
+on:  # yamllint disable-line rule:truthy
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - '**/*.md'
+      - .github/dependabot.yml
+concurrency:
+  group: >-
+    ${{ github.workflow }} @
+    ${{ github.event.pull_request.head.label || github.head_ref || github.ref }}
+  cancel-in-progress: true
+jobs:
+  check:
+    # a public repository: GitHub-hosted runners only
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      # v32.0.0
+      - uses: cachix/install-nix-action@bb0495a1086c46893eee56f32fd192dfe4a15bb9
+      - run: nix flake check --print-build-logs

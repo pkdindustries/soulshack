@@ -26,6 +26,9 @@
         }
       );
 
+      # `nix flake check` builds every package; CI runs just that.
+      checks = self.packages;
+
       # `nix develop`: the go toolchain, and what the shell tools call.
       devShells = nixpkgs.lib.genAttrs systems (system: {
         default = nixpkgs.legacyPackages.${system}.mkShell {
