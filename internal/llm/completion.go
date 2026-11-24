@@ -11,6 +11,7 @@ import (
 
 	"pkdindustries/soulshack/internal/config"
 	"pkdindustries/soulshack/internal/core"
+	"pkdindustries/soulshack/internal/irc"
 	"pkdindustries/soulshack/internal/memory"
 )
 
@@ -77,7 +78,7 @@ func NewCompletionRequest(config *config.Configuration, history []messages.ChatM
 
 // Complete appends msg and streams the reply. Callers must drain the stream so the turn is saved.
 func Complete(turn *core.Turn, msg string) core.CompletionStream {
-	return complete(turn, msg, "")
+	return complete(turn, msg)
 }
 
 // CompleteWithoutDelegating is Complete without the spawn tool, for turns nobody asked for
@@ -96,14 +97,24 @@ func Drain(stream core.CompletionStream, reply func(string)) bool {
 	return <-stream.Done == nil && answered
 }
 
-func complete(turn *core.Turn, msg string, without string) core.CompletionStream {
+func complete(turn *core.Turn, msg string, without ...string) core.CompletionStream {
 	cfg := turn.GetConfig()
 	history := turn.Conversation.Messages()
+
+	denied := make(map[string]bool, len(without))
+	for _, name := range without {
+		denied[name] = true
+	}
+	if turn.Silent {
+		for _, name := range irc.ChannelWriteTools() {
+			denied[name] = true
+		}
+	}
 
 	var allTools []tools.Tool
 	if registry := turn.GetSystem().GetToolRegistry(); registry != nil {
 		for _, tool := range registry.All() {
-			if tool.GetName() != without {
+			if !denied[tool.GetName()] {
 				allTools = append(allTools, tool)
 			}
 		}

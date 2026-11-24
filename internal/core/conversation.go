@@ -11,7 +11,7 @@ type Turn struct {
 
 	Conversation *memory.Conversation
 
-	// Silent suppresses replies. IRC tool permissions are unaffected.
+	// Silent suppresses replies, announcements, and channel-acting IRC tools.
 	Silent bool
 }
 
@@ -33,7 +33,7 @@ func WithConversation(ctx ChatContextInterface, operation string, run func(*Turn
 	withConversation(ctx, operation, false, run, onTimeout)
 }
 
-// WithDetachedConversation runs one turn on a discarded scratch conversation, on the same queue.
+// WithDetachedConversation runs one turn on an unqueued, discarded scratch conversation.
 func WithDetachedConversation(ctx ChatContextInterface, operation string, run func(*Turn), onTimeout func()) {
 	withConversation(ctx, operation, true, run, onTimeout)
 }
@@ -43,18 +43,19 @@ func withConversation(ctx ChatContextInterface, operation string, detached bool,
 	logger := ctx.GetLogger()
 	mem := ctx.GetSystem().GetMemory()
 
-	logger.Debug("turn_waiting", "conversation", key, "operation", operation)
-
 	turn := func(conversation *memory.Conversation) {
 		logger.Debug("turn_started", "conversation", key, "operation", operation, "messages", conversation.Len())
 		run(&Turn{ChatContextInterface: ctx, Conversation: conversation})
 	}
 
-	queued := mem.With
+	var err error
 	if detached {
-		queued = mem.WithDetached
+		err = mem.WithScratch(ctx, turn)
+	} else {
+		logger.Debug("turn_waiting", "conversation", key, "operation", operation)
+		err = mem.With(ctx, key, turn)
 	}
-	if err := queued(ctx, key, turn); err != nil {
+	if err != nil {
 		if ctx.Err() != nil {
 			logger.Warn("turn_timeout", "conversation", key, "operation", operation)
 		} else {

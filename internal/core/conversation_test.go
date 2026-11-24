@@ -107,6 +107,24 @@ func TestDetachedConversationIsDiscarded(t *testing.T) {
 	}, nil)
 }
 
+func TestDetachedConversationDoesNotQueueOnChannel(t *testing.T) {
+	sys := mocktest.NewMockSystem(t)
+	ctx := mocktest.NewMockContext().WithSystem(sys)
+
+	core.WithConversation(ctx, "holding", func(*core.Turn) {
+		waitCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		detached := mocktest.NewMockContext().WithSystem(sys).WithContext(waitCtx)
+		ran := false
+		core.WithDetachedConversation(detached, "silent", func(*core.Turn) {
+			ran = true
+		}, func() { t.Fatal("detached turn timed out behind channel turn") })
+		if !ran {
+			t.Fatal("detached turn did not run while channel turn was active")
+		}
+	}, nil)
+}
+
 func TestConversationIdleExpiryStartsFresh(t *testing.T) {
 	sys := mocktest.NewMockSystem(t)
 	ctx := mocktest.NewMockContext().WithSystem(sys)

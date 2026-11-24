@@ -14,6 +14,7 @@ import (
 	"pkdindustries/soulshack/internal/subagents"
 
 	"pkdindustries/soulshack/internal/config"
+	"pkdindustries/soulshack/internal/irc"
 	mocktest "pkdindustries/soulshack/internal/testing"
 )
 
@@ -200,6 +201,77 @@ func TestURLObservationCannotDelegate(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestSilentURLWithholdsChannelWriteTools(t *testing.T) {
+	sys := mocktest.NewMockSystem(t)
+	model := &mocktest.MockLLM{Responses: []string{"observed"}}
+	sys.LLM = model
+	irc.RegisterIRCTools(sys.ToolRegistry)
+	for _, name := range []string{"irc__action", "irc__op", "irc__kick", "irc__names"} {
+		if _, err := sys.ToolRegistry.LoadToolAuto(name); err != nil {
+			t.Fatalf("LoadToolAuto(%s): %v", name, err)
+		}
+	}
+	ctx := mocktest.NewMockContext().WithSystem(sys).WithAddressed(false)
+	mocktest.SetConfig(t, sys, func(c *config.Configuration) { c.Bot.URLWatcherSilent = true })
+
+	settled(t, (&URLBehavior{}).execute(ctx, &girc.Event{Command: girc.PRIVMSG, Params: []string{"#test", "https://example.com"}}))
+
+	if model.LastRequest == nil {
+		t.Fatal("silent URL did not run")
+	}
+	offered := make(map[string]bool)
+	for _, tool := range model.LastRequest.Tools {
+		offered[tool.GetName()] = true
+	}
+	for _, withheld := range []string{"irc__action", "irc__op", "irc__kick"} {
+		if offered[withheld] {
+			t.Errorf("silent URL observation was offered channel-acting tool %s", withheld)
+		}
+	}
+	if !offered["irc__names"] {
+		t.Errorf("silent URL observation should still be offered read-only tool irc__names")
+	}
+}
+
+func TestSilentURLDoesNotBlockChannelTurns(t *testing.T) {
+	sys := mocktest.NewMockSystem(t)
+	reading := make(chan struct{})
+	release := make(chan struct{})
+	sys.LLM = &blockingLLM{reading: reading, release: release}
+	mocktest.SetConfig(t, sys, func(c *config.Configuration) { c.Bot.URLWatcherSilent = true })
+
+	ctx := mocktest.NewMockContext().WithSystem(sys).WithAddressed(false)
+	done := (&URLBehavior{}).execute(ctx, &girc.Event{Command: girc.PRIVMSG, Params: []string{"#test", "https://example.com"}})
+	<-reading
+
+	ran := false
+	core.WithConversation(ctx, "chat", func(*core.Turn) {
+		ran = true
+	}, func() { t.Fatal("channel turn blocked behind silent URL observation") })
+	if !ran {
+		t.Fatal("channel turn did not run")
+	}
+
+	close(release)
+	settled(t, done)
+}
+
+func TestNonSilentURLRetainsChannelContext(t *testing.T) {
+	sys := mocktest.NewMockSystem(t)
+	model := &mocktest.MockLLM{Responses: []string{"article summary"}}
+	sys.LLM = model
+	ctx := mocktest.NewMockContext().WithSystem(sys).WithAddressed(false)
+
+	settled(t, (&URLBehavior{}).execute(ctx, &girc.Event{Command: girc.PRIVMSG, Params: []string{"#test", "https://example.com/post"}}))
+
+	core.WithConversation(ctx, "verify", func(turn *core.Turn) {
+		history := turn.Conversation.Messages()
+		if len(history) == 0 {
+			t.Fatal("non-silent URL observation was not recorded in channel history")
+		}
+	}, nil)
 }
 
 func TestURLObservationDoesNotHoldTheHandler(t *testing.T) {
