@@ -23,7 +23,7 @@ func (c *ToolsCommand) Execute(turn *core.Turn) {
 
 	// If no arguments, list tools (equivalent to old /get tools)
 	if len(args) < 2 {
-		turn.Reply("Usage: /tools [list|load|rm] <args>")
+		c.listTools(turn)
 		return
 	}
 
@@ -82,14 +82,11 @@ func (c *ToolsCommand) listNamespace(turn *core.Turn, namespace string) {
 	registry := turn.GetSystem().GetToolRegistry()
 	allTools := registry.All()
 
-	prefix := namespace + "__"
-
 	var toolNames []string
 	for _, tool := range allTools {
 		name := tool.GetName()
-		if strings.HasPrefix(name, prefix) {
-			_, bareName := parseToolName(name)
-			toolNames = append(toolNames, namespace+"__"+bareName)
+		if ns, _ := parseToolName(name); ns == namespace {
+			toolNames = append(toolNames, name)
 		}
 	}
 
@@ -174,44 +171,44 @@ func (c *ToolsCommand) removeTool(turn *core.Turn, pattern string) {
 	}
 
 	registry := turn.GetSystem().GetToolRegistry()
+	original := pattern
 
-	// A bare name means name__*.
-	if !strings.Contains(pattern, "*") && !strings.Contains(pattern, "__") {
+	// Exact match takes precedence so non-namespaced tools (bash, view_image, etc.)
+	// can be removed by name; otherwise a bare name removes that namespace (name__*).
+	if !strings.Contains(pattern, "*") {
+		if _, exists := registry.Get(pattern); exists {
+			registry.Remove(pattern)
+			_, bareName := parseToolName(pattern)
+			turn.Reply(fmt.Sprintf("Removed: %s", bareName))
+			return
+		}
+		if strings.Contains(pattern, "__") {
+			turn.Reply(fmt.Sprintf("Not found: %s", pattern))
+			return
+		}
 		pattern += "__*"
 	}
 	isNamespaceRemoval := strings.HasSuffix(pattern, "__*")
 	namespace := strings.TrimSuffix(pattern, "__*")
 
-	// Use wildcard matching
-	if strings.Contains(pattern, "*") {
-		var removed []string
-		for _, tool := range registry.All() {
-			name := tool.GetName()
-			matched, _ := path.Match(pattern, name)
-			if matched {
-				registry.Remove(name)
-				removed = append(removed, name)
-			}
+	var removed []string
+	for _, tool := range registry.All() {
+		name := tool.GetName()
+		matched, _ := path.Match(pattern, name)
+		if matched {
+			registry.Remove(name)
+			removed = append(removed, name)
 		}
+	}
 
-		if len(removed) > 0 {
-			if isNamespaceRemoval {
-				turn.Reply(fmt.Sprintf("Removed: %s", namespace))
-			} else {
-				turn.Reply(fmt.Sprintf("Removed: %s", formatToolList(removed)))
-			}
+	if len(removed) > 0 {
+		if isNamespaceRemoval {
+			turn.Reply(fmt.Sprintf("Removed: %s", namespace))
 		} else {
-			turn.Reply(fmt.Sprintf("No tools matched: %s", pattern))
+			turn.Reply(fmt.Sprintf("Removed: %s", formatToolList(removed)))
 		}
 	} else {
-		// Exact match
-		if _, exists := registry.Get(pattern); !exists {
-			turn.Reply(fmt.Sprintf("Not found: %s", pattern))
-		} else {
-			registry.Remove(pattern)
-			_, bareName := parseToolName(pattern)
-			turn.Reply(fmt.Sprintf("Removed: %s", bareName))
-		}
+		turn.Reply(fmt.Sprintf("No tools matched: %s", original))
 	}
 }
 

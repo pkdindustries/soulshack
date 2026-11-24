@@ -16,7 +16,8 @@ func (c *SetCommand) Name() string    { return "/set" }
 func (c *SetCommand) AdminOnly() bool { return true }
 
 func (c *SetCommand) Execute(turn *core.Turn) {
-	keys := getConfigKeys()
+	system := turn.GetSystem()
+	keys := configKeysFor(system)
 	if len(turn.GetArgs()) < 3 {
 		turn.Reply(fmt.Sprintf("Usage: /set <key> <value>. Available keys: %s", strings.Join(keys, ", ")))
 		return
@@ -27,13 +28,12 @@ func (c *SetCommand) Execute(turn *core.Turn) {
 	turn.GetLogger().Debug("config_change_requested", "param", param, "value", value)
 
 	// Handle standard config fields
-	field, ok := configFields[param]
+	field, ok := lookupConfigField(system, param)
 	if !ok {
 		turn.Reply(fmt.Sprintf("Unknown key. Available keys: %s", strings.Join(keys, ", ")))
 		return
 	}
 
-	system := turn.GetSystem()
 	if err := system.UpdateConfig(func(live *config.Configuration) error {
 		// Trial on a copy so a change that breaks the context budget never lands.
 		candidate := live.Clone()

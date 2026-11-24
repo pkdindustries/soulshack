@@ -63,6 +63,55 @@ func TestToolsCommand_ListTools(t *testing.T) {
 	}
 }
 
+func TestToolsCommand_BareListsTools(t *testing.T) {
+	mockSys := mocktest.NewMockSystem(t)
+	mockSys.ToolRegistry.Register(&mockTool{name: "bash"})
+
+	ctx := mocktest.NewTurnContext(t, mockSys, "test").
+		WithArgs("/tools")
+
+	(&ToolsCommand{}).Execute(ctx.Turn())
+
+	if got := ctx.LastReply(); !strings.Contains(got, "other (1 tool)") {
+		t.Fatalf("bare /tools = %q, want tool summary", got)
+	}
+
+	ctx.WithArgs("/tools", "list", "other")
+	(&ToolsCommand{}).Execute(ctx.Turn())
+	if got := ctx.LastReply(); got != "bash" {
+		t.Fatalf("/tools list other = %q, want %q", got, "bash")
+	}
+}
+
+func TestToolsCommand_RemoveExactAndNamespace(t *testing.T) {
+	mockSys := mocktest.NewMockSystem(t)
+	mockSys.ToolRegistry.Register(&mockTool{name: "bash"})
+	mockSys.ToolRegistry.Register(&mockTool{name: "irc__op"})
+	mockSys.ToolRegistry.Register(&mockTool{name: "irc__names"})
+
+	// Exact removal of a non-namespaced tool.
+	ctx := mocktest.NewTurnContext(t, mockSys, "test").
+		WithAdmin(true).
+		WithArgs("/tools", "remove", "bash")
+	(&ToolsCommand{}).Execute(ctx.Turn())
+	if got := ctx.LastReply(); got != "Removed: bash" {
+		t.Fatalf("remove bash reply = %q, want %q", got, "Removed: bash")
+	}
+	if _, ok := mockSys.ToolRegistry.Get("bash"); ok {
+		t.Fatal("bash was not removed")
+	}
+
+	// Namespace removal still works for a bare namespace name.
+	ctx.WithArgs("/tools", "remove", "irc")
+	(&ToolsCommand{}).Execute(ctx.Turn())
+	if got := ctx.LastReply(); got != "Removed: irc" {
+		t.Fatalf("remove irc reply = %q, want %q", got, "Removed: irc")
+	}
+	if len(mockSys.ToolRegistry.All()) != 0 {
+		t.Fatalf("expected all irc tools removed, remaining: %d", len(mockSys.ToolRegistry.All()))
+	}
+}
+
 func TestToolsCommand_AddRequiresAdmin(t *testing.T) {
 	mockSys := mocktest.NewMockSystem(t)
 

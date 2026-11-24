@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"pkdindustries/soulshack/internal/config"
+	"pkdindustries/soulshack/internal/subagents"
 	mocktest "pkdindustries/soulshack/internal/testing"
 )
 
@@ -34,7 +35,9 @@ func TestConfigFieldsRoundTrip(t *testing.T) {
 }
 
 func TestConfigKeysAreSorted(t *testing.T) {
-	keys := getConfigKeys()
+	sys := mocktest.NewMockSystem(t)
+	sys.Agents = subagents.NewTracker()
+	keys := configKeysFor(sys)
 	if len(keys) != len(configFields) {
 		t.Fatalf("listed %d keys for %d fields", len(keys), len(configFields))
 	}
@@ -42,6 +45,43 @@ func TestConfigKeysAreSorted(t *testing.T) {
 		if keys[i-1] > keys[i] {
 			t.Fatalf("keys are not sorted: %v", keys)
 		}
+	}
+}
+
+func TestSubagentKeysHiddenWhenDisabled(t *testing.T) {
+	disabled := mocktest.NewMockSystem(t)
+	for _, key := range configKeysFor(disabled) {
+		if strings.HasPrefix(key, "subagent") {
+			t.Fatalf("disabled system exposed subagent key %q", key)
+		}
+	}
+
+	ctx := mocktest.NewTurnContext(t, disabled, "test").WithAdmin(true)
+	ctx.WithArgs("/get", "subagentmodel")
+	(&GetCommand{}).Execute(ctx.Turn())
+	if !strings.Contains(ctx.LastReply(), "Unknown key") {
+		t.Fatalf("/get subagentmodel when disabled = %q, want Unknown key", ctx.LastReply())
+	}
+
+	ctx.WithArgs("/set", "subagentmodel", "ollama/small")
+	(&SetCommand{}).Execute(ctx.Turn())
+	if !strings.Contains(ctx.LastReply(), "Unknown key") {
+		t.Fatalf("/set subagentmodel when disabled = %q, want Unknown key", ctx.LastReply())
+	}
+
+	// Enabled system exposes them and enforces positive subagenttimeout.
+	enabled := mocktest.NewMockSystem(t)
+	enabled.Agents = subagents.NewTracker()
+	ctxOn := mocktest.NewTurnContext(t, enabled, "test").WithAdmin(true)
+	ctxOn.WithArgs("/set", "subagenttimeout", "0s")
+	(&SetCommand{}).Execute(ctxOn.Turn())
+	if !strings.Contains(ctxOn.LastReply(), "positive duration") {
+		t.Fatalf("/set subagenttimeout 0s = %q, want positive duration error", ctxOn.LastReply())
+	}
+	ctxOn.WithArgs("/set", "subagentmodel", "ollama/small")
+	(&SetCommand{}).Execute(ctxOn.Turn())
+	if got := enabled.GetConfig().Bot.SubagentModel; got != "ollama/small" {
+		t.Fatalf("subagentmodel = %q, want ollama/small", got)
 	}
 }
 
@@ -54,10 +94,16 @@ func TestConfigFieldsRejectWithExplanation(t *testing.T) {
 	}{
 		{"addressed", "maybe", "'true' or 'false'"},
 		{"maxtokens", "many", "valid integer"},
+		{"maxtokens", "0", "at least 1"},
 		{"maxcontext", "-5", "at least 0"},
+		{"chunkmax", "-1", "at least 0"},
 		{"temperature", "hot", "valid float"},
+		{"temperature", "-0.5", "at least 0"},
 		{"top_p", "7", "between 0 and 1"},
+		{"apitimeout", "0s", "positive duration"},
+		{"apitimeout", "-5m", "positive duration"},
 		{"sessionduration", "10", "valid duration"},
+		{"sessionduration", "-1m", "non-negative duration"},
 	}
 
 	for _, tt := range tests {

@@ -250,14 +250,15 @@ func TestSetCommand_TopPBounds(t *testing.T) {
 
 func TestSetCommand_ChunkMaxEdgeCases(t *testing.T) {
 	tests := []struct {
-		name  string
-		value string
-		want  int
+		name      string
+		value     string
+		want      int
+		wantError bool
 	}{
-		{"zero", "0", 0},
-		{"small", "10", 10},
-		{"normal", "350", 350},
-		{"negative", "-1", -1}, // Currently accepted (no validation)
+		{"zero", "0", 0, false},
+		{"small", "10", 10, false},
+		{"normal", "350", 350, false},
+		{"negative", "-1", 350, true},
 	}
 
 	for _, tt := range tests {
@@ -272,8 +273,10 @@ func TestSetCommand_ChunkMaxEdgeCases(t *testing.T) {
 			if ctx.ReplyCount() != 1 {
 				t.Fatalf("expected 1 reply, got %d", ctx.ReplyCount())
 			}
-
-			// Currently no bounds validation, so all values are accepted
+			hasError := strings.Contains(ctx.LastReply(), "invalid value")
+			if hasError != tt.wantError {
+				t.Fatalf("chunkmax=%s: wantError=%v, got reply %q", tt.value, tt.wantError, ctx.LastReply())
+			}
 			if ctx.GetConfig().Session.ChunkMax != tt.want {
 				t.Errorf("expected chunkmax=%d, got=%d", tt.want, ctx.GetConfig().Session.ChunkMax)
 			}

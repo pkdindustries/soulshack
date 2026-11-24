@@ -31,16 +31,7 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 	defer sys.GetMemory().Close()
 
 	// Initialize command registry
-	cmdRegistry := commands.NewRegistry()
-	cmdRegistry.Register(&commands.SetCommand{})
-	cmdRegistry.Register(&commands.GetCommand{})
-	cmdRegistry.Register(commands.NewHelpCommand(cmdRegistry))
-	cmdRegistry.Register(&commands.VersionCommand{Version: "v" + Version})
-	cmdRegistry.Register(&commands.CompletionCommand{})
-	cmdRegistry.Register(&commands.ToolsCommand{})
-	cmdRegistry.Register(&commands.AdminCommand{})
-	cmdRegistry.Register(&commands.StatsCommand{})
-	cmdRegistry.Register(&commands.AgentsCommand{})
+	cmdRegistry := newCommandRegistry(sys)
 
 	// Initialize behavior registry (order matters: passive watchers first, addressed last as fallback)
 	behaviorRegistry := behaviors.NewRegistry()
@@ -142,4 +133,20 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 	}
 
 	return fmt.Errorf("failed to connect after %d attempts", maxRetries)
+}
+
+func newCommandRegistry(sys core.System) *commands.Registry {
+	reg := commands.NewRegistry()
+	reg.Register(&commands.SetCommand{})
+	reg.Register(&commands.GetCommand{})
+	reg.Register(commands.NewHelpCommand(reg))
+	reg.Register(&commands.VersionCommand{Version: "v" + Version})
+	reg.Register(&commands.CompletionCommand{})
+	reg.Register(&commands.ToolsCommand{})
+	reg.Register(&commands.AdminCommand{})
+	reg.Register(&commands.StatsCommand{})
+	if sys.GetAgents() != nil {
+		reg.Register(&commands.AgentsCommand{})
+	}
+	return reg
 }

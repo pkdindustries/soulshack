@@ -14,7 +14,8 @@ func (c *GetCommand) Name() string    { return "/get" }
 func (c *GetCommand) AdminOnly() bool { return false }
 
 func (c *GetCommand) Execute(turn *core.Turn) {
-	keys := getConfigKeys()
+	sys := turn.GetSystem()
+	keys := configKeysFor(sys)
 	if len(turn.GetArgs()) < 2 {
 		turn.Reply(fmt.Sprintf("Usage: /get <key>. Available keys: %s", strings.Join(keys, ", ")))
 		return
@@ -36,7 +37,7 @@ func (c *GetCommand) Execute(turn *core.Turn) {
 	}
 
 	// Handle standard config fields
-	field, ok := configFields[param]
+	field, ok := lookupConfigField(sys, param)
 	if !ok {
 		turn.Reply(fmt.Sprintf("Unknown key %s. Available keys: %s", param, strings.Join(keys, ", ")))
 		return

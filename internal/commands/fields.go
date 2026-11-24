@@ -21,7 +21,8 @@ type configField struct {
 	setter func(*config.Configuration, string) error
 	getter func(*config.Configuration) string
 	// apply syncs copies held outside the config; runs under the config lock.
-	apply func(*config.Configuration, core.System)
+	apply        func(*config.Configuration, core.System)
+	subagentOnly bool
 }
 
 // configFields maps parameter names to their handlers. Setter errors omit the
@@ -30,8 +31,8 @@ var configFields = map[string]configField{
 	"addressed":          boolSetting(func(c *settings) *bool { return &c.Bot.Addressed }),
 	"prompt":             stringSetting(func(c *settings) *string { return &c.Bot.Prompt }),
 	"model":              stringSetting(func(c *settings) *string { return &c.Model.Model }),
-	"maxtokens":          intSetting(func(c *settings) *int { return &c.Model.MaxTokens }),
-	"temperature":        floatSetting(func(c *settings) *float32 { return &c.Model.Temperature }, nil),
+	"maxtokens":          intSetting(func(c *settings) *int { return &c.Model.MaxTokens }, 1),
+	"temperature":        floatSetting(func(c *settings) *float32 { return &c.Model.Temperature }, atLeast(0)),
 	"top_p":              floatSetting(func(c *settings) *float32 { return &c.Model.TopP }, between(0, 1)),
 	"openaiurl":          stringSetting(func(c *settings) *string { return &c.API.OpenAIURL }),
 	"ollamaurl":          stringSetting(func(c *settings) *string { return &c.API.OllamaURL }),
@@ -45,22 +46,22 @@ var configFields = map[string]configField{
 	"thinkingeffort":     checkedStringSetting(func(c *settings) *string { return &c.Model.ThinkingEffort }, checkThinkingEffort),
 	"showthinkingaction": boolSetting(func(c *settings) *bool { return &c.Bot.ShowThinkingAction }),
 	"showtoolactions":    boolSetting(func(c *settings) *bool { return &c.Bot.ShowToolActions }),
-	"apitimeout":         durationSetting(func(c *settings) *time.Duration { return &c.API.Timeout }),
-	"chunkmax":           intSetting(func(c *settings) *int { return &c.Session.ChunkMax }),
+	"apitimeout":         durationSetting(func(c *settings) *time.Duration { return &c.API.Timeout }, true),
+	"chunkmax":           intSetting(func(c *settings) *int { return &c.Session.ChunkMax }, 0),
 	"urlwatcher":         boolSetting(func(c *settings) *bool { return &c.Bot.URLWatcher }),
 	"urlwatchersilent":   boolSetting(func(c *settings) *bool { return &c.Bot.URLWatcherSilent }),
 	"opwatcher":          boolSetting(func(c *settings) *bool { return &c.Bot.OpWatcher }),
 
 	// Read per spawn; whether the tool exists is fixed at startup.
-	"subagentmodel":      stringSetting(func(c *settings) *string { return &c.Bot.SubagentModel }),
-	"subagenttimeout":    durationSetting(func(c *settings) *time.Duration { return &c.Bot.SubagentTimeout }),
-	"subagentmax":        intSetting(func(c *settings) *int { return &c.Bot.SubagentMax }, 0),
-	"subagentmaxperchat": intSetting(func(c *settings) *int { return &c.Bot.SubagentMaxPerChat }, 0),
+	"subagentmodel":      subagentSetting(stringSetting(func(c *settings) *string { return &c.Bot.SubagentModel })),
+	"subagenttimeout":    subagentSetting(durationSetting(func(c *settings) *time.Duration { return &c.Bot.SubagentTimeout }, true)),
+	"subagentmax":        subagentSetting(intSetting(func(c *settings) *int { return &c.Bot.SubagentMax }, 0)),
+	"subagentmaxperchat": subagentSetting(intSetting(func(c *settings) *int { return &c.Bot.SubagentMaxPerChat }, 0)),
 
 	// Also held by the conversations.
 	"maxcontext": withApply(intSetting(func(c *settings) *int { return &c.Session.MaxContext }, 0),
 		func(c *config.Configuration, sys core.System) { sys.GetMemory().SetBudget(c.Session.MaxContext) }),
-	"sessionduration": withApply(durationSetting(func(c *settings) *time.Duration { return &c.Session.TTL }),
+	"sessionduration": withApply(durationSetting(func(c *settings) *time.Duration { return &c.Session.TTL }, false),
 		func(c *config.Configuration, sys core.System) { sys.GetMemory().SetTTL(c.Session.TTL) }),
 }
 
@@ -128,6 +129,15 @@ func floatSetting(get func(*settings) *float32, check func(float64) error) confi
 	}, func(f float32) string { return strconv.FormatFloat(float64(f), 'f', 6, 32) })
 }
 
+func atLeast(min float64) func(float64) error {
+	return func(value float64) error {
+		if value < min {
+			return fmt.Errorf("provide a float of at least %g", min)
+		}
+		return nil
+	}
+}
+
 func between(min, max float64) func(float64) error {
 	return func(value float64) error {
 		if value < min || value > max {
@@ -137,11 +147,17 @@ func between(min, max float64) func(float64) error {
 	}
 }
 
-func durationSetting(get func(*settings) *time.Duration) configField {
+func durationSetting(get func(*settings) *time.Duration, positive bool) configField {
 	return valueSetting(get, func(v string) (time.Duration, error) {
 		parsed, err := time.ParseDuration(v)
 		if err != nil {
 			return 0, errDuration
+		}
+		if positive && parsed <= 0 {
+			return 0, errors.New("provide a positive duration, such as 10m or 1h")
+		}
+		if !positive && parsed < 0 {
+			return 0, errors.New("provide a non-negative duration, such as 10m or 0")
 		}
 		return parsed, nil
 	}, time.Duration.String)
@@ -180,9 +196,30 @@ func withApply(field configField, apply func(*config.Configuration, core.System)
 	return field
 }
 
-func getConfigKeys() []string {
+func subagentSetting(field configField) configField {
+	field.subagentOnly = true
+	return field
+}
+
+func subagentsEnabled(sys core.System) bool {
+	return sys != nil && sys.GetAgents() != nil
+}
+
+func lookupConfigField(sys core.System, name string) (configField, bool) {
+	field, ok := configFields[name]
+	if !ok || (field.subagentOnly && !subagentsEnabled(sys)) {
+		return configField{}, false
+	}
+	return field, true
+}
+
+func configKeysFor(sys core.System) []string {
+	enabled := subagentsEnabled(sys)
 	keys := make([]string, 0, len(configFields))
-	for key := range configFields {
+	for key, field := range configFields {
+		if field.subagentOnly && !enabled {
+			continue
+		}
 		keys = append(keys, key)
 	}
 	slices.Sort(keys)
