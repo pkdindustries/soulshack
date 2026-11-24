@@ -77,8 +77,12 @@ func NewChatContext(parentctx context.Context, system core.System, ircclient *gi
 	if !girc.IsValidChannel(key) {
 		key = e.Source.Name
 	}
+	caseMapping := ""
+	if ircclient != nil {
+		caseMapping, _ = ircclient.GetServerOption("CASEMAPPING")
+	}
 
-	ctx.conversationKey = key
+	ctx.conversationKey = FoldNick(key, caseMapping)
 	return &ctx, cancel
 }
 

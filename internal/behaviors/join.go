@@ -27,6 +27,10 @@ func (b *JoinBehavior) Check(ctx irc.ChatContextInterface, event *girc.Event) bo
 
 func (b *JoinBehavior) Execute(ctx irc.ChatContextInterface, event *girc.Event) {
 	core.WithConversation(ctx, "join", func(turn *core.Turn) {
+		// Skip greeting when resuming an existing persisted conversation.
+		if turn.Conversation.Len() > 0 {
+			return
+		}
 		complete(turn, turn.GetConfig().Bot.Greeting, false)
 	}, nil)
 }

@@ -205,3 +205,29 @@ func TestBackgroundResolvesItsOwnChatContext(t *testing.T) {
 		t.Fatal("background work resolved a chat context other than its own")
 	}
 }
+
+func TestChatContextFoldsConversationKeys(t *testing.T) {
+	sys := mocktest.NewMockSystem(t)
+
+	// Channels with different casing share one conversation.
+	upperChan := newEventContext(t, sys, &girc.Event{
+		Command: girc.PRIVMSG, Source: &girc.Source{Name: "alice"}, Params: []string{"#SoulShack", "hello"},
+	})
+	lowerChan := newEventContext(t, sys, &girc.Event{
+		Command: girc.PRIVMSG, Source: &girc.Source{Name: "bob"}, Params: []string{"#soulshack", "hi"},
+	})
+	if upperChan.GetConversationKey() != lowerChan.GetConversationKey() {
+		t.Fatalf("channel keys differ: %q vs %q", upperChan.GetConversationKey(), lowerChan.GetConversationKey())
+	}
+
+	// PM nicks with RFC1459-equivalent casing share one conversation.
+	nick1 := newEventContext(t, sys, &girc.Event{
+		Command: girc.PRIVMSG, Source: &girc.Source{Name: "Alice["}, Params: []string{"testbot", "hello"},
+	})
+	nick2 := newEventContext(t, sys, &girc.Event{
+		Command: girc.PRIVMSG, Source: &girc.Source{Name: "alice{"}, Params: []string{"testbot", "again"},
+	})
+	if nick1.GetConversationKey() != nick2.GetConversationKey() {
+		t.Fatalf("PM nick keys differ: %q vs %q", nick1.GetConversationKey(), nick2.GetConversationKey())
+	}
+}
