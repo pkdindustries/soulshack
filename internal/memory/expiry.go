@@ -45,8 +45,12 @@ func (m *Memory) expire(ctx context.Context) error {
 			continue
 		}
 		// expiryMu blocks acquisition; Delete also refuses a live lease.
-		if err := m.store.Delete(ctx, metadata.Name); err != nil && !errors.Is(err, sessions.ErrSessionInUse) {
+		err := m.store.Delete(ctx, metadata.Name)
+		if err != nil && !errors.Is(err, sessions.ErrSessionInUse) {
 			return err
+		}
+		if err == nil {
+			m.pruneIdle(metadata.Name)
 		}
 	}
 	return nil

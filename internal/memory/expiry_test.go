@@ -170,3 +170,54 @@ func TestCleanupLoopAndScratchExpiry(t *testing.T) {
 		}
 	})
 }
+
+func TestExpirePrunesIdleKeysFromMemory(t *testing.T) {
+	m := testMemory(t, Config{
+		TTL: time.Minute,
+		Now: func() time.Time { return time.Now().Add(10 * time.Minute) },
+	})
+	storeHistory(t, m, "alice|")
+	if keys := m.Keys(); len(keys) != 1 || keys[0] != "alice|" {
+		t.Fatalf("keys before expire = %v", keys)
+	}
+	if err := m.expire(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if keys := m.Keys(); len(keys) != 0 {
+		t.Fatalf("keys after expire = %v, want empty", keys)
+	}
+}
+
+func TestReopenRestoresCompactionState(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "sessions.db")
+	m := testMemory(t, Config{Path: dbPath})
+	compaction := messages.Compaction{Summary: "earlier summary"}.Message()
+	if err := m.With(context.Background(), "#chan", func(c *Conversation) {
+		if err := c.Append([]messages.ChatMessage{
+			{Role: messages.MessageRoleUser, Content: "hello"},
+			compaction,
+			{Role: messages.MessageRoleAssistant, Content: "hi"},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+	m.Close()
+
+	reopened := testMemory(t, Config{Path: dbPath})
+	if err := reopened.With(context.Background(), "#chan", func(c *Conversation) {
+		if !c.Compacted() {
+			t.Fatal("reopened conversation lost compacted state")
+		}
+		usage, hasUsage := c.Usage()
+		if hasUsage {
+			t.Fatalf("reopened conversation fabricated usage: %+v", usage)
+		}
+		if !usage.Compacted {
+			t.Fatal("reopened usage.Compacted should be true so compaction warning is not repeated")
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+}

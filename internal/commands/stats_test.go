@@ -36,3 +36,29 @@ func TestStatsSeparatesProjectedInputFromRetainedHistory(t *testing.T) {
 		t.Fatalf("clear left stored messages: %s", ctx.LastReply())
 	}
 }
+
+func TestStatsExcludesInternalCompactionMarkersAndNotesCompactedRestart(t *testing.T) {
+	sys := mocktest.NewMockSystem(t)
+	conversation := sys.Conversation(t, "stats-compacted")
+	ctx := mocktest.NewMockContext().WithSystem(sys).WithConversation(conversation)
+
+	if err := conversation.Append([]messages.ChatMessage{
+		{Role: messages.MessageRoleUser, Content: "(nick:alice) hi"},
+		messages.Compaction{Summary: "older summary"}.Message(),
+		{Role: messages.MessageRoleAssistant, Content: "hello"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// No Usage recorded yet (as right after restart).
+	(&StatsCommand{}).Execute(ctx.Turn())
+	reply := ctx.LastReply()
+	for _, want := range []string{
+		"last completed input: no completed request (older exchanges compacted)",
+		"stored messages: 2 (user: 1, assistant: 1, tool: 0)",
+	} {
+		if !strings.Contains(reply, want) {
+			t.Errorf("stats reply %q missing %q", reply, want)
+		}
+	}
+}

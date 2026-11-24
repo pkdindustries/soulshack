@@ -13,8 +13,9 @@ import (
 // StatsCommand reports conversation statistics.
 type StatsCommand struct{}
 
-func (c *StatsCommand) Name() string    { return "/stats" }
-func (c *StatsCommand) AdminOnly() bool { return false }
+func (c *StatsCommand) Name() string            { return "/stats" }
+func (c *StatsCommand) AdminOnly() bool         { return false }
+func (c *StatsCommand) NeedsConversation() bool { return true }
 
 func (c *StatsCommand) Execute(turn *core.Turn) {
 	history := turn.Conversation.Messages()
@@ -26,11 +27,10 @@ func (c *StatsCommand) Execute(turn *core.Turn) {
 	// Track participants (IRC-specific)
 	participants := make(map[string]bool)
 	counts := make(map[string]int)
+	storedMessages := 0
 
 	for _, msg := range history {
-		counts[string(msg.Role)]++
-
-		// Token counting
+		// Token counting (including any internal usage-only records)
 		input := msg.GetInputTokens()
 		output := msg.GetOutputTokens()
 
@@ -38,6 +38,12 @@ func (c *StatsCommand) Execute(turn *core.Turn) {
 			totalInputTokens += input
 			totalOutputTokens += output
 		}
+
+		if msg.Role == messages.MessageRoleInternal {
+			continue
+		}
+		storedMessages++
+		counts[string(msg.Role)]++
 
 		// Track participants from user messages
 		if msg.Role == messages.MessageRoleUser {
@@ -60,15 +66,18 @@ func (c *StatsCommand) Execute(turn *core.Turn) {
 	if ttl := turn.GetSystem().GetMemory().TTL(); ttl > 0 {
 		ttlStr = fmt.Sprintf("after %s idle", formatDuration(ttl))
 	}
+	compacted := turn.Conversation.Compacted()
 	contextStr := "no completed request"
 	if usage, ok := turn.Conversation.Usage(); ok {
 		contextStr = fmt.Sprintf("~%d tokens (no configured limit)", usage.EstimatedTokens)
 		if usage.Budget > 0 {
 			contextStr = fmt.Sprintf("~%d/%d tokens", usage.EstimatedTokens, usage.Budget)
 		}
-		if usage.Compacted {
+		if usage.Compacted || compacted {
 			contextStr += " (older exchanges compacted)"
 		}
+	} else if compacted {
+		contextStr = "no completed request (older exchanges compacted)"
 	}
 
 	// Build response in simple format
@@ -82,7 +91,7 @@ func (c *StatsCommand) Execute(turn *core.Turn) {
 		totalInputTokens,
 		totalOutputTokens,
 		contextStr,
-		len(history),
+		storedMessages,
 		counts[string(messages.MessageRoleUser)],
 		counts[string(messages.MessageRoleAssistant)],
 		counts[string(messages.MessageRoleTool)],

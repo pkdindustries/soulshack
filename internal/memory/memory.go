@@ -132,7 +132,8 @@ func (m *Memory) Keys() []string {
 // With runs fn on key's conversation, one turn at a time.
 // If ctx ends while queued, fn doesn't run and ctx's error is returned.
 func (m *Memory) With(ctx context.Context, key string, fn func(*Conversation)) error {
-	conversation := m.conversation(key)
+	conversation := m.acquireConversation(key)
+	defer m.releaseConversation(conversation)
 	if err := conversation.enter(ctx); err != nil {
 		return err
 	}
@@ -148,7 +149,8 @@ func (m *Memory) With(ctx context.Context, key string, fn func(*Conversation)) e
 
 // WithDetached runs fn on a discarded scratch conversation, queued on key's turns.
 func (m *Memory) WithDetached(ctx context.Context, key string, fn func(*Conversation)) error {
-	queue := m.conversation(key)
+	queue := m.acquireConversation(key)
+	defer m.releaseConversation(queue)
 	if err := queue.enter(ctx); err != nil {
 		return err
 	}
@@ -173,7 +175,7 @@ func (m *Memory) WithScratch(ctx context.Context, fn func(*Conversation)) error 
 	return nil
 }
 
-func (m *Memory) conversation(key string) *Conversation {
+func (m *Memory) acquireConversation(key string) *Conversation {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	conversation, ok := m.convs[key]
@@ -181,7 +183,24 @@ func (m *Memory) conversation(key string) *Conversation {
 		conversation = &Conversation{owner: m, turn: make(chan struct{}, 1)}
 		m.convs[key] = conversation
 	}
+	conversation.refs++
 	return conversation
+}
+
+func (m *Memory) releaseConversation(conversation *Conversation) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	conversation.refs--
+}
+
+func (m *Memory) pruneIdle(storedName string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for key, conversation := range m.convs {
+		if conversation.refs == 0 && sessionName(key) == storedName {
+			delete(m.convs, key)
+		}
+	}
 }
 
 // sessionName percent-escapes nick characters like '|' and '\', and '%' to stay one-to-one.
@@ -203,6 +222,7 @@ func sessionName(key string) string {
 type Conversation struct {
 	owner *Memory
 	turn  chan struct{}
+	refs  int // guarded by owner.mu
 
 	mu       sync.Mutex
 	session  sessions.Session
@@ -230,8 +250,19 @@ func (c *Conversation) open(ctx context.Context, key string) error {
 	c.session, c.history = session, history
 	if len(history) == 0 {
 		c.usage, c.hasUsage = ContextUsage{}, false
+	} else if !c.hasUsage && hasCompactionSummary(history) {
+		c.usage.Compacted = true
 	}
 	return nil
+}
+
+func hasCompactionSummary(msgs []messages.ChatMessage) bool {
+	for _, msg := range msgs {
+		if comp, ok := msg.Compaction(); ok && comp.Summary != "" {
+			return true
+		}
+	}
+	return false
 }
 
 // prepare applies the current TTL. Named sessions keep a zero storage TTL
@@ -310,6 +341,13 @@ func (c *Conversation) Artifacts() artifacts.Store {
 		return nil
 	}
 	return c.session.ArtifactStore()
+}
+
+// Compacted reports whether the conversation carries a compaction summary.
+func (c *Conversation) Compacted() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.usage.Compacted || hasCompactionSummary(c.history)
 }
 
 // Usage returns the last completed turn's accounting.
