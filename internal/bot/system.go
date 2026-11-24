@@ -130,6 +130,7 @@ func NewSystem(c *config.Configuration) (core.System, error) {
 		"tools_loaded", len(s.Tools.All()),
 		"max_context", c.Session.MaxContext,
 		"session_db", c.Session.Path,
+		"session_ttl", c.Session.TTL,
 	}
 	if toolErrors > 0 {
 		fields = append(fields, "tool_errors", toolErrors)

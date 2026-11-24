@@ -191,7 +191,7 @@ func GetFlags() []cli.Flag {
 
 		// Timeouts and Behavior
 		&cli.BoolFlag{Name: "addressed", Aliases: []string{"a"}, Value: true, Usage: "require bot be addressed by nick for response", Sources: src("addressed", "SOULSHACK_ADDRESSED")},
-		&cli.DurationFlag{Name: "sessionduration", Aliases: []string{"S"}, Value: time.Minute * 10, Usage: "a conversation is forgotten after this duration of inactivity (0 = no expiry)", Sources: src("sessionduration", "SOULSHACK_SESSIONDURATION")},
+		&cli.DurationFlag{Name: "sessionduration", Aliases: []string{"S"}, Value: time.Minute * 10, Usage: "a conversation is forgotten after this duration of inactivity (default: 10m in memory, 0 with --sessiondb; 0 = no expiry)", Sources: src("sessionduration", "SOULSHACK_SESSIONDURATION")},
 		&cli.IntFlag{Name: "maxcontext", Value: 0, Usage: "context budget a conversation's requests are compacted to stay within; older exchanges are summarized, not forgotten; refused below the least a turn always fits in (0 = unlimited)", Sources: src("maxcontext", "SOULSHACK_MAXCONTEXT")},
 		&cli.StringFlag{Name: "sessiondb", Usage: "SQLite database that keeps conversations across restarts (empty: in memory)", Sources: src("sessiondb", "SOULSHACK_SESSIONDB")},
 		&cli.IntFlag{Name: "chunkmax", Aliases: []string{"m"}, Value: 350, Usage: "maximum number of characters to send as a single message", Sources: src("chunkmax", "SOULSHACK_CHUNKMAX")},
@@ -226,6 +226,12 @@ func getConfigPath() string {
 func NewConfiguration(c *cli.Command) *Configuration {
 	if c.IsSet("config") {
 		slog.Info("config_loaded", "path", c.String("config"))
+	}
+
+	sessionDB := c.String("sessiondb")
+	sessionTTL := c.Duration("sessionduration")
+	if sessionDB != "" && !c.IsSet("sessionduration") {
+		sessionTTL = 0
 	}
 
 	config := &Configuration{
@@ -273,8 +279,8 @@ func NewConfiguration(c *cli.Command) *Configuration {
 		Session: &SessionConfig{
 			ChunkMax:   c.Int("chunkmax"),
 			MaxContext: c.Int("maxcontext"),
-			TTL:        c.Duration("sessionduration"),
-			Path:       c.String("sessiondb"),
+			TTL:        sessionTTL,
+			Path:       sessionDB,
 		},
 
 		API: &APIConfig{
