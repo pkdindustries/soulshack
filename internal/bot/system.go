@@ -1,6 +1,7 @@
 package bot
 
 import (
+	"fmt"
 	"log/slog"
 	"sync/atomic"
 
@@ -53,6 +54,9 @@ func (s *SystemImpl) UpdateLLM(cfg config.APIConfig) error {
 	return nil
 }
 
+// newSandbox is a hook for tests to simulate sandbox setup failure.
+var newSandbox = sandbox.New
+
 func NewSystem(c *config.Configuration) (core.System, error) {
 	s := &SystemImpl{Config: config.NewStore(c)}
 
@@ -60,19 +64,19 @@ func NewSystem(c *config.Configuration) (core.System, error) {
 	regOpts := []tools.RegistryOption{tools.WithNativeTools()}
 	if c.Bot.Sandbox {
 		baseCfg := sandbox.DefaultConfig()
-		if _, err := sandbox.New(baseCfg); err != nil {
-			slog.Warn("sandbox_unavailable", "error", err)
-			regOpts = append(regOpts, tools.WithUnsafeNoSandbox())
-		} else {
-			regOpts = append(regOpts, tools.WithSandboxFactory(sandbox.New, baseCfg))
-			slog.Info("sandbox_enabled")
+		if _, err := newSandbox(baseCfg); err != nil {
+			return nil, fmt.Errorf("initialize sandbox: %w", err)
 		}
+		regOpts = append(regOpts, tools.WithSandboxFactory(newSandbox, baseCfg))
+		slog.Info("sandbox_enabled")
 	} else {
 		regOpts = append(regOpts, tools.WithUnsafeNoSandbox())
 	}
 	s.Tools = tools.NewToolRegistry([]tools.Tool{}, regOpts...)
+	// WithNativeTools auto-registers view_image; remove it so all native tools are opt-in via --tool.
+	s.Tools.Remove("view_image")
 
-	// Register native IRC tools with polly's registry
+	// Register native IRC tools with polly's registry (opt-in via --tool)
 	irc.RegisterIRCTools(s.Tools)
 
 	// Fixed at startup: a tool can't be withdrawn from a running turn.

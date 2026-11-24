@@ -10,22 +10,23 @@ import (
 	mocktest "pkdindustries/soulshack/internal/testing"
 )
 
-// A native factory alone doesn't reach registry.All().
-func TestRegisterIRCToolsOffersThemToTheModel(t *testing.T) {
+func TestRegisterIRCToolsAreOptIn(t *testing.T) {
 	registry := tools.NewToolRegistry([]tools.Tool{}, tools.WithUnsafeNoSandbox())
 	RegisterIRCTools(registry)
 
-	offered := make(map[string]bool)
-	for _, tool := range registry.All() {
-		offered[tool.GetName()] = true
+	if got := registry.All(); len(got) != 0 {
+		t.Fatalf("expected no IRC tools active by default, got %d", len(got))
 	}
 
 	for _, name := range []string{
 		"irc__op", "irc__kick", "irc__ban", "irc__topic", "irc__action",
 		"irc__mode_set", "irc__mode_query", "irc__invite", "irc__names", "irc__whois",
 	} {
-		if !offered[name] {
-			t.Errorf("registry.All() does not offer %s", name)
+		if _, err := registry.LoadToolAuto(name); err != nil {
+			t.Fatalf("LoadToolAuto(%s) failed: %v", name, err)
+		}
+		if _, ok := registry.Get(name); !ok {
+			t.Errorf("registry does not offer %s after opt-in load", name)
 		}
 	}
 }
@@ -45,47 +46,33 @@ func (c *modeRecordingContext) SetMode(target, flags string, args ...string) boo
 	return true
 }
 
-func TestOpToolAdminOrSelf(t *testing.T) {
+func TestOpToolAdminOnly(t *testing.T) {
 	for _, tt := range []struct {
-		name                                       string
-		admin, opped, grant, canceled, emptyAdmins bool
-		users                                      []string
-		source, caseMapping, wantMode, denial      string
+		name                                 string
+		admin, opped, grant, canceled, empty bool
+		users                                []string
+		wantMode, denial                     string
 	}{
-		{name: "self op", opped: true, grant: true, wantMode: "+o"},
-		{name: "self deop", opped: true, wantMode: "-o"},
+		{name: "admin may op self", admin: true, opped: true, grant: true, wantMode: "+o"},
 		{name: "admin may op anyone", admin: true, opped: true, grant: true, users: []string{"alice", "bob"}, wantMode: "+o"},
 		{name: "admin may deop anyone", admin: true, opped: true, users: []string{"alice", "bob"}, wantMode: "-o"},
-		{name: "nonadmin cannot op others", opped: true, grant: true, users: []string{"bob"}, denial: "Only configured admins"},
-		{name: "nonadmin cannot deop others", opped: true, users: []string{"bob"}, denial: "Only configured admins"},
-		{name: "mixed grant rejected before any modes", opped: true, grant: true, users: []string{"alice", "bob"}, denial: "Only configured admins"},
-		{name: "mixed revoke rejected before any modes", opped: true, users: []string{"alice", "bob"}, denial: "Only configured admins"},
-		{name: "empty admins permit self op", admin: true, emptyAdmins: true, opped: true, grant: true, wantMode: "+o"},
-		{name: "empty admins permit self deop", admin: true, emptyAdmins: true, opped: true, wantMode: "-o"},
-		{name: "empty admins cannot op others", admin: true, emptyAdmins: true, opped: true, grant: true, users: []string{"bob"}, denial: "Only configured admins"},
-		{name: "empty admins cannot deop others", admin: true, emptyAdmins: true, opped: true, users: []string{"bob"}, denial: "Only configured admins"},
-		{name: "nickname case", opped: true, grant: true, users: []string{"ALICE"}, wantMode: "+o"},
-		{name: "RFC1459 nickname equivalents", opped: true, grant: true, source: "alice[", users: []string{"ALICE{"}, wantMode: "+o"},
-		{name: "ASCII distinct nicknames", opped: true, grant: true, source: "alice[", users: []string{"alice{"}, caseMapping: "ascii", denial: "Only configured admins"},
-		{name: "strict RFC1459 distinct nicknames", opped: true, grant: true, source: "alice^", users: []string{"alice~"}, caseMapping: "rfc1459-strict", denial: "Only configured admins"},
-		{name: "bot needs ops", grant: true, denial: "Bot does not have operator status"},
-		{name: "canceled request", opped: true, grant: true, canceled: true},
+		{name: "nonadmin cannot op self", opped: true, grant: true, denial: "not authorized"},
+		{name: "nonadmin cannot deop self", opped: true, denial: "not authorized"},
+		{name: "nonadmin cannot op others", opped: true, grant: true, users: []string{"bob"}, denial: "not authorized"},
+		{name: "empty admins deny even when IsAdmin is true", admin: true, empty: true, opped: true, grant: true, denial: "not authorized"},
+		{name: "bot needs ops", admin: true, grant: true, denial: "Bot does not have operator status"},
+		{name: "canceled request", admin: true, opped: true, grant: true, canceled: true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := mocktest.DefaultTestConfig()
-			if !tt.emptyAdmins {
+			if !tt.empty {
 				cfg.Bot.Admins = []string{"owner!user@trusted.example"}
-			}
-			source := tt.source
-			if source == "" {
-				source = "alice"
 			}
 			users := tt.users
 			if users == nil {
 				users = []string{"alice"}
 			}
-			chat := &modeRecordingContext{MockChatContext: mocktest.NewMockContext().WithConfig(cfg).WithAdmin(tt.admin).WithSource(source)}
-			chat.ServerOptions = map[string]string{"CASEMAPPING": tt.caseMapping}
+			chat := &modeRecordingContext{MockChatContext: mocktest.NewMockContext().WithConfig(cfg).WithAdmin(tt.admin).WithSource("alice")}
 			chat.ChannelUsers[cfg.Server.Channel] = []core.ChannelUser{{Nick: chat.GetBotNick(), IsOp: tt.opped}}
 			ctx, cancel := context.WithCancel(core.WithChat(chat, chat))
 			defer cancel()
@@ -117,6 +104,35 @@ func TestOpToolAdminOrSelf(t *testing.T) {
 				if mode.target != cfg.Server.Channel || mode.flags != tt.wantMode || len(mode.args) != 1 || mode.args[0] != nick {
 					t.Fatalf("unexpected mode: %+v", mode)
 				}
+			}
+		})
+	}
+}
+
+func TestChannelModToolsRequireConfiguredAdmins(t *testing.T) {
+	cases := []struct {
+		name string
+		tool tools.Tool
+		args map[string]any
+	}{
+		{"irc__op", newIrcOpTool(), map[string]any{"users": []string{"bob"}, "grant": true}},
+		{"irc__kick", newIrcKickTool(), map[string]any{"users": []string{"bob"}, "reason": "bye"}},
+		{"irc__ban", newIrcBanTool(), map[string]any{"target": "bob", "ban": true}},
+		{"irc__topic", newIrcTopicTool(), map[string]any{"topic": "new topic"}},
+		{"irc__mode_set", newIrcModeSetTool(), map[string]any{"modes": "+m"}},
+		{"irc__invite", newIrcInviteTool(), map[string]any{"users": []string{"bob"}}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := mocktest.DefaultTestConfig() // empty Admins
+			chat := mocktest.NewMockContext().WithConfig(cfg).WithAdmin(true).WithSource("alice")
+			chat.ChannelUsers[cfg.Server.Channel] = []core.ChannelUser{{Nick: chat.GetBotNick(), IsOp: true}}
+			result, err := tc.tool.Execute(core.WithChat(chat, chat), tc.args)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(result, "not authorized") {
+				t.Fatalf("%s with empty admins returned %q, want denial", tc.name, result)
 			}
 		})
 	}

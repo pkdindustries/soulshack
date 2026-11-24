@@ -47,7 +47,7 @@ func validateAdminOp(ctx context.Context) (ChatContextInterface, string, error) 
 	if err := ctx.Err(); err != nil {
 		return nil, "", err
 	}
-	if !chatCtx.IsAdmin() {
+	if len(chatCtx.GetConfig().Bot.Admins) == 0 || !chatCtx.IsAdmin() {
 		return nil, "You are not authorized to use this tool", nil
 	}
 	if !isBotOpped(chatCtx) {
@@ -99,46 +99,30 @@ func ChannelWriteTools() []string {
 	return names
 }
 
-// RegisterIRCTools registers IRC tools as native tools with polly's registry
+// RegisterIRCTools registers IRC tool factories with polly's registry (opt-in via --tool).
 func RegisterIRCTools(registry *tools.ToolRegistry) {
 	for name, tool := range ircTools {
-		// Only instances reach registry.All(), which the model is offered.
 		registry.RegisterNative(name, tool.new)
-		registry.Register(tool.new())
 	}
 }
 
 func newIrcOpTool() tools.Tool {
 	return &tools.Func{
 		Name: "irc__op",
-		Desc: "Grant or revoke IRC operator status. Anyone may op or deop themselves; honor explicit self-service requests by calling this tool. Configured bot admins may op or deop anyone. The requester is identified from the IRC event, not from tool arguments. The tool checks permissions and whether the bot is opped; report any denial it returns.",
+		Desc: "Grant or revoke IRC operator status for one or more users",
 		Params: schema.Params{
 			"users": schema.Strings("List of user nicknames to op/deop"),
 			"grant": schema.Bool("true to grant op, false to revoke"),
 		},
 		Required: []string{"users", "grant"},
 		Run: func(ctx context.Context, args tools.Args) (string, error) {
-			chatCtx, err := validateContext(ctx)
-			if err != nil {
-				return "", err
+			chatCtx, msg, err := validateAdminOp(ctx)
+			if err != nil || msg != "" {
+				return msg, err
 			}
 			users := args.StringSlice("users")
 			if len(users) == 0 {
 				return "", fmt.Errorf("users must be a non-empty array of strings")
-			}
-			cfg := chatCtx.GetConfig()
-			// IsAdmin is true for an empty admin list; this tool requires one.
-			if len(cfg.Bot.Admins) == 0 || !chatCtx.IsAdmin() {
-				caseMapping, _ := chatCtx.GetServerOption("CASEMAPPING")
-				requester := FoldNick(chatCtx.GetSource(), caseMapping)
-				for _, nick := range users {
-					if requester == "" || FoldNick(nick, caseMapping) != requester {
-						return "Only configured admins may change other users' operator status; you may op or deop yourself", nil
-					}
-				}
-			}
-			if !isBotOpped(chatCtx) {
-				return "Bot does not have operator status in the channel", nil
 			}
 
 			mode := "-o"
@@ -146,7 +130,7 @@ func newIrcOpTool() tools.Tool {
 				mode = "+o"
 			}
 
-			channel := cfg.Server.Channel
+			channel := chatCtx.GetConfig().Server.Channel
 			for _, nick := range users {
 				if err := ctx.Err(); err != nil {
 					return "", err

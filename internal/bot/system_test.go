@@ -85,3 +85,31 @@ func TestNewSystemRefusesMaxContextBelowTheMinimum(t *testing.T) {
 		t.Fatalf("error = %v", err)
 	}
 }
+
+func TestNewSystemDefaultToolsAreOptIn(t *testing.T) {
+	cfg := mocktest.DefaultTestConfig()
+	cfg.Bot.Sandbox = false
+	sys, err := bot.NewSystem(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { sys.GetMemory().Close() })
+
+	if got := sys.GetToolRegistry().All(); len(got) != 0 {
+		names := make([]string, len(got))
+		for i, tool := range got {
+			names[i] = tool.GetName()
+		}
+		t.Fatalf("expected no default active tools, got %v", names)
+	}
+
+	// Both view_image and irc__* remain loadable on opt-in.
+	for _, name := range []string{"view_image", "irc__names", "irc__op"} {
+		if _, err := sys.GetToolRegistry().LoadToolAuto(name); err != nil {
+			t.Fatalf("LoadToolAuto(%s): %v", name, err)
+		}
+		if _, ok := sys.GetToolRegistry().Get(name); !ok {
+			t.Fatalf("%s was not registered after LoadToolAuto", name)
+		}
+	}
+}
