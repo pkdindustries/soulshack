@@ -145,6 +145,7 @@ func newCommandRegistry(sys core.System) *commands.Registry {
 	reg.Register(&commands.ToolsCommand{})
 	reg.Register(&commands.AdminCommand{})
 	reg.Register(&commands.StatsCommand{})
+	reg.Register(&commands.ClearCommand{})
 	if sys.GetAgents() != nil {
 		reg.Register(&commands.AgentsCommand{})
 	}

@@ -63,9 +63,4 @@ func (c *SetCommand) Execute(turn *core.Turn) {
 	}
 
 	turn.Reply(fmt.Sprintf("%s set to: %s", param, field.getter(cfg)))
-
-	// The transcript may describe the old configuration.
-	if err := turn.Conversation.Clear(); err != nil {
-		turn.GetLogger().Error("conversation_clear_failed", "error", err)
-	}
 }

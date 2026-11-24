@@ -11,8 +11,9 @@ import (
 // CompletionCommand handles the default chat completion
 type CompletionCommand struct{}
 
-func (c *CompletionCommand) Name() string    { return "" }
-func (c *CompletionCommand) AdminOnly() bool { return false }
+func (c *CompletionCommand) Name() string            { return "" }
+func (c *CompletionCommand) AdminOnly() bool         { return false }
+func (c *CompletionCommand) NeedsConversation() bool { return true }
 
 func (c *CompletionCommand) Execute(turn *core.Turn) {
 	msg := strings.Join(turn.GetArgs(), " ")

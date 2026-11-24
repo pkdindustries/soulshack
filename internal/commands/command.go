@@ -11,6 +11,10 @@ type Command interface {
 	AdminOnly() bool
 }
 
+type conversationCommand interface {
+	NeedsConversation() bool
+}
+
 // Registry manages command registration and dispatch
 type Registry struct {
 	commands       map[string]Command
@@ -39,6 +43,16 @@ func (r *Registry) Register(cmd Command) {
 func (r *Registry) Get(name string) (Command, bool) {
 	cmd, ok := r.commands[name]
 	return cmd, ok
+}
+
+// NeedsConversation reports whether cmdName requires leasing a conversation turn.
+func (r *Registry) NeedsConversation(cmdName string) bool {
+	cmd, ok := r.commands[cmdName]
+	if !ok {
+		return r.defaultCommand != nil
+	}
+	cc, ok := cmd.(conversationCommand)
+	return ok && cc.NeedsConversation()
 }
 
 // Dispatch executes the appropriate command based on context

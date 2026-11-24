@@ -17,6 +17,9 @@ func TestCommandRegistryRegistersAgentsOnlyWhenEnabled(t *testing.T) {
 		t.Cleanup(func() { sys.GetMemory().Close() })
 
 		reg := newCommandRegistry(sys)
+		if _, ok := reg.Get("/clear"); !ok {
+			t.Fatal("/clear was not registered")
+		}
 		_, ok := reg.Get("/agents")
 		if ok != enabled {
 			t.Fatalf("subagents=%v: /agents registered = %v, want %v", enabled, ok, enabled)

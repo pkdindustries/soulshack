@@ -71,8 +71,12 @@ func observe(turn *core.Turn, prompt string, silent bool) {
 	llm.Drain(llm.CompleteWithoutDelegating(turn, prompt), turn.Reply)
 }
 
-// dispatch tells the sender when the conversation's queue is busy.
+// dispatch runs stateless commands immediately and queues conversation turns.
 func dispatch(ctx irc.ChatContextInterface, operation string, registry *commands.Registry) {
+	if !registry.NeedsConversation(ctx.GetCommand()) {
+		registry.Dispatch(&core.Turn{ChatContextInterface: ctx})
+		return
+	}
 	core.WithConversation(ctx, operation, func(turn *core.Turn) {
 		registry.Dispatch(turn)
 	}, func() {
