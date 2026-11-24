@@ -281,8 +281,7 @@ func TestSetCommand_ChunkMaxEdgeCases(t *testing.T) {
 	}
 }
 
-// maxcontext and sessionduration take effect for conversations that already
-// exist, not only for ones created after the change.
+// Applies to existing conversations too.
 func TestSetCommand_ConversationLimitsApplyToTheMemory(t *testing.T) {
 	mockSys := mocktest.NewMockSystem(t)
 	ctx := mocktest.NewTurnContext(t, mockSys, "test").
@@ -302,8 +301,6 @@ func TestSetCommand_ConversationLimitsApplyToTheMemory(t *testing.T) {
 	}
 }
 
-// Changes made with /set are visible to turns reading the configuration at the
-// same time: both go through the store, not through a shared pointer.
 func TestSetCommand_ConcurrentReadersSeeChanges(t *testing.T) {
 	mockSys := mocktest.NewMockSystem(t)
 	ctx := mocktest.NewTurnContext(t, mockSys, "test").
@@ -347,8 +344,7 @@ func TestSetCommand_ConcurrentReadersSeeChanges(t *testing.T) {
 	readers.Wait()
 }
 
-// A maxcontext too small for the prompt and tools is refused, and so is a
-// prompt that would outgrow the maxcontext already set; neither lands.
+// Covers both a too-small maxcontext and a too-large prompt.
 func TestSetCommand_RefusesBudgetsTurnsCannotFit(t *testing.T) {
 	mockSys := mocktest.NewMockSystem(t)
 	least := llm.MinContext(mockSys.GetConfig(), mockSys.GetToolRegistry())

@@ -9,7 +9,6 @@ import (
 	mocktest "pkdindustries/soulshack/internal/testing"
 )
 
-// A slow second load must not stop unrelated conversations reading config.
 func TestToolsCommand_LiveLoadDoesNotBlockConfigReaders(t *testing.T) {
 	sys := mocktest.NewMockSystem(t)
 	registry := sys.ToolRegistry

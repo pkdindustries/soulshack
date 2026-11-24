@@ -75,9 +75,7 @@ func NewSystem(c *config.Configuration) (core.System, error) {
 	// Register native IRC tools with polly's registry
 	irc.RegisterIRCTools(s.Tools)
 
-	// Whether the model can delegate is fixed here, at startup: offering the
-	// tool is what enables it, and a tool cannot be taken back from a turn
-	// that is already using it.
+	// Fixed at startup: a tool can't be withdrawn from a running turn.
 	if c.Bot.Subagents {
 		tracker := subagents.NewTracker()
 		s.Agents = tracker
@@ -102,15 +100,12 @@ func NewSystem(c *config.Configuration) (core.System, error) {
 		}
 	}
 
-	// A maxcontext too small for this prompt and these tools would fail
-	// turns; refuse it now rather than at the first one.
+	// Fail fast on a maxcontext that can't fit the prompt and tools.
 	if err := llm.CheckContextBudget(c, s.Tools); err != nil {
 		_ = s.Tools.Close()
 		return nil, err
 	}
 
-	// Conversations are polly sessions, kept in the session database when
-	// one is configured and in memory otherwise.
 	mem, err := memory.New(memory.Config{
 		Budget: c.Session.MaxContext,
 		TTL:    c.Session.TTL,

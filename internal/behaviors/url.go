@@ -42,11 +42,8 @@ func (b *URLBehavior) Execute(ctx irc.ChatContextInterface, event *girc.Event) {
 	b.execute(ctx, event)
 }
 
-// execute runs the observation in the background and returns at once. Nobody
-// asked for this turn, so nobody should be kept waiting on it: the event
-// handler returns while the link is still being read, and the observation gets
-// a lifetime of its own rather than the event's. The channel returned is
-// closed when the observation has finished, which is what a test waits on.
+// execute runs the observation in the background, outliving the event; the
+// returned channel closes when it finishes.
 func (b *URLBehavior) execute(ctx irc.ChatContextInterface, event *girc.Event) <-chan struct{} {
 	cfg := ctx.GetConfig()
 	silent := cfg.Bot.URLWatcherSilent
@@ -55,7 +52,7 @@ func (b *URLBehavior) execute(ctx irc.ChatContextInterface, event *girc.Event) <
 		withConversation = core.WithDetachedConversation
 	}
 
-	// Read the event before the handler that owns it returns.
+	// The handler owns event; read it now.
 	prompt := fmt.Sprintf("(nick:%s) %s", ctx.GetSource(), event.Last())
 
 	background, cancel := ctx.Background(cfg.API.Timeout)

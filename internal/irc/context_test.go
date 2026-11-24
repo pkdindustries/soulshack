@@ -110,7 +110,6 @@ func TestChatContextUsesActualChannelForConversation(t *testing.T) {
 		}, nil)
 	}
 
-	// Each channel's turn wrote to its own conversation.
 	for _, channel := range []string{"#one", "#two"} {
 		history := sys.Conversation(t, channel).Messages()
 		if len(history) != 1 || history[0].Content != channel+" history" {
@@ -119,8 +118,6 @@ func TestChatContextUsesActualChannelForConversation(t *testing.T) {
 	}
 }
 
-// Tools find their chat context through the turn they run in, including when
-// polly derives a context for the tool call.
 func TestChatContextIsReachableFromDerivedContexts(t *testing.T) {
 	sys := mocktest.NewMockSystem(t)
 	ctx := newEventContext(t, sys, &girc.Event{Command: girc.PRIVMSG, Source: &girc.Source{Name: "alice"}, Params: []string{"#test", "hello"}})
@@ -161,8 +158,6 @@ func TestChatContextChunkWriterUsesChunkMax(t *testing.T) {
 	}
 }
 
-// Work handed to a child agent outlives the event that asked for it: the
-// event's deadline must not be the child's.
 func TestBackgroundOutlivesTheEventButNotTheBot(t *testing.T) {
 	sys := mocktest.NewMockSystem(t)
 	bot, shutdown := context.WithCancel(context.Background())
@@ -174,7 +169,6 @@ func TestBackgroundOutlivesTheEventButNotTheBot(t *testing.T) {
 	background, release := chat.Background(time.Minute)
 	defer release()
 
-	// The event handler returns, which is what ends the turn.
 	cancel()
 	if chat.Err() == nil {
 		t.Fatal("the event's context outlived its handler")
@@ -186,7 +180,6 @@ func TestBackgroundOutlivesTheEventButNotTheBot(t *testing.T) {
 		t.Fatalf("background work lost its conversation: %q", background.GetConversationKey())
 	}
 
-	// Shutting the bot down is what does end it.
 	shutdown()
 	select {
 	case <-background.Done():
@@ -195,8 +188,6 @@ func TestBackgroundOutlivesTheEventButNotTheBot(t *testing.T) {
 	}
 }
 
-// A background context is still the context its own tools resolve, so a
-// child's tools find the chat they belong to.
 func TestBackgroundResolvesItsOwnChatContext(t *testing.T) {
 	sys := mocktest.NewMockSystem(t)
 	event := &girc.Event{Command: girc.PRIVMSG, Source: &girc.Source{Name: "alice"}, Params: []string{"#test", "hello"}}

@@ -40,8 +40,6 @@ func TestNewSystemLoadsUnsandboxedTools(t *testing.T) {
 	}
 }
 
-// Offering the spawning tool is what enables delegation, and it happens once,
-// at startup.
 func TestNewSystemOffersSpawningOnlyWhenEnabled(t *testing.T) {
 	for _, enabled := range []bool{true, false} {
 		name := "disabled"
@@ -74,8 +72,6 @@ func TestNewSystemOffersSpawningOnlyWhenEnabled(t *testing.T) {
 	}
 }
 
-// A maxcontext turns cannot fit in stops the bot at startup, with the
-// minimum in the error, rather than failing turns once it is running.
 func TestNewSystemRefusesMaxContextBelowTheMinimum(t *testing.T) {
 	cfg := mocktest.DefaultTestConfig()
 	cfg.Bot.Sandbox = false

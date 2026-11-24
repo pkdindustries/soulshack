@@ -39,8 +39,8 @@ func CheckAddressed(message, botNick string) bool {
 	return next == ' ' || next == ':' || next == ','
 }
 
-// CheckAdmin matches full hostmasks against case-insensitive admin masks.
-// Only * (zero or more characters) and ? (one character) are wildcards.
+// CheckAdmin matches a hostmask against case-insensitive admin masks.
+// Only * and ? are wildcards.
 // WARNING: Returns true if adminList is empty (legacy behavior - everyone is admin).
 func CheckAdmin(hostmask string, adminList []string) bool {
 	if len(adminList) == 0 {
@@ -62,8 +62,8 @@ func CheckAdmin(hostmask string, adminList []string) bool {
 	return false
 }
 
-// ValidateAdminMask accepts nick!user@host masks, including wildcard patterns
-// and server-provided cloaks. Brackets and other regexp syntax are literals.
+// ValidateAdminMask accepts nick!user@host masks, wildcards and cloaks
+// included. Regexp syntax is literal.
 func ValidateAdminMask(mask string) error {
 	if strings.Count(mask, "!") != 1 || strings.Count(mask, "@") != 1 {
 		return errors.New("admin mask must use nick!user@host format")

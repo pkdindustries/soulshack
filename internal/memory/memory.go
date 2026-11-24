@@ -1,17 +1,5 @@
-// Package memory owns every conversation the bot has: the transcript, the
-// artifacts its tools produced, and when an idle conversation is forgotten.
-//
-// Each conversation is a pollytool session. pollytool's agent does not hold
-// transcript state across turns ("callers provide messages and persist the
-// generated messages themselves"), so a turn loads the session's transcript
-// when it starts and appends what it generated. The session store is a SQLite
-// database on disk when Config.Path names one, so conversations survive a
-// restart, or an in-memory one that goes with the process.
-//
-// A stored transcript is never trimmed. The token budget (maxcontext) bounds
-// what a request sends, not what is kept: polly compacts each request down to
-// the budget, replacing the exchanges before its summary marker with that
-// summary, and the agent's read_transcript can reach back past it.
+// Package memory stores conversations as pollytool sessions: transcripts, artifacts and idle expiry.
+// Transcripts are never trimmed; the budget only bounds what a request sends.
 package memory
 
 import (
@@ -31,48 +19,37 @@ import (
 	"github.com/alexschlessinger/pollytool/sessions"
 )
 
-// cleanupInterval is how often idle conversations and abandoned scratch
-// sessions are deleted. A conversation is also expired when its next turn
-// starts, so this only bounds how long an abandoned one stays stored.
+// cleanupInterval bounds how long abandoned sessions linger; turns also expire on open.
 const cleanupInterval = time.Minute
 
-// scratchTTL expires a scratch session its turn did not delete, as when the
-// process stops mid-turn. A scratch session is leased while it is in use, and
-// the store never expires a leased session, so this only has to outlast the
-// time between its last use and the sweep.
+// scratchTTL reaps scratch sessions orphaned mid-turn; leased ones never expire.
 const scratchTTL = time.Hour
 
-// scratchPrefix starts every scratch session's name. sessionName escapes
-// every '%' in a key as %XX with two hex digits, so no key can produce it.
+// scratchPrefix can't collide with a key: sessionName escapes every '%'.
 const scratchPrefix = "%scratch-"
 
-// ContextUsage describes the last provider request a conversation completed.
+// ContextUsage describes a conversation's last completed request.
 type ContextUsage struct {
-	// EstimatedTokens is the request's size, in the provider's count where one
-	// covers it.
+	// EstimatedTokens prefers the provider's count when available.
 	EstimatedTokens int
 	Budget          int
-	// Compacted reports that the conversation's requests carry a summary in
-	// place of the exchanges before it.
+	// Compacted reports that requests carry a summary in place of older exchanges.
 	Compacted bool
 }
 
 // Config configures a Memory.
 type Config struct {
-	// Budget is the number of tokens a request may send from a conversation
-	// (maxcontext). Zero sends everything.
+	// Budget is maxcontext in tokens per request; zero is unlimited.
 	Budget int
-	// TTL forgets a conversation after this much inactivity. Zero never
-	// forgets one.
+	// TTL is the idle expiry; zero never expires.
 	TTL time.Duration
-	// Path is the SQLite database conversations are stored in. Empty keeps
-	// them in memory, and they end with the process.
+	// Path is the SQLite database; empty keeps conversations in memory.
 	Path string
-	// Now overrides the clock idle expiry is judged by, for tests.
+	// Now overrides the expiry clock, for tests.
 	Now func() time.Time
 }
 
-// Memory holds one conversation per key, each usable by one turn at a time.
+// Memory holds one conversation per key, one turn at a time.
 type Memory struct {
 	store *sessions.SQLiteStore
 
@@ -83,15 +60,13 @@ type Memory struct {
 	budget atomic.Int64
 	ttlNS  atomic.Int64
 
-	// expiryMu orders TTL changes, turn acquisition and cleanup. A sweep
-	// cannot delete a conversation that has been used since its snapshot,
-	// or apply an old TTL after SetTTL returns. It is never held for a turn.
+	// expiryMu orders SetTTL, turn acquisition and sweeps. Never held for a turn.
 	expiryMu sync.RWMutex
 	cancel   context.CancelFunc
 	done     chan struct{}
 }
 
-// New opens the session store and returns a Memory over it.
+// New opens the session store.
 func New(cfg Config) (*Memory, error) {
 	now := cfg.Now
 	if now == nil {
@@ -119,33 +94,30 @@ func New(cfg Config) (*Memory, error) {
 	return m, nil
 }
 
-// Close closes the session store. Stored conversations stay on disk.
+// Close closes the session store.
 func (m *Memory) Close() {
 	m.cancel()
 	<-m.done
 	_ = m.store.Close()
 }
 
-// Budget returns the token budget a request may send from a conversation.
+// Budget returns the per-request token budget.
 func (m *Memory) Budget() int { return int(m.budget.Load()) }
 
-// SetBudget changes the token budget for every conversation, including ones
-// that already exist.
+// SetBudget changes the token budget for all conversations.
 func (m *Memory) SetBudget(tokens int) { m.budget.Store(int64(tokens)) }
 
-// TTL returns how long a conversation survives inactivity.
+// TTL returns the idle expiry.
 func (m *Memory) TTL() time.Duration { return time.Duration(m.ttlNS.Load()) }
 
-// SetTTL changes the idle expiry for every conversation. Its next turn or
-// cleanup uses the new TTL, including for conversations loaded after a restart.
+// SetTTL changes the idle expiry for all conversations, stored ones included.
 func (m *Memory) SetTTL(d time.Duration) {
 	m.expiryMu.Lock()
 	defer m.expiryMu.Unlock()
 	m.ttlNS.Store(int64(d))
 }
 
-// Keys returns the conversations this process has run turns on, for
-// inspection and tests.
+// Keys returns the keys this process has run turns on.
 func (m *Memory) Keys() []string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -157,10 +129,8 @@ func (m *Memory) Keys() []string {
 	return keys
 }
 
-// With runs fn with key's conversation, one turn at a time. When ctx ends
-// before the previous turn does, fn does not run and the error is ctx's, so
-// callers can tell the user that the previous turn is still running. Any
-// other error means the stored conversation could not be opened.
+// With runs fn on key's conversation, one turn at a time.
+// If ctx ends while queued, fn doesn't run and ctx's error is returned.
 func (m *Memory) With(ctx context.Context, key string, fn func(*Conversation)) error {
 	conversation := m.conversation(key)
 	if err := conversation.enter(ctx); err != nil {
@@ -176,9 +146,7 @@ func (m *Memory) With(ctx context.Context, key string, fn func(*Conversation)) e
 	return nil
 }
 
-// WithDetached runs fn against a scratch conversation that is discarded
-// afterwards, artifacts and all. It waits on key's turn queue, so a detached
-// turn cannot interleave with the conversation's own turns.
+// WithDetached runs fn on a discarded scratch conversation, queued on key's turns.
 func (m *Memory) WithDetached(ctx context.Context, key string, fn func(*Conversation)) error {
 	queue := m.conversation(key)
 	if err := queue.enter(ctx); err != nil {
@@ -188,10 +156,7 @@ func (m *Memory) WithDetached(ctx context.Context, key string, fn func(*Conversa
 	return m.WithScratch(ctx, fn)
 }
 
-// WithScratch runs fn against a conversation of its own that is deleted
-// afterwards, for an agent that answers to no conversation, such as a child.
-// It has a transcript and an artifact store like any other, so its agent can
-// keep large tool output out of its requests.
+// WithScratch runs fn on an unqueued throwaway conversation, e.g. for a child agent.
 func (m *Memory) WithScratch(ctx context.Context, fn func(*Conversation)) error {
 	name := scratchPrefix + rand.Text()
 	session, err := m.store.Acquire(ctx, name, sessions.AcquireOptions{Auto: true})
@@ -201,15 +166,13 @@ func (m *Memory) WithScratch(ctx context.Context, fn func(*Conversation)) error 
 	scratch := &Conversation{session: session}
 	defer func() {
 		scratch.close()
-		// The store's own context: fn's may have ended, and the session
-		// should go regardless.
+		// Not fn's ctx, which may have ended.
 		_ = m.store.Delete(context.WithoutCancel(ctx), name)
 	}()
 	fn(scratch)
 	return nil
 }
 
-// conversation returns key's conversation, creating it if needed.
 func (m *Memory) conversation(key string) *Conversation {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -221,9 +184,7 @@ func (m *Memory) conversation(key string) *Conversation {
 	return conversation
 }
 
-// sessionName is key as a session name. IRC nicks may contain characters a
-// session name may not, such as '|' and '\', so those are percent-escaped, as
-// is '%' itself to keep the mapping one-to-one.
+// sessionName percent-escapes nick characters like '|' and '\', and '%' to stay one-to-one.
 func sessionName(key string) string {
 	var b strings.Builder
 	for i := 0; i < len(key); i++ {
@@ -238,10 +199,7 @@ func sessionName(key string) string {
 	return b.String()
 }
 
-// Conversation is one key's transcript and turn queue. While a turn holds it,
-// it holds that key's session and a copy of its transcript; a scratch
-// conversation holds a session of its own and no queue. Its methods are safe
-// to call from any goroutine; the turn slot only decides who goes first.
+// Conversation is one key's transcript and turn queue. Methods are goroutine-safe.
 type Conversation struct {
 	owner *Memory
 	turn  chan struct{}
@@ -253,8 +211,7 @@ type Conversation struct {
 	hasUsage bool
 }
 
-// open leases key's session for the turn holding the slot, starts it over if
-// it has been idle past the TTL, and loads its transcript.
+// open leases the session, expires it if idle, and loads the transcript.
 func (c *Conversation) open(ctx context.Context, key string) error {
 	m := c.owner
 	m.expiryMu.RLock()
@@ -271,17 +228,14 @@ func (c *Conversation) open(ctx context.Context, key string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.session, c.history = session, history
-	// A transcript that starts over, by expiry or otherwise, has no last
-	// request to describe.
 	if len(history) == 0 {
 		c.usage, c.hasUsage = ContextUsage{}, false
 	}
 	return nil
 }
 
-// prepare expires a leased session using the current policy, then returns its
-// transcript. Named sessions always have a zero storage TTL: SQLite's startup,
-// Acquire and background expiry cannot be allowed to use an obsolete policy.
+// prepare applies the current TTL. Named sessions keep a zero storage TTL
+// so the store never expires them by a stale one.
 func prepare(ctx context.Context, session sessions.Session, ttl time.Duration, now time.Time) ([]messages.ChatMessage, error) {
 	metadata, err := session.GetMetadata(ctx)
 	if err != nil {
@@ -295,7 +249,6 @@ func prepare(ctx context.Context, session sessions.Session, ttl time.Duration, n
 	return session.GetHistory(ctx)
 }
 
-// close releases the session at the end of the turn.
 func (c *Conversation) close() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -312,16 +265,14 @@ func (c *Conversation) Messages() []messages.ChatMessage {
 	return slices.Clone(c.history)
 }
 
-// Len returns how many messages the transcript holds, for the callers that
-// only want to know whether there is anything in it. Messages copies the whole
-// transcript, which is a lot of work to answer that.
+// Len returns the transcript length without copying it.
 func (c *Conversation) Len() int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return len(c.history)
 }
 
-// Append stores messages at the end of the transcript.
+// Append adds messages to the transcript.
 func (c *Conversation) Append(msgs []messages.ChatMessage) error {
 	if len(msgs) == 0 {
 		return nil
@@ -337,8 +288,7 @@ func (c *Conversation) Append(msgs []messages.ChatMessage) error {
 	return nil
 }
 
-// Clear forgets the transcript and its artifacts, keeping the conversation
-// usable.
+// Clear deletes the transcript and artifacts.
 func (c *Conversation) Clear() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -352,8 +302,7 @@ func (c *Conversation) Clear() error {
 	return nil
 }
 
-// Artifacts returns the store for the large tool output this conversation's
-// transcript refers to, or nil outside a turn.
+// Artifacts returns the conversation's artifact store, or nil outside a turn.
 func (c *Conversation) Artifacts() artifacts.Store {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -363,14 +312,14 @@ func (c *Conversation) Artifacts() artifacts.Store {
 	return c.session.ArtifactStore()
 }
 
-// Usage returns the request accounting of the last completed turn.
+// Usage returns the last completed turn's accounting.
 func (c *Conversation) Usage() (ContextUsage, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.usage, c.hasUsage
 }
 
-// SetUsage records the request accounting of a completed turn.
+// SetUsage records a completed turn's accounting.
 func (c *Conversation) SetUsage(usage ContextUsage) {
 	c.mu.Lock()
 	defer c.mu.Unlock()

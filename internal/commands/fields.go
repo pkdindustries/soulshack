@@ -14,21 +14,18 @@ import (
 	"pkdindustries/soulshack/internal/core"
 )
 
-// settings shortens the accessors below: it is the configuration they read.
 type settings = config.Configuration
 
 // configField defines how to get and set a configuration value
 type configField struct {
 	setter func(*config.Configuration, string) error
 	getter func(*config.Configuration) string
-	// apply pushes a setting to whatever reads it outside the configuration,
-	// such as the conversations that hold their own budget and idle expiry.
-	// It runs in the same step as the setter, under the configuration lock.
+	// apply syncs copies held outside the config; runs under the config lock.
 	apply func(*config.Configuration, core.System)
 }
 
-// configFields maps parameter names to their handlers. A setter reports why a
-// value was rejected without naming the setting: /set adds the name.
+// configFields maps parameter names to their handlers. Setter errors omit the
+// key; /set adds it.
 var configFields = map[string]configField{
 	"addressed":          boolSetting(func(c *settings) *bool { return &c.Bot.Addressed }),
 	"prompt":             stringSetting(func(c *settings) *string { return &c.Bot.Prompt }),
@@ -54,15 +51,13 @@ var configFields = map[string]configField{
 	"urlwatchersilent":   boolSetting(func(c *settings) *bool { return &c.Bot.URLWatcherSilent }),
 	"opwatcher":          boolSetting(func(c *settings) *bool { return &c.Bot.OpWatcher }),
 
-	// Subagents. Whether the tool exists at all is fixed at startup, since
-	// that is when it is registered; everything about how children run is
-	// read fresh each time one is spawned.
+	// Read per spawn; whether the tool exists is fixed at startup.
 	"subagentmodel":      stringSetting(func(c *settings) *string { return &c.Bot.SubagentModel }),
 	"subagenttimeout":    durationSetting(func(c *settings) *time.Duration { return &c.Bot.SubagentTimeout }),
 	"subagentmax":        intSetting(func(c *settings) *int { return &c.Bot.SubagentMax }, 0),
 	"subagentmaxperchat": intSetting(func(c *settings) *int { return &c.Bot.SubagentMaxPerChat }, 0),
 
-	// Two settings are also held by the conversations themselves.
+	// Also held by the conversations.
 	"maxcontext": withApply(intSetting(func(c *settings) *int { return &c.Session.MaxContext }, 0),
 		func(c *config.Configuration, sys core.System) { sys.GetMemory().SetBudget(c.Session.MaxContext) }),
 	"sessionduration": withApply(durationSetting(func(c *settings) *time.Duration { return &c.Session.TTL }),
@@ -76,8 +71,6 @@ var (
 	errDuration = errors.New("provide a valid duration, such as 10m or 1h")
 )
 
-// valueSetting builds a field around a parser: parse reports why a value was
-// rejected, show renders the stored value back.
 func valueSetting[T any](get func(*settings) *T, parse func(string) (T, error), show func(T) string) configField {
 	return configField{
 		setter: func(c *config.Configuration, v string) error {
@@ -102,7 +95,7 @@ func boolSetting(get func(*settings) *bool) configField {
 	}, strconv.FormatBool)
 }
 
-// intSetting stores an integer, rejecting values below atLeast when it is given.
+// intSetting rejects values below atLeast, if given.
 func intSetting(get func(*settings) *int, atLeast ...int) configField {
 	minimum, bounded := 0, len(atLeast) > 0
 	if bounded {
@@ -135,7 +128,6 @@ func floatSetting(get func(*settings) *float32, check func(float64) error) confi
 	}, func(f float32) string { return strconv.FormatFloat(float64(f), 'f', 6, 32) })
 }
 
-// between rejects floats outside min and max.
 func between(min, max float64) func(float64) error {
 	return func(value float64) error {
 		if value < min || value > max {
@@ -159,14 +151,13 @@ func stringSetting(get func(*settings) *string) configField {
 	return valueSetting(get, func(v string) (string, error) { return v, nil }, func(s string) string { return s })
 }
 
-// secretSetting stores a value that is masked when it is read back.
+// secretSetting masks the value on read.
 func secretSetting(get func(*settings) *string) configField {
 	field := stringSetting(get)
 	field.getter = func(c *config.Configuration) string { return maskAPIKey(*get(c)) }
 	return field
 }
 
-// checkedStringSetting stores a string once check accepts it.
 func checkedStringSetting(get func(*settings) *string, check func(string) error) configField {
 	field := stringSetting(get)
 	field.setter = func(c *config.Configuration, v string) error {
@@ -184,14 +175,11 @@ func checkThinkingEffort(v string) error {
 	return err
 }
 
-// withApply attaches the step that pushes a setting to whatever reads it
-// outside the configuration.
 func withApply(field configField, apply func(*config.Configuration, core.System)) configField {
 	field.apply = apply
 	return field
 }
 
-// getConfigKeys returns all available config keys, in a stable order
 func getConfigKeys() []string {
 	keys := make([]string, 0, len(configFields))
 	for key := range configFields {

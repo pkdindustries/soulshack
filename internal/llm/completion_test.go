@@ -98,8 +98,6 @@ func TestComplete_SetsProjectionBudget(t *testing.T) {
 	for range Complete(mockCtx.Turn(), "test message").Chunks {
 	}
 
-	// maxcontext reaches the request as the projection budget, and is the same
-	// number the conversation is trimmed to.
 	if mockLLM.LastRequest == nil {
 		t.Fatal("no completion request captured")
 	}
@@ -120,7 +118,6 @@ func TestComplete_NoLeakedGoroutines(t *testing.T) {
 		WithConversation(mockSys.Conversation(t, "test")).
 		WithArgs("hello")
 
-	// Run completion and drain the channel completely
 	for range Complete(mockCtx.Turn(), "test message").Chunks {
 	}
 

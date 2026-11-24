@@ -16,10 +16,7 @@ import (
 
 type CompletionRequest = llm.CompletionRequest
 
-// summarized reports whether these generated messages include a summary, which
-// is how polly records that requests carry one in place of the exchanges before
-// it. Clearing tool results leaves no summary and needs no notice: the model
-// still reads their receipts.
+// summarized reports whether msgs include a compaction summary; cleared tool results don't count.
 func summarized(msgs []messages.ChatMessage) bool {
 	for _, msg := range msgs {
 		if c, ok := msg.Compaction(); ok && c.Summary != "" {
@@ -29,9 +26,7 @@ func summarized(msgs []messages.ChatMessage) bool {
 	return false
 }
 
-// Warn from the request Polly actually sent, independently of the transcript we
-// keep and of cumulative provider billing. The previous turn supplies the
-// warning state, so no second cache is needed.
+// checkContextUsage warns from the request polly sent, not the transcript or billing.
 func checkContextUsage(turn *core.Turn, usage memory.ContextUsage) {
 	previous, _ := turn.Conversation.Usage()
 	if usage.Compacted && !previous.Compacted {
@@ -61,14 +56,12 @@ func NewCompletionRequest(config *config.Configuration, history []messages.ChatM
 	thinkingEffort, _ := llm.ParseThinkingEffort(config.Model.ThinkingEffort)
 
 	req := &CompletionRequest{
-		// BaseURL is resolved per provider when the request is dispatched.
+		// BaseURL is set per provider at dispatch.
 		Timeout:   config.API.Timeout,
 		Model:     config.Model.Model,
 		MaxTokens: config.Model.MaxTokens,
 		Messages:  history,
-		// maxcontext. The stored transcript is kept whole; polly compacts the
-		// request within this budget before it is sent, and refuses a request
-		// no compaction can bring within it.
+		// Polly compacts the request, not the stored transcript, to this.
 		MaxContextTokens: budget,
 		Temperature:      llm.Float32Ptr(config.Model.Temperature),
 		Tools:            tools,
@@ -82,27 +75,18 @@ func NewCompletionRequest(config *config.Configuration, history []messages.ChatM
 	return req
 }
 
-// Complete appends the user message to the turn's conversation and returns the
-// stream of response chunks. The stream also appends the finished turn, so
-// callers must drain it.
+// Complete appends msg and streams the reply. Callers must drain the stream so the turn is saved.
 func Complete(turn *core.Turn, msg string) core.CompletionStream {
 	return complete(turn, msg, "")
 }
 
-// CompleteWithoutDelegating is Complete for the turns that must answer for
-// themselves. A turn that reports a child's findings could otherwise answer by
-// starting another child, with nobody in the channel having asked for either;
-// a turn the bot took on its own initiative, watching what people post, would
-// be spending on work nobody requested. Both are turns where the bot is
-// talking to itself, and delegation is for what someone asked for.
+// CompleteWithoutDelegating is Complete without the spawn tool, for turns nobody asked for
+// (child reports, unprompted replies).
 func CompleteWithoutDelegating(turn *core.Turn, msg string) core.CompletionStream {
 	return complete(turn, msg, subagent.ToolName)
 }
 
-// Drain replies with each chunk, including error notices, and reports whether
-// the completion succeeded with a nonempty reply. An error notice or partial
-// reply from a failed run is not a successful answer. The stream is always
-// drained so that the turn finishes saving its history.
+// Drain replies with every chunk and reports whether the run succeeded with a nonempty reply.
 func Drain(stream core.CompletionStream, reply func(string)) bool {
 	answered := false
 	for chunk := range stream.Chunks {
@@ -112,7 +96,6 @@ func Drain(stream core.CompletionStream, reply func(string)) bool {
 	return <-stream.Done == nil && answered
 }
 
-// complete runs the turn, offering every tool but the one named in without.
 func complete(turn *core.Turn, msg string, without string) core.CompletionStream {
 	cfg := turn.GetConfig()
 	history := turn.Conversation.Messages()
@@ -133,7 +116,7 @@ func complete(turn *core.Turn, msg string, without string) core.CompletionStream
 		Content: msg,
 	}, share)
 	if err != nil {
-		// The message goes as it is; the request may still fit.
+		// Send it unbounded; it may still fit.
 		turn.GetLogger().Error("message_bound_failed", "error", err)
 	}
 	truncated := msg
@@ -145,8 +128,7 @@ func complete(turn *core.Turn, msg string, without string) core.CompletionStream
 		turn.GetLogger().Error("conversation_append_failed", "error", err)
 	}
 
-	// The system prompt is the process's, not part of the transcript: it is
-	// rebuilt per request so /set prompt takes effect immediately.
+	// Prompt is rebuilt per request, not stored, so /set prompt applies at once.
 	request := make([]messages.ChatMessage, 0, len(history)+2)
 	if prompt := strings.TrimSpace(cfg.Bot.Prompt); prompt != "" {
 		request = append(request, messages.ChatMessage{Role: messages.MessageRoleSystem, Content: prompt})

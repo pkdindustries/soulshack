@@ -26,8 +26,7 @@ func (b *OpBehavior) Check(ctx irc.ChatContextInterface, event *girc.Event) bool
 		return false
 	}
 
-	// Parameter modes and membership prefixes vary by server. Their argument
-	// rules determine which nickname belongs to each +o or -o in a MODE line.
+	// Server-specific; decides which nick each +o/-o applies to.
 	channelModes := girc.NewCModes(
 		serverOption(ctx, "CHANMODES", girc.ModeDefaults),
 		serverOption(ctx, "PREFIX", girc.DefaultPrefixes),

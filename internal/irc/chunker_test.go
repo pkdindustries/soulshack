@@ -36,8 +36,7 @@ func TestChunkerPreservesUnicode(t *testing.T) {
 				if chunk == "" || !utf8.ValidString(chunk) {
 					t.Fatalf("invalid chunk: %q", chunk)
 				}
-				// A single rune wider than the configured limit must still
-				// travel intact, even when chunkmax is only one byte.
+				// A rune wider than the limit stays whole.
 				if len(chunk) > tc.limit && utf8.RuneCountInString(chunk) != 1 {
 					t.Fatalf("chunk exceeds %d bytes: %q", tc.limit, chunk)
 				}

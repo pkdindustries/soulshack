@@ -33,13 +33,9 @@ func (c *SetCommand) Execute(turn *core.Turn) {
 		return
 	}
 
-	// The change lands on the live configuration, and anything that holds a
-	// copy of the setting follows in the same step.
 	system := turn.GetSystem()
 	if err := system.UpdateConfig(func(live *config.Configuration) error {
-		// The change is tried on a copy first: a setting that leaves
-		// maxcontext too small for the prompt and tools, whichever of them
-		// changed, is refused before it lands.
+		// Trial on a copy so a change that breaks the context budget never lands.
 		candidate := live.Clone()
 		if err := field.setter(candidate, value); err != nil {
 			return err
@@ -68,8 +64,7 @@ func (c *SetCommand) Execute(turn *core.Turn) {
 
 	turn.Reply(fmt.Sprintf("%s set to: %s", param, field.getter(cfg)))
 
-	// Any configuration change starts this conversation over: its transcript
-	// may describe a bot that no longer exists.
+	// The transcript may describe the old configuration.
 	if err := turn.Conversation.Clear(); err != nil {
 		turn.GetLogger().Error("conversation_clear_failed", "error", err)
 	}

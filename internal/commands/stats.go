@@ -10,7 +10,7 @@ import (
 	"github.com/alexschlessinger/pollytool/messages"
 )
 
-// StatsCommand handles the /stats command for showing conversation statistics
+// StatsCommand reports conversation statistics.
 type StatsCommand struct{}
 
 func (c *StatsCommand) Name() string    { return "/stats" }

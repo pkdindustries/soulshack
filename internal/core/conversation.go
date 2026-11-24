@@ -4,19 +4,14 @@ import (
 	"pkdindustries/soulshack/internal/memory"
 )
 
-// Turn is the scope of one chat turn: the IRC context plus the conversation the
-// turn is working on. Turns come from WithConversation or
-// WithDetachedConversation, which are the only places a conversation is handed
-// out, so everything a turn touches belongs to a conversation that is still
-// live.
+// Turn is one chat turn: the IRC context plus its conversation.
+// Only WithConversation and WithDetachedConversation create one.
 type Turn struct {
 	ChatContextInterface
 
-	// Conversation is the transcript this turn reads and appends to.
 	Conversation *memory.Conversation
 
-	// Silent discards completion replies and announcements for observations
-	// that must not speak. It does not change the permissions of IRC tools.
+	// Silent suppresses replies. IRC tool permissions are unaffected.
 	Silent bool
 }
 
@@ -32,17 +27,13 @@ func (t *Turn) ReplyAction(message string) {
 	}
 }
 
-// WithConversation runs one turn against the conversation for ctx's key,
-// queueing behind any turn already running for it. onTimeout runs instead of
-// run when the turn cannot start: the queue has not cleared by the time ctx
-// ends, or, rarely, the stored conversation cannot be opened.
+// WithConversation runs one turn on ctx's conversation, queued behind any running turn.
+// onTimeout runs instead if ctx ends first or the conversation can't be opened.
 func WithConversation(ctx ChatContextInterface, operation string, run func(*Turn), onTimeout func()) {
 	withConversation(ctx, operation, false, run, onTimeout)
 }
 
-// WithDetachedConversation runs one turn against a scratch conversation on the
-// same queue: what it writes is discarded with the turn, so an observation can
-// never leak into the conversation the key owns.
+// WithDetachedConversation runs one turn on a discarded scratch conversation, on the same queue.
 func WithDetachedConversation(ctx ChatContextInterface, operation string, run func(*Turn), onTimeout func()) {
 	withConversation(ctx, operation, true, run, onTimeout)
 }

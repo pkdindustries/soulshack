@@ -26,9 +26,7 @@ func (m *Memory) cleanupLoop(ctx context.Context) {
 	}
 }
 
-// expire removes idle conversations even if they never receive another turn.
-// Unlike the store's own sweep (which still reaps abandoned scratch sessions),
-// this always uses the current TTL, not the setting from the last turn.
+// expire deletes idle conversations by the current TTL, not each session's stored one.
 func (m *Memory) expire(ctx context.Context) error {
 	m.expiryMu.Lock()
 	defer m.expiryMu.Unlock()
@@ -46,8 +44,7 @@ func (m *Memory) expire(ctx context.Context) error {
 		if summary.InUse || strings.HasPrefix(metadata.Name, scratchPrefix) || now.Sub(metadata.LastUsed) <= ttl {
 			continue
 		}
-		// Acquisition is excluded until the sweep finishes; a session in use
-		// at the snapshot was skipped. Delete also refuses a live lease.
+		// expiryMu blocks acquisition; Delete also refuses a live lease.
 		if err := m.store.Delete(ctx, metadata.Name); err != nil && !errors.Is(err, sessions.ErrSessionInUse) {
 			return err
 		}

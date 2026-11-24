@@ -20,25 +20,21 @@ type ChatContextInterface = core.ChatContextInterface
 type ChatContext struct {
 	context.Context
 	Sys core.System
-	// conversationKey is what identifies this event's conversation: the
-	// channel for channel traffic, the source nick for anything else.
+	// conversationKey is the channel, or the source nick outside channels.
 	conversationKey string
 	client          *girc.Client
 	event           *girc.Event
 	args            []string
 	logger          *slog.Logger
 	fatalCh         chan<- error
-	// parent is the bot's context, which this event's context was given its
-	// deadline from. Background work derives from it so that it outlives the
-	// event and still ends when the bot does.
+	// parent is the bot's context; background work derives from it.
 	parent context.Context
 }
 
 var _ ChatContextInterface = (*ChatContext)(nil)
 
 func NewChatContext(parentctx context.Context, system core.System, ircclient *girc.Client, e *girc.Event, fatalCh chan<- error) (ChatContextInterface, context.CancelFunc) {
-	// One snapshot for the request: its deadline and its defaults come from
-	// the settings in force now.
+	// One config snapshot per request.
 	settings := system.GetConfig()
 	timedctx, cancel := context.WithTimeout(parentctx, settings.API.Timeout)
 
@@ -86,21 +82,17 @@ func NewChatContext(parentctx context.Context, system core.System, ircclient *gi
 	return &ctx, cancel
 }
 
-// Background returns this chat context with the event's deadline replaced by
-// one of its own, derived from the bot's context. The girc client and the
-// event outlive the handler, so replying still reaches the same target long
-// after the handler has returned; only the deadline had to be rebuilt. The
-// event is copied because the handler owns the one it was given.
+// Background returns a copy whose deadline derives from the bot's context, not
+// the event's, so it can outlive the handler.
 func (c ChatContext) Background(timeout time.Duration) (ChatContextInterface, context.CancelFunc) {
 	parent := c.parent
 	if parent == nil {
-		// A context built without one, as in a test: the bot's lifetime is
-		// the best remaining approximation.
+		// Built without a parent, as in tests.
 		parent = context.Background()
 	}
 	background, cancel := context.WithTimeout(parent, timeout)
 
-	// The receiver is this call's own copy, so it is the fork.
+	// The handler owns c.event; copy it.
 	event := *c.event
 	c.Context = background
 	c.event = &event
@@ -108,9 +100,8 @@ func (c ChatContext) Background(timeout time.Duration) (ChatContextInterface, co
 	return &c, cancel
 }
 
-// Value answers the lookup IRC tools use to find their chat context. A turn's
-// context is the chat context, so the lookup resolves by itself: no layer has
-// to inject a value into tool calls.
+// Value resolves core.ChatKey to this context, so IRC tools find it without
+// injection.
 func (c *ChatContext) Value(key any) any {
 	if key == core.ChatKey() {
 		return ChatContextInterface(c)
@@ -206,7 +197,7 @@ func (c ChatContext) Reply(message string) {
 
 }
 
-// NewChunkWriter frames model output into IRC-sized messages.
+// NewChunkWriter splits model output into IRC-sized messages.
 func (c ChatContext) NewChunkWriter(output chan<- string) core.ChunkWriter {
 	return NewChunker(output, c.chunkSize())
 }

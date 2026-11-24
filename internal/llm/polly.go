@@ -15,8 +15,7 @@ import (
 	"pkdindustries/soulshack/internal/memory"
 )
 
-// turnMaxIterations bounds the bot's own tool loop for one turn. A child's is
-// shorter; see childMaxIterations.
+// turnMaxIterations bounds one turn's tool loop.
 const turnMaxIterations = 10
 
 // PollyLLM wraps pollytool's MultiPass and Agent to implement soulshack's LLM interface
@@ -41,8 +40,6 @@ func NewPollyLLM(config config.APIConfig) *PollyLLM {
 // ChatCompletionStream returns IRC output and the completion's final outcome.
 func (p *PollyLLM) ChatCompletionStream(turn *core.Turn, req *CompletionRequest) core.CompletionStream {
 	cfg := turn.GetConfig()
-	// A custom endpoint belongs only to the provider it was configured for;
-	// every other provider keeps polly's default base URL.
 	req.BaseURL = baseURLForModel(req.Model, cfg.API)
 
 	output := make(chan string, 10)
@@ -73,9 +70,7 @@ func (p *PollyLLM) ChatCompletionStream(turn *core.Turn, req *CompletionRequest)
 
 		framer.Flush()
 
-		// What the run generated is kept even when it ended early: the tool
-		// calls it made have happened, and polly hands back a transcript that
-		// ends at a boundary a provider accepts.
+		// Keep partial output on error: the tool calls happened, and polly ends it at a valid boundary.
 		if resp != nil {
 			if err := turn.Conversation.Append(resp.AllMessages); err != nil {
 				turn.GetLogger().Error("conversation_append_failed", "error", err)
@@ -85,11 +80,7 @@ func (p *PollyLLM) ChatCompletionStream(turn *core.Turn, req *CompletionRequest)
 			turn.GetLogger().Error("agent_error", "error", err.Error())
 			return
 		}
-		// Polly reports the request it last sent, sized in the provider's count
-		// where one covers it and by its own estimate until then; it compacts
-		// at 90% of the budget in that count. A summary marker among what the
-		// turn generated means requests now carry a summary in place of the
-		// exchanges before it, and they keep doing so.
+		// Compacted is sticky: once summarized, later requests keep the summary.
 		tokens := resp.Projection.RequestEstimatedTokens
 		if resp.Projection.Counted {
 			tokens = resp.Projection.CountedTokens
@@ -107,15 +98,13 @@ func (p *PollyLLM) ChatCompletionStream(turn *core.Turn, req *CompletionRequest)
 	return core.CompletionStream{Chunks: output, Done: done}
 }
 
-// baseURLForModel returns the configured endpoint override for a model's
-// provider, or "" to let polly use the provider's default.
+// baseURLForModel returns the endpoint override for the model's provider, or "" for polly's default.
 func baseURLForModel(model string, api *config.APIConfig) string {
 	provider, _, ok := strings.Cut(model, "/")
 	if !ok {
 		return ""
 	}
-	// Match Polly's case-insensitive provider routing, without changing the
-	// model name (which may be case-sensitive).
+	// Polly routes case-insensitively; the model name itself may be case-sensitive.
 	switch strings.ToLower(provider) {
 	case "ollama":
 		return api.OllamaURL
@@ -251,11 +240,7 @@ func (h *callbackHandler) onToolEnd(tc messages.ChatMessageToolCall, result stri
 
 func (h *callbackHandler) onError(err error) {
 	h.turn.GetLogger().Error("stream_error", "error", err.Error())
-	// Polly compacts a request to keep it within maxcontext, in the
-	// provider's count, and answers a provider's rejection as too long with a
-	// smaller one. What still ends a turn is a limit to report, not a fault: a
-	// request no compaction can bring within the budget, or a model whose
-	// window cannot hold it.
+	// Context limits that survive compaction are reported plainly, not as faults.
 	var limit *llm.ContextLimitError
 	if errors.As(err, &limit) {
 		h.framer.Write(fmt.Sprintf("Stopped: this needs about %d tokens of context and only %d fit", limit.EstimatedTokens, limit.Limit))
@@ -273,12 +258,7 @@ func (h *callbackHandler) onError(err error) {
 	h.framer.Write(fmt.Sprintf("Error: %v", err))
 }
 
-// CreateAgent shares the caller-owned configured tools, sandbox policy, and MCP
-// connections. Polly's private built-ins come with an artifact store, which
-// every turn and child has: large tool output is stored as artifacts the model
-// reads back with read_artifact and list_artifacts, and read_transcript reaches
-// the exchanges the context budget left out of the request. Without a store
-// there is nothing for them to read, so none are installed.
+// CreateAgent builds an agent over the caller-owned registry. Polly's builtins are installed only with an artifact store.
 func CreateAgent(client llm.LLM, registry *tools.ToolRegistry, config llm.AgentConfig) *llm.Agent {
 	if config.ArtifactStore == nil {
 		config.Builtins = []string{}
@@ -286,11 +266,8 @@ func CreateAgent(client llm.LLM, registry *tools.ToolRegistry, config llm.AgentC
 	return llm.NewAgent(client, registry, config)
 }
 
-// offeredRegistry narrows what an agent may run to what the request offered
-// the model. An agent runs a call by looking the name up in its registry, not
-// in the request, so a turn that withheld a tool from the model would still
-// run that tool if the model named it anyway. Withholding has to mean both.
-// The returned release closes only what this call derived.
+// offeredRegistry narrows registry to the offered tools, since the agent runs by registry, not request.
+// release closes only the derived view.
 func offeredRegistry(registry *tools.ToolRegistry, offered []tools.Tool) (*tools.ToolRegistry, func()) {
 	nothing := func() {}
 	if registry == nil {

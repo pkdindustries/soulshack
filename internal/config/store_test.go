@@ -46,8 +46,6 @@ func TestUpdateChangesWhatTheNextSnapshotSees(t *testing.T) {
 	}
 }
 
-// A reader holding a snapshot keeps seeing the settings it read, which is what
-// lets a turn read config freely while /set runs elsewhere.
 func TestSnapshotSurvivesConcurrentUpdates(t *testing.T) {
 	store := config.NewStore(testConfig())
 

@@ -48,8 +48,7 @@ func (c *Chunker) Write(content string) {
 		}
 	}
 
-	// Force chunks until the buffer is back under the limit: one write can
-	// overshoot it by far more than a single chunk.
+	// One write can overshoot by many chunks.
 	for c.buffer.Len() >= c.maxChunkSize {
 		chunk := c.extractBestSplitChunk()
 		if chunk == "" {
@@ -59,8 +58,7 @@ func (c *Chunker) Write(content string) {
 	}
 }
 
-// writeLine emits a complete line, splitting it when it is longer than one
-// message can carry. Like extractBestSplitChunk, it prefers a word boundary.
+// writeLine emits a line, split at word boundaries if too long.
 func (c *Chunker) writeLine(line string) {
 	data := []byte(line)
 	for len(data) > c.maxChunkSize {
@@ -88,9 +86,8 @@ func (c *Chunker) extractBestSplitChunk() string {
 	return chunk
 }
 
-// splitChunk prefers a word boundary within the byte limit. It waits for
-// incomplete UTF-8 at the end of a streaming write, and lets a single rune
-// exceed a limit smaller than that rune so the text can always make progress.
+// splitChunk prefers a word boundary. It holds back a trailing partial rune,
+// and lets one rune exceed a smaller limit so output always progresses.
 func splitChunk(data []byte, limit int) (end, consumed int) {
 	for end < len(data) {
 		if !utf8.FullRune(data[end:]) {
@@ -111,8 +108,7 @@ func splitChunk(data []byte, limit int) (end, consumed int) {
 	return end, end
 }
 
-// Flush emits any remaining buffer content, still respecting the message size
-// limit.
+// Flush emits the remaining buffer in limit-sized chunks.
 func (c *Chunker) Flush() {
 	for c.buffer.Len() > c.maxChunkSize {
 		chunk := c.extractBestSplitChunk()

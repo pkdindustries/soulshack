@@ -41,58 +41,32 @@ The primary interface passed to behaviors. It provides access to:
 -   The conversation key: the channel, or the sender for private messages
 
 ### `Turn`
-What commands and completions receive: a `ChatContextInterface` plus the
-conversation for this turn (`turn.Conversation`). Turns are handed out by
-`core.WithConversation`, which queues behind any turn already running for the
-same key, and by `core.WithDetachedConversation`, which runs against a scratch
-conversation that is discarded with the turn.
+A `ChatContextInterface` plus its `Conversation`; what commands and completions get.
+-   `core.WithConversation`: queues behind the key's running turn.
+-   `core.WithDetachedConversation`: scratch conversation, discarded after.
 
 ### `System`
 Holds the singleton components:
 -   `ToolRegistry`: Manages available tools.
--   `Memory`: Holds every conversation (`internal/memory`) — the transcript, its
-    artifacts, the request token budget, and its idle expiry.
--   `Config`: The running settings (`config.Store`). Turns read a snapshot, so
-    `/set` can change settings while other turns are reading them.
+-   `Memory` (`internal/memory`): conversations, their artifacts, budget and expiry.
+-   `Config` (`config.Store`): turns read a snapshot; `/set` doesn't block them.
 -   `LLM`: The configured LLM client.
 
 ### Conversations
-pollytool's agent holds no transcript state across turns, so soulshack keeps
-conversations as pollytool sessions: `internal/memory` keeps one `Conversation`
-per key and hands it to one turn at a time. The turn leases the key's session,
-loads its transcript, and appends what it generates; its agent stores large
-tool output in the session's artifact store. The store is the SQLite database
-named by `--sessiondb`, so conversations survive a restart, or an in-memory
-one when that is empty. A conversation idle past `--sessionduration` starts over
-on its next turn, and memory sweeps abandoned ones using the current TTL. New
-named sessions have no storage-level TTL, so later TTL changes take effect before
-expiry; scratch sessions keep their independent expiry.
+-   One pollytool session per key, leased to one turn at a time. Polly's agent is stateless across turns.
+-   Stored in `--sessiondb` (SQLite) or in memory.
+-   Idle past `--sessionduration`: restarts on next turn; sweeps use the current TTL. Named sessions have no storage TTL; scratch sessions do.
+-   Transcripts are never trimmed. `maxcontext` is polly's `MaxContextTokens`: it clears read tool results, then summarizes, then fails. `read_transcript` still reaches summarized history.
 
-The transcript is never trimmed. `maxcontext` is the request's
-`MaxContextTokens`: polly compacts each request to stay within it, clearing the
-tool results the model has already read and, when that is not enough, replacing
-the older exchanges with a summary, and fails a request no compaction can bring
-within the budget. The markers it leaves are internal messages in the
-transcript, so a conversation's requests keep a stable prefix between
-compactions and `read_transcript` still reaches everything a summary left out.
-
-What polly cannot shrink is bounded instead (`internal/llm/budget.go`). Polly's
-context floor (the tool schemas and the system prompt) is carried whole; the
-rest of the budget is room. The incoming message takes up to half of it
-(`messageShare`), never so much that no useful page is left, and is stored as
-an artifact beyond that. Pages of recalled output are sized by polly to the
-room left, and a turn that outgrows the budget is compacted rather than cut
-off. `llm.MinContext` is polly's floor plus the message floor and one useful
-page, and startup, `/set` and `/tools add` refuse a `maxcontext` below it;
-polly keeps its floor estimate private, so `contextFloor` repeats it from the
-same primitives and a test holds the two together. Every agent has an artifact
-store for this: detached turns and child agents get a scratch session from
-`Memory.WithScratch`, deleted when they finish. A turn that fails anyway, as
-under a model window smaller than `maxcontext`, keeps what it generated and
-replies with a plain `Stopped:` line.
+Budget (`internal/llm/budget.go`):
+-   Polly's floor (system prompt + tool schemas) is sent whole.
+-   The incoming message gets up to half the remaining room (`messageShare`); the excess goes to an artifact.
+-   `llm.MinContext` = floor + message floor + one page; smaller `maxcontext` is refused.
+-   `contextFloor` mirrors polly's private estimate; a test keeps them in sync.
+-   Detached turns and child agents get a scratch session (`Memory.WithScratch`) for artifacts.
+-   A failed turn keeps its output and replies `Stopped:`.
 
 ### `LLM`
 Abstracts the AI provider.
--   `ChatCompletionStream`: Takes a turn and request, returns `CompletionStream`.
-    Drain its `Chunks` before receiving the final error from `Done`; error notices
-    are output, not evidence that the completion succeeded.
+-   `ChatCompletionStream`: returns a `CompletionStream`. Drain `Chunks` before
+    reading `Done`; error notices in `Chunks` don't mean success.

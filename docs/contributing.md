@@ -28,8 +28,7 @@ This guide provides an overview of the codebase and instructions for common modi
         turn.Reply("Hello from MyCommand!")
     }
     ```
-    Commands receive a `*core.Turn`: the IRC context plus the conversation for
-    this turn (`turn.Conversation`). Import `pkdindustries/soulshack/internal/core`.
+    `*core.Turn` is the IRC context plus `turn.Conversation`.
 3.  **Register the command** in `internal/bot/run.go`:
     ```go
     cmdRegistry.Register(&commands.MyCommand{})

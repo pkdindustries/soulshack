@@ -11,13 +11,10 @@ import (
 	"pkdindustries/soulshack/internal/core"
 )
 
-// listToolName is polly's name for this, which is worth keeping: its
-// ChildRegistry denies the name outright, so a child never inherits a view of
-// its parent's roster.
+// listToolName matches polly's, which ChildRegistry denies to children.
 const listToolName = "list_agents"
 
-// chatFor finds the chat a tool call is running under, and reports a call that
-// has already been cancelled.
+// chatFor also errors if ctx is already cancelled.
 func chatFor(ctx context.Context) (core.ChatContextInterface, error) {
 	chat, ok := core.ChatFromContext(ctx)
 	if !ok {
@@ -29,10 +26,7 @@ func chatFor(ctx context.Context) (core.ChatContextInterface, error) {
 	return chat, nil
 }
 
-// newListTool lets the model answer the question the channel actually asks,
-// which is never "/agents" but "are you still doing that thing". The bot knows
-// it delegated, but a turn minutes later has only the transcript to go on, and
-// the transcript says a child started, not whether it is still going.
+// newListTool lets the model check whether delegated work is still running; the transcript can't say.
 func newListTool(tracker *Tracker) tools.Tool {
 	return &tools.Func{
 		Name:   listToolName,

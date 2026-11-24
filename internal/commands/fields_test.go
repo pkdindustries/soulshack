@@ -8,9 +8,6 @@ import (
 	mocktest "pkdindustries/soulshack/internal/testing"
 )
 
-// Every key reads back as something its own setter accepts, and writing that
-// value back leaves the setting alone. This is the invariant the field
-// constructors share, checked across the whole table.
 func TestConfigFieldsRoundTrip(t *testing.T) {
 	sys := mocktest.NewMockSystem(t)
 
@@ -36,7 +33,6 @@ func TestConfigFieldsRoundTrip(t *testing.T) {
 	}
 }
 
-// The keys are listed to users, so they come out in a stable order.
 func TestConfigKeysAreSorted(t *testing.T) {
 	keys := getConfigKeys()
 	if len(keys) != len(configFields) {
@@ -49,8 +45,7 @@ func TestConfigKeysAreSorted(t *testing.T) {
 	}
 }
 
-// A rejected value is explained in terms of what the setting wants, and the
-// reply names the setting, rather than echoing the parser's own error.
+// Replies name the setting, not the parser's error.
 func TestConfigFieldsRejectWithExplanation(t *testing.T) {
 	tests := []struct {
 		key   string

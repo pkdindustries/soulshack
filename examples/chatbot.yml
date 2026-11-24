@@ -41,7 +41,7 @@ model: anthropic/claude-sonnet-4-5-20250929
 # huggingfacekey: hf_xxxxx       # Or use SOULSHACK_HUGGINGFACEKEY env var
 
 # Custom API endpoints
-# openaiurl: https://api.openai.com/v1  # Applies to openai/ models only
+# openaiurl: https://api.openai.com/v1  # openai/ models only
 # ollamaurl: http://localhost:11434     # Default for Ollama
 # ollamakey: xxxxx                      # Bearer token for secured Ollama endpoints
 
@@ -80,8 +80,8 @@ greeting: wave hello
 # ============================================================================
 
 sessionduration: 30m           # Clear context after idle time (default: 10m)
-maxcontext: 100000              # Max tokens a request may send (default: 0, unlimited)
-# sessiondb: soulshack.db       # Keep conversations across restarts (default: in memory)
+maxcontext: 100000              # Max tokens per request (default: 0, unlimited)
+# sessiondb: soulshack.db       # Persist conversations (default: in memory)
 # chunkmax: 350                  # Max chars per IRC message
 
 # ============================================================================

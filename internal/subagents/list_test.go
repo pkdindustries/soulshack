@@ -11,8 +11,7 @@ import (
 	"pkdindustries/soulshack/internal/core"
 )
 
-// running puts a child in the tracker without running one, so a test can ask
-// what is in flight without waiting on anything.
+// running tracks a fake child without starting one.
 func running(t *testing.T, tracker *Tracker, label, conversation, source string, age time.Duration) {
 	t.Helper()
 	if _, err := tracker.admit(core.AgentInfo{
@@ -25,9 +24,6 @@ func running(t *testing.T, tracker *Tracker, label, conversation, source string,
 	}
 }
 
-// The channel asks the bot, not the command line. A turn minutes after a
-// delegation has only the transcript to go on, and the transcript says a child
-// started, not whether it is still going.
 func TestListToolAnswersWhatIsStillWorking(t *testing.T) {
 	_, ctx, _, tracker := newFixture(t)
 	running(t, tracker, "bird lookup", "#test", "alice", 90*time.Second)
@@ -55,8 +51,7 @@ func TestListToolSaysWhenNothingIsWorking(t *testing.T) {
 	}
 }
 
-// What another conversation asked for is that conversation's business. The bot
-// may say it is busy; it may not say with what, or for whom.
+// Other conversations' children are counted, not described.
 func TestListToolKeepsOtherConversationsOut(t *testing.T) {
 	_, ctx, _, tracker := newFixture(t)
 	running(t, tracker, "secret errand", "bob", "bob", time.Second)
@@ -79,8 +74,6 @@ func TestListToolKeepsOtherConversationsOut(t *testing.T) {
 	}
 }
 
-// A child polling its parent's roster is not something to design around, and
-// polly already denies the name.
 func TestChildrenDoNotInheritTheRoster(t *testing.T) {
 	registry := tools.NewToolRegistry([]tools.Tool{}, tools.WithUnsafeNoSandbox())
 	defer registry.Close()
@@ -96,8 +89,6 @@ func TestChildrenDoNotInheritTheRoster(t *testing.T) {
 	}
 }
 
-// The tool is offered only where a bot has agents at all, and is registered
-// alongside spawning.
 func TestListToolIsOffered(t *testing.T) {
 	registry := tools.NewToolRegistry([]tools.Tool{}, tools.WithUnsafeNoSandbox())
 	defer registry.Close()

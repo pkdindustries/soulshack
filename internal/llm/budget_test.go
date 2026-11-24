@@ -41,10 +41,6 @@ func TestMinContextGrowsWithPromptAndTools(t *testing.T) {
 	}
 }
 
-// Polly sizes a request by an estimate of its system prompt and tool schemas,
-// which it keeps private; contextFloor repeats that estimate, so MinContext has
-// to agree with what polly charges for the same request. A floor below polly's
-// would let a turn at mincontext fail for want of room.
 func TestContextFloorMatchesWhatPollyCharges(t *testing.T) {
 	sys := mocktest.NewMockSystem(t)
 	sys.ToolRegistry.Register(&tools.Func{
@@ -92,8 +88,6 @@ func TestCheckContextBudget(t *testing.T) {
 	}
 }
 
-// The message's share of the room has a floor and a ceiling in every case:
-// half the room in between, never so much that no floor-sized page is left.
 func TestMessageShare(t *testing.T) {
 	const floor = 3000
 	least := floor + messageFloorTokens + pageFloorTokens
@@ -167,10 +161,7 @@ func TestBoundMessageStoresWhatExceedsItsShare(t *testing.T) {
 
 var artifactID = regexp.MustCompile(`sha256:[0-9a-f]{64}`)
 
-// At exactly MinContext, the worst a turn can bring still fits: a long history
-// the budget cannot hold, an incoming message far over its share, and the
-// model paging back through both, in parallel and one at a time, before
-// answering. Reads beyond the room are refused, not overflowed.
+// Worst case: overlong history and message, paged back in parallel and serially.
 func TestTurnAtMinContextNeverRunsOutOfRoom(t *testing.T) {
 	sys := mocktest.NewMockSystem(t)
 	cfg := sys.GetConfig()
@@ -182,8 +173,7 @@ func TestTurnAtMinContextNeverRunsOutOfRoom(t *testing.T) {
 	calls := 0
 	sys.LLM = &PollyLLM{client: completionFunc(func(_ context.Context, req *polly.CompletionRequest) messages.ChatMessage {
 		calls++
-		// Polly finishes a turn whose next batch has no room without
-		// tools; the answer is all there is to give then.
+		// Polly drops tools when the next batch has no room.
 		if len(req.Tools) == 0 {
 			return messages.ChatMessage{Role: messages.MessageRoleAssistant, Content: "final answer", StopReason: messages.StopReasonEndTurn}
 		}
@@ -249,9 +239,6 @@ func TestTurnAtMinContextNeverRunsOutOfRoom(t *testing.T) {
 	}
 }
 
-// When a request cannot fit anyway, as when the prompt and tools alone
-// outgrow maxcontext, the channel hears a plain account of it and what the
-// turn did is kept.
 func TestContextLimitIsReportedAndTheTurnKept(t *testing.T) {
 	sys := mocktest.NewMockSystem(t)
 	sys.Memory.SetBudget(2500)
@@ -281,9 +268,7 @@ func TestContextLimitIsReportedAndTheTurnKept(t *testing.T) {
 	}, nil)
 }
 
-// windowClient is a provider whose context window is smaller than maxcontext:
-// it rejects a request it counts over the window, in DeepSeek's words, and
-// answers the rest.
+// windowClient rejects requests over its window with DeepSeek's error text.
 type windowClient struct {
 	window          int
 	calls, rejected int
@@ -307,8 +292,6 @@ func (c *windowClient) ChatCompletionStream(ctx context.Context, req *polly.Comp
 	}).ChatCompletionStream(ctx, req, processor)
 }
 
-// A model whose window is smaller than maxcontext rejects the request, and
-// the turn still gets its answer from a smaller one.
 func TestSmallerModelWindowIsAnsweredWithASmallerRequest(t *testing.T) {
 	sys := mocktest.NewMockSystem(t)
 	sys.Memory.SetBudget(40_000)
@@ -335,14 +318,12 @@ func TestSmallerModelWindowIsAnsweredWithASmallerRequest(t *testing.T) {
 	if got := strings.Join(chunks, " "); !strings.Contains(got, "final answer") || strings.Contains(got, "Stopped") || strings.Contains(got, "Error") {
 		t.Fatalf("reply = %q", got)
 	}
-	// The request the window rejected, the summary that made room for a
-	// smaller one, and the retry it was sized for.
+	// Rejected request, summary, retry.
 	if client.rejected != 1 || client.calls != 3 {
 		t.Fatalf("%d requests, %d rejected; want the first rejected, then a summary and one retry", client.calls, client.rejected)
 	}
 }
 
-// A turn that runs out of iterations keeps the tool calls it made.
 func TestTurnThatRunsOutOfIterationsKeepsItsWork(t *testing.T) {
 	sys := mocktest.NewMockSystem(t)
 	sys.ToolRegistry.Register(&tools.Func{
@@ -378,10 +359,6 @@ func TestTurnThatRunsOutOfIterationsKeepsItsWork(t *testing.T) {
 	}, nil)
 }
 
-// However the model runs its tool loop, a turn at MinContext answers: it may
-// keep calling tools with ever larger arguments and ever more to say, and polly
-// keeps the requests within the budget by compacting them, which the turn then
-// answers from.
 func TestToolLoopAtMinContextIsCompactedIntoRoom(t *testing.T) {
 	sys := mocktest.NewMockSystem(t)
 	sys.ToolRegistry.Register(&tools.Func{
@@ -400,8 +377,7 @@ func TestToolLoopAtMinContextIsCompactedIntoRoom(t *testing.T) {
 			return messages.ChatMessage{Role: messages.MessageRoleAssistant, Content: "a summary of the work so far", StopReason: messages.StopReasonEndTurn}
 		}
 		calls++
-		// The model answers once polly has made room for the answer by
-		// compacting what the loop has said so far.
+		// Answer only after compaction.
 		for _, msg := range req.Messages {
 			if strings.Contains(msg.Content, "was compacted into the summary below") {
 				compacted = true

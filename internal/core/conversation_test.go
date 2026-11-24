@@ -19,8 +19,6 @@ func TestConversationQueuesTurnsAndKeepsTheTranscript(t *testing.T) {
 	var conversation *core.Turn
 	core.WithConversation(ctx, "first", func(turn *core.Turn) {
 		turn.Conversation.Append([]messages.ChatMessage{{Role: messages.MessageRoleAssistant, Content: "saved response"}})
-		// A second turn for the same key waits for this one, and gives up
-		// rather than running when its own deadline passes first.
 		waitCtx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
 		defer cancel()
 		waiting := mocktest.NewMockContext().WithSystem(sys).WithContext(waitCtx)
@@ -60,8 +58,7 @@ func TestConversationCancellationReachesTheTurn(t *testing.T) {
 		if !errors.Is(context.Cause(turn), cause) {
 			t.Fatalf("lost cancellation cause: %v", context.Cause(turn))
 		}
-		// A finished reply can still be appended after the request ended:
-		// the transcript is process memory, not a leased resource.
+		// Appending after cancellation is fine; the transcript isn't leased.
 		turn.Conversation.Append([]messages.ChatMessage{{Role: messages.MessageRoleAssistant, Content: "final"}})
 	}, nil)
 
@@ -117,8 +114,7 @@ func TestConversationIdleExpiryStartsFresh(t *testing.T) {
 		turn.Conversation.Append([]messages.ChatMessage{{Role: messages.MessageRoleUser, Content: "expired"}})
 	}, nil)
 
-	// The next turn judges idleness by the live TTL, so there is no need to
-	// wait for the store's sweep.
+	// The next turn applies the live TTL; no sweep needed.
 	sys.Memory.SetTTL(time.Nanosecond)
 	time.Sleep(time.Millisecond)
 

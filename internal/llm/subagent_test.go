@@ -16,8 +16,7 @@ import (
 	mocktest "pkdindustries/soulshack/internal/testing"
 )
 
-// parentRegistry is the bot's own tools: the IRC ones, plus something
-// ordinary for a child to be allowed to keep.
+// parentRegistry is the IRC tools plus one ordinary tool a child may keep.
 func parentRegistry(t *testing.T) *tools.ToolRegistry {
 	t.Helper()
 	registry := tools.NewToolRegistry([]tools.Tool{}, tools.WithUnsafeNoSandbox())
@@ -36,9 +35,7 @@ func offered(registry *tools.ToolRegistry) map[string]bool {
 	return names
 }
 
-// A child acts on a brief the parent model wrote, under the authority of an
-// event that may be long past, so it is given no way to act on the channel.
-// Looking is still allowed.
+// Reading the channel stays allowed.
 func TestChildCannotActOnTheChannel(t *testing.T) {
 	child, release, err := childRegistry(parentRegistry(t), nil)
 	if err != nil {
@@ -46,8 +43,7 @@ func TestChildCannotActOnTheChannel(t *testing.T) {
 	}
 	defer release()
 
-	// Named here rather than read from the deny list, so that shortening the
-	// list is a test failure rather than a quieter test.
+	// Listed explicitly so shortening the deny list fails the test.
 	names := offered(child)
 	for _, denied := range []string{
 		"irc__op", "irc__kick", "irc__ban", "irc__mode_set",
@@ -64,8 +60,6 @@ func TestChildCannotActOnTheChannel(t *testing.T) {
 	}
 }
 
-// A brief that asks for the tools it needs still cannot ask its way back to
-// the ones a child never gets.
 func TestBriefCannotReopenDeniedTools(t *testing.T) {
 	child, release, err := childRegistry(parentRegistry(t), []string{"irc__*", "search"})
 	if err != nil {
@@ -82,8 +76,6 @@ func TestBriefCannotReopenDeniedTools(t *testing.T) {
 	}
 }
 
-// What a child is told is its own prompt and its brief. The channel's
-// conversation is not its business and would cost tokens in every child.
 func TestChildSeesOnlyItsBrief(t *testing.T) {
 	sys := mocktest.NewMockSystem(t)
 	mocktest.SetConfig(t, sys, func(c *config.Configuration) {
@@ -127,8 +119,7 @@ func TestChildSeesOnlyItsBrief(t *testing.T) {
 	}
 }
 
-// A brief may name a model, which outranks the configured one; naming none
-// falls back to what the bot itself answers with.
+// Brief's model, then configured subagent model, then the bot's.
 func TestChildModelResolution(t *testing.T) {
 	cfg := mocktest.DefaultTestConfig()
 	cfg.Model.Model = "anthropic/big"
@@ -148,10 +139,6 @@ func TestChildModelResolution(t *testing.T) {
 	}
 }
 
-// An agent runs a call by looking the name up in its registry, not in the
-// request it was given, so a turn that withheld a tool from the model must
-// withhold it from the agent too. Otherwise the only thing stopping a child's
-// report from starting another child is the model's good manners.
 func TestWithheldToolsCannotBeRunAnyway(t *testing.T) {
 	registry := parentRegistry(t)
 
@@ -176,8 +163,6 @@ func TestWithheldToolsCannotBeRunAnyway(t *testing.T) {
 	}
 }
 
-// The ordinary turn offers everything, and pays nothing for the narrowing it
-// does not need.
 func TestUnnarrowedTurnUsesTheRegistryItself(t *testing.T) {
 	registry := parentRegistry(t)
 	same, release := offeredRegistry(registry, registry.All())

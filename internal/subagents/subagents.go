@@ -16,17 +16,12 @@ import (
 	"pkdindustries/soulshack/internal/memory"
 )
 
-// defaultLabel names a child whose brief did not.
 const defaultLabel = "subagent"
 
-// defaultTimeout bounds a child whose configured limit is missing or zero.
-// Zero means unlimited elsewhere in the configuration, but a child agent with
-// no deadline is one that can spend on a provider until the bot is restarted,
-// so here it means the default instead.
+// defaultTimeout applies when the configured limit is <= 0; unlike elsewhere, zero is not unlimited.
 const defaultTimeout = 15 * time.Minute
 
-// Register offers the model the spawning tool and, since delegated work
-// finishes out of sight, a way to look at what is still running.
+// Register adds the spawn and list tools to registry.
 func Register(registry *tools.ToolRegistry, tracker *Tracker) {
 	registry.Register(newSpawnTool(tracker))
 	registry.MarkAlwaysAllowed(subagent.ToolName)
@@ -35,16 +30,8 @@ func Register(registry *tools.ToolRegistry, tracker *Tracker) {
 	registry.MarkAlwaysAllowed(listToolName)
 }
 
-// newSpawnTool builds the tool under polly's name, with a schema and an
-// argument list of soulshack's own. Polly's subagent.Tool is not reused:
-// its schema offers workspaces, isolation modes and a choice about waiting,
-// none of which an IRC bot has, and overriding the description alone would
-// leave its parser still accepting the arguments the description no longer
-// mentions. What is worth keeping from that package is its Request type and
-// the wording of a started child's result, which are exported.
-//
-// LongRunning exempts the call from the agent's per-tool timeout. It returns
-// promptly anyway, since the child is what takes the time.
+// newSpawnTool uses polly's tool name with soulshack's own schema; polly's
+// subagent.Tool would still accept workspace, isolation and wait arguments.
 func newSpawnTool(tracker *Tracker) tools.Tool {
 	return &tools.Func{
 		Name:        subagent.ToolName,
@@ -77,8 +64,7 @@ func newSpawnTool(tracker *Tracker) tools.Tool {
 	}
 }
 
-// spawn starts a child and returns. Everything after the start happens on the
-// child's own goroutine, under a context that outlives this turn.
+// spawn starts a child and returns without waiting for it.
 func spawn(ctx context.Context, tracker *Tracker, req subagent.Request) (subagent.Result, error) {
 	chat, err := chatFor(ctx)
 	if err != nil {
@@ -101,9 +87,7 @@ func spawn(ctx context.Context, tracker *Tracker, req subagent.Request) (subagen
 		return subagent.Result{}, err
 	}
 
-	// The child's own lifetime. It is the bot's context underneath, not
-	// this turn's, so the child survives the end of the turn and still
-	// ends when the bot does.
+	// Derived from the bot's context, so the child outlives this turn.
 	timeout := cfg.Bot.SubagentTimeout
 	if timeout <= 0 {
 		timeout = defaultTimeout
@@ -119,16 +103,10 @@ func spawn(ctx context.Context, tracker *Tracker, req subagent.Request) (subagen
 		Config:   cfg,
 	}
 
-	// Always said, whatever showtoolactions is set to. That setting hides
-	// the running commentary on a turn that is about to answer anyway;
-	// this is the opposite, a turn ending with the work still outstanding.
-	// The channel is owed the same account of it as of its outcome, which
-	// is reported unconditionally further down.
+	// Announced regardless of showtoolactions: the turn ends with work outstanding.
 	chat.ReplyAction("delegating: " + label)
 	chat.GetLogger().Info("agent_started", "agent", label, "model", spec.Model)
 
-	// Done closes when the child has settled, which is long after this call
-	// returned. It is what a caller waits on to know the work is over.
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -140,15 +118,12 @@ func spawn(ctx context.Context, tracker *Tracker, req subagent.Request) (subagen
 	return subagent.Result{Started: true, Session: label, Done: done}, nil
 }
 
-// run works the child to completion and reports what it said. It is the whole
-// of a child's life after the spawning turn has ended.
+// run works the child to completion and delivers its report.
 func run(chat core.ChatContextInterface, spec core.SubagentSpec) {
 	logger := chat.GetLogger().With("agent", spec.Label)
 	started := time.Now()
 
-	// The child answers to no conversation, but it gets a scratch one for
-	// its artifacts, deleted when it is done, so it can keep large tool
-	// output out of its requests like any other turn.
+	// Scratch conversation for artifacts, so large tool output stays out of requests.
 	var result core.SubagentResult
 	var err error
 	if scratchErr := chat.GetSystem().GetMemory().WithScratch(chat, func(scratch *memory.Conversation) {
@@ -161,14 +136,10 @@ func run(chat core.ChatContextInterface, spec core.SubagentSpec) {
 
 	if err != nil {
 		switch {
-		// A bot shutting down cancels every child. That is not a failure
-		// anyone in the channel needs to hear about, and there is nobody
-		// left to hear it.
+		// Bot shutdown: stay silent.
 		case errors.Is(chat.Err(), context.Canceled):
 			logger.Info("agent_canceled", "duration_ms", duration.Milliseconds())
-		// Running out of time is the opposite: the channel was told this
-		// was coming, so it has to be told that it is not. Distinguishing
-		// the two matters because both end this same context.
+		// Timeout: the channel was promised a report, so say it gave up.
 		case errors.Is(chat.Err(), context.DeadlineExceeded):
 			logger.Error("agent_timeout", "duration_ms", duration.Milliseconds())
 			chat.ReplyAction(fmt.Sprintf("%s gave up after %s", spec.Label, duration.Round(time.Second)))
@@ -187,9 +158,7 @@ func run(chat core.ChatContextInterface, spec core.SubagentSpec) {
 	deliver(chat, spec, result.Text)
 }
 
-// deliver puts the child's report in front of the bot as a turn of its own,
-// queued behind whatever else the conversation is doing, and lets the bot
-// answer it in its own voice.
+// deliver queues the report as a turn of its own for the bot to answer.
 func deliver(chat core.ChatContextInterface, spec core.SubagentSpec, text string) {
 	label := spec.Label
 	text = strings.TrimSpace(text)
@@ -197,11 +166,7 @@ func deliver(chat core.ChatContextInterface, spec core.SubagentSpec, text string
 		text = "(the agent returned no reply)"
 	}
 
-	// Delivering the report needs a budget of its own. Sharing the child's
-	// would mean that a child which spent almost all of its time producing a
-	// report would have almost none left to deliver it, and the report would
-	// be dropped for having arrived too near the deadline. One timeout's
-	// worth of waiting for the conversation, one of answering in it.
+	// Own budget, not the child's leftovers: one timeout to wait for the conversation, one to answer.
 	budget := 2 * spec.Config.API.Timeout
 	if budget <= 0 {
 		budget = defaultTimeout
@@ -210,30 +175,24 @@ func deliver(chat core.ChatContextInterface, spec core.SubagentSpec, text string
 	defer cancel()
 
 	core.WithConversation(chat, "subagent", func(turn *core.Turn) {
-		// The conversation this was asked in has since been forgotten, so
-		// there is nothing left for the bot to answer the report against:
-		// pass it on as it stands rather than reacting to it out of context.
+		// Conversation forgotten: relay verbatim rather than answer out of context.
 		if turn.Conversation.Len() == 0 {
 			turn.Reply(verbatim(label, text))
 			return
 		}
 		answered := llm.Drain(llm.CompleteWithoutDelegating(turn, fmt.Sprintf("(agent:%s) %s", label, text)), turn.Reply)
-		// A failed relay may already have sent an error notice or partial
-		// answer. Neither replaces the successful child's report; a silent
-		// completion also owes the channel that report.
+		// A failed or silent relay still owes the channel the report.
 		if !answered {
 			chat.GetLogger().Warn("agent_relay_incomplete", "agent", label)
 			turn.Reply(verbatim(label, text))
 		}
 	}, func() {
-		// The conversation stayed busy for the rest of the child's lifetime.
-		// The report is still worth having.
+		// Conversation stayed busy past the budget.
 		chat.GetLogger().Warn("agent_delivery_queued_out", "agent", label)
 		chat.Reply(verbatim(label, text))
 	})
 }
 
-// verbatim is the child's own words, for when the bot cannot answer them.
 func verbatim(label, text string) string {
 	return fmt.Sprintf("[%s] %s", label, text)
 }

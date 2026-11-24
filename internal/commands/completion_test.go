@@ -105,7 +105,6 @@ func TestCompletionCommand_ConversationUpdated(t *testing.T) {
 	// Wait for completion
 	time.Sleep(50 * time.Millisecond)
 
-	// The conversation should have the new messages
 	if newLen := len(conversation.Messages()); newLen <= initialLen {
 		t.Errorf("expected conversation to grow, was %d, now %d", initialLen, newLen)
 	}

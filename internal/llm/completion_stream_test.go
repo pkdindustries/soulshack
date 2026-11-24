@@ -23,7 +23,7 @@ func TestDrainReportsCompletionOutcome(t *testing.T) {
 		{"partial answer", []string{"part of an answer", "Error: rejected"}, errors.New("rejected"), false},
 		{"context limit", []string{"Stopped: this does not fit"}, errors.New("context limit"), false},
 		{"canceled", nil, context.Canceled, false},
-		// The outcome is not inferred from text the model happens to write.
+		// Outcome comes from the error, not the text.
 		{"answer mentions error", []string{"Error: is the prefix in the log"}, nil, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

@@ -120,9 +120,7 @@ func (c *ToolsCommand) addTool(turn *core.Turn, toolPath string) {
 
 	system := turn.GetSystem()
 	registry := system.GetToolRegistry()
-	// Reloading in place can replace working tools and close their MCP
-	// clients before we know whether the schemas fit. A derived registry
-	// shadows them privately; closing it releases only the trial's clients.
+	// Trial-load in a derived registry so a misfit can't close live MCP clients.
 	candidate := registry.Derive()
 	defer candidate.Close()
 	if _, err := candidate.LoadToolAuto(toolPath); err != nil {
@@ -132,17 +130,13 @@ func (c *ToolsCommand) addTool(turn *core.Turn, toolPath string) {
 
 	var result tools.LoadResult
 	failure := "Not added"
-	// Check the current configuration and parent tools, including changes
-	// made while loading. Serialize admission with /set and other adds.
+	// Under the config lock, serialized with /set and other adds.
 	if err := system.UpdateConfig(func(live *config.Configuration) error {
 		if err := llm.CheckContextBudget(live, candidate); err != nil {
 			return err
 		}
-		// Polly has no API to adopt a derived registry's loaded tools and
-		// MCP clients. A successful add must load again through the normal
-		// owner; this preflight cannot make changing external schemas atomic.
-		// Release trial clients first so they do not compete with the live
-		// load for resources such as a server's lock file or listening port.
+		// Polly can't adopt the trial's tools, so load again for real; close the
+		// trial first to free shared resources (lock files, ports).
 		failure = "Failed"
 		if err := candidate.Close(); err != nil {
 			return err
@@ -181,7 +175,7 @@ func (c *ToolsCommand) removeTool(turn *core.Turn, pattern string) {
 
 	registry := turn.GetSystem().GetToolRegistry()
 
-	// A bare name means the whole namespace; name__* says so explicitly.
+	// A bare name means name__*.
 	if !strings.Contains(pattern, "*") && !strings.Contains(pattern, "__") {
 		pattern += "__*"
 	}

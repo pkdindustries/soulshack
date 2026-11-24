@@ -9,8 +9,7 @@ import (
 	mocktest "pkdindustries/soulshack/internal/testing"
 )
 
-// fakeAgents stands in for the tracker, which lives in a package that would
-// import this one.
+// fakeAgents avoids an import cycle with the real tracker.
 type fakeAgents []core.AgentInfo
 
 func (f fakeAgents) List() []core.AgentInfo { return f }
@@ -33,9 +32,7 @@ func TestAgentsCommand(t *testing.T) {
 			wants: []string{"2 working", "bird lookup", "alice", "1m30s", "long read", "bob"},
 		},
 		{
-			// Another channel's work is somebody else's conversation. What
-			// this one may know is that the bot is busy, not with what or
-			// for whom.
+			// Shows the bot is busy, not with what or for whom.
 			name: "running elsewhere",
 			agents: fakeAgents{
 				{Label: "secret errand", Conversation: "bob", Source: "bob", Started: time.Now()},

@@ -33,7 +33,6 @@ func newMemory(t *testing.T, cfg memory.Config) *memory.Memory {
 	return mem
 }
 
-// with runs one turn and fails the test if it could not start.
 func with(t *testing.T, mem *memory.Memory, key string, fn func(*memory.Conversation)) {
 	t.Helper()
 	if err := mem.With(context.Background(), key, fn); err != nil {
@@ -68,8 +67,6 @@ func TestConversationsAreIndependent(t *testing.T) {
 	})
 }
 
-// Nicks may contain characters a session name cannot. Each key still gets a
-// conversation of its own, including one spelled like another's escape.
 func TestKeysWithReservedCharactersStayDistinct(t *testing.T) {
 	mem := newMemory(t, memory.Config{})
 	keys := []string{"alice|", "alice%7C", `bob\`, "alice_", ".dot."}
@@ -102,8 +99,6 @@ func TestTurnsOnOneConversationSerialize(t *testing.T) {
 	}()
 	<-running
 
-	// A second turn cannot start while the first holds the conversation, and
-	// gives up when its own context ends.
 	waitCtx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
 	defer cancel()
 	ran := false
@@ -114,15 +109,12 @@ func TestTurnsOnOneConversationSerialize(t *testing.T) {
 		t.Fatal("second turn ran after giving up")
 	}
 
-	// Another key is unaffected.
 	with(t, mem, "#other", func(*memory.Conversation) {})
 
 	close(release)
 	<-finished
 }
 
-// The budget bounds what a request sends, which polly enforces; the stored
-// transcript is kept whole so the model can read back what was left out.
 func TestBudgetDoesNotTrimTheTranscript(t *testing.T) {
 	mem := newMemory(t, memory.Config{Budget: 12})
 
@@ -159,8 +151,7 @@ func TestConversationsSurviveARestart(t *testing.T) {
 	})
 }
 
-// The current policy must win before SQLite has a chance to discard a
-// transcript using the TTL from its previous turn (or previous process).
+// The current TTL must apply before SQLite expires by the stored one.
 func TestExtendedTTLAppliesBeforeOpeningConversation(t *testing.T) {
 	for _, restart := range []bool{false, true} {
 		for _, ttl := range []time.Duration{0, time.Hour} {
@@ -214,7 +205,6 @@ func TestIdleConversationIsForgotten(t *testing.T) {
 		c.SetUsage(memory.ContextUsage{EstimatedTokens: 10, Budget: 100})
 	})
 
-	// Still within the TTL: the transcript stays.
 	with(t, mem, "#chan", func(c *memory.Conversation) {
 		if c.Len() != 1 {
 			t.Fatal("transcript expired before the TTL passed")
@@ -232,8 +222,6 @@ func TestIdleConversationIsForgotten(t *testing.T) {
 	})
 }
 
-// A TTL shortened while a conversation exists applies to it on its next turn,
-// without rewriting every stored session's metadata.
 func TestShortenedTTLAppliesToStoredConversations(t *testing.T) {
 	mem := newMemory(t, memory.Config{TTL: time.Hour})
 
@@ -270,8 +258,6 @@ func TestDetachedTurnDoesNotTouchTheConversation(t *testing.T) {
 		if got := c.Messages(); len(got) != 0 {
 			t.Fatalf("detached turn saw channel history: %+v", got)
 		}
-		// A store of its own, so its tools can keep large output out of
-		// its requests.
 		var err error
 		if ref, err = c.Artifacts().Put(context.Background(), artifacts.Blob{Kind: artifacts.KindText, Data: []byte("fetched page")}); err != nil {
 			t.Fatal(err)

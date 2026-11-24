@@ -1,7 +1,4 @@
-// Package subagents lets the model hand a task to a child agent. Children
-// always run in the background: the turn that spawns one ends as soon as the
-// child has started, and the child's report arrives in the channel as a turn
-// of its own whenever it finishes.
+// Package subagents runs background child agents whose reports arrive as later turns.
 package subagents
 
 import (
@@ -14,9 +11,7 @@ import (
 	"pkdindustries/soulshack/internal/core"
 )
 
-// Tracker holds the children running right now. A child outlives the turn
-// that spawned it, so what is running belongs to the process rather than to
-// any conversation.
+// Tracker holds the process-wide set of running children.
 type Tracker struct {
 	mu      sync.Mutex
 	next    uint64
@@ -43,13 +38,7 @@ func (t *Tracker) List() []core.AgentInfo {
 	return agents
 }
 
-// admit records a child that is about to start, or reports why it may not.
-// Counting and inserting happen together, so concurrent spawns cannot both
-// pass the last free slot. The caller forgets the child by the id it returns.
-//
-// The limits bound spending, not permission: anyone in the channel can cause
-// a spawn, so what is bounded is how much can be in flight at once. Zero or
-// less is unlimited, as elsewhere in the configuration.
+// admit atomically checks the caps and records a child. Caps <= 0 are unlimited.
 func (t *Tracker) admit(info core.AgentInfo, max, maxPerChat int) (uint64, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -75,19 +64,14 @@ func (t *Tracker) admit(info core.AgentInfo, max, maxPerChat int) (uint64, error
 	return id, nil
 }
 
-// forget drops a child that has settled, freeing its slot.
 func (t *Tracker) forget(id uint64) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	delete(t.running, id)
 }
 
-// Report says what is running for one conversation, for whoever asked, model
-// or person. Conversations do not see each other's transcripts, and a child is
-// something someone said in one: naming another channel's work, or who asked
-// for it, would carry it across a boundary the rest of the bot keeps. The
-// count is left in because "busy elsewhere" explains a slow reply without
-// saying anything about who or what.
+// Report describes the children running for conversation. Other conversations'
+// children are only counted, never described.
 func Report(agents core.Agents, conversation string, now time.Time) string {
 	var here []string
 	elsewhere := 0

@@ -13,8 +13,7 @@ import (
 	"pkdindustries/soulshack/internal/memory"
 )
 
-// ChunkWriter frames model output into messages a transport can send, emitting
-// each finished message on the channel it was built with.
+// ChunkWriter splits model output into transport-sized messages.
 type ChunkWriter interface {
 	Write(content string)
 	Flush()
@@ -36,17 +35,10 @@ type ChatContextInterface interface {
 	Reply(string)
 	ReplyAction(string)
 	SendAction(target, message string)
-	// NewChunkWriter frames output for this chat, since only the transport
-	// knows the message size limit.
 	NewChunkWriter(output chan<- string) ChunkWriter
 
-	// Background returns a copy of this chat context whose lifetime is the
-	// process's rather than this event's, so work started here can finish
-	// after the event handler has returned and still reach the channel. It
-	// is the lifetime that changes: the conversation, the target, and the
-	// tools are the ones this context already had. Callers own the cancel
-	// func. Note the distinct axis: WithDetachedConversation detaches the
-	// transcript, this detaches the deadline.
+	// Background returns a copy that outlives the event, with only the deadline changed.
+	// Caller owns the cancel func.
 	Background(timeout time.Duration) (ChatContextInterface, context.CancelFunc)
 
 	// Controller methods
@@ -76,10 +68,7 @@ type ChatContextInterface interface {
 	GetLogger() *slog.Logger
 }
 
-// chatKey is what a tool looks a chat context up by. A turn's context is the
-// chat context, so a context built from one resolves the lookup by itself and
-// no layer has to inject a value into tool calls; WithChat is for the callers
-// that have a bare context, such as tests.
+// chatKey: a chat context answers it itself; WithChat is for bare contexts.
 type chatKey struct{}
 
 // ChatKey is the key a ChatContextInterface answers Value with.
@@ -90,15 +79,14 @@ func WithChat(ctx context.Context, chat ChatContextInterface) context.Context {
 	return context.WithValue(ctx, chatKey{}, chat)
 }
 
-// ChatFromContext returns the chat context a tool is running under.
+// ChatFromContext returns the chat context in ctx.
 func ChatFromContext(ctx context.Context) (ChatContextInterface, bool) {
 	chat, ok := ctx.Value(chatKey{}).(ChatContextInterface)
 	return chat, ok
 }
 
-// CompletionStream separates IRC output (including error notices) from the
-// outcome of the completion. Drain Chunks before receiving the single result
-// from Done; both channels close after the turn's history has been saved.
+// CompletionStream carries IRC output on Chunks and the result on Done.
+// Drain Chunks before reading Done; both close after history is saved.
 type CompletionStream struct {
 	Chunks <-chan string
 	Done   <-chan error
@@ -107,42 +95,34 @@ type CompletionStream struct {
 // LLM defines the interface for the language model client
 type LLM interface {
 	ChatCompletionStream(*Turn, *llm.CompletionRequest) CompletionStream
-	// RunSubagent runs one child agent to completion and returns its reply.
-	// It blocks, so callers that must not block run it on their own
-	// goroutine.
+	// RunSubagent runs a child agent to completion. It blocks.
 	RunSubagent(context.Context, SubagentSpec) (SubagentResult, error)
 }
 
-// SubagentSpec is one child agent's brief. Everything the child needs is
-// passed explicitly rather than read back out of the context: a background
-// child outlives the turn that asked for it, so it cannot rely on the turn's
-// settings still being the current ones.
+// SubagentSpec is a child agent's full input; the child outlives its turn, so nothing comes from ctx.
 type SubagentSpec struct {
-	// Task is the brief. It is everything the child knows.
+	// Task is the brief; the child knows nothing else.
 	Task string
-	// Label names the job in a few words, for the people watching.
+	// Label is a short display name.
 	Label string
-	// Model overrides the configured subagent model when set.
 	Model string
-	// Tools lists the tool names or globs the child may use. Nil inherits
-	// what the parent has, minus what a child is never given.
+	// Tools are allowed names or globs; nil inherits the parent's, minus child-forbidden ones.
 	Tools []string
-	// Registry is the parent's tools, which the child's view derives from.
+	// Registry is the parent's registry the child's tools derive from.
 	Registry *tools.ToolRegistry
-	// Config is the snapshot the child runs under.
+	// Config is the child's snapshot.
 	Config *config.Configuration
-	// Artifacts is where the child keeps large tool output out of its
-	// requests. Nil keeps none.
+	// Artifacts stores large tool output; nil disables it.
 	Artifacts artifacts.Store
 }
 
-// SubagentResult is what a child returned.
+// SubagentResult is a child's reply and token usage.
 type SubagentResult struct {
 	Text                      string
 	InputTokens, OutputTokens int
 }
 
-// AgentInfo describes one child agent that is currently running.
+// AgentInfo describes a running child agent.
 type AgentInfo struct {
 	Label        string
 	Conversation string
@@ -150,8 +130,7 @@ type AgentInfo struct {
 	Started      time.Time
 }
 
-// Agents tracks the child agents running right now. Children outlive the
-// turns that spawn them, so the tracker belongs to the process, not the turn.
+// Agents tracks running child agents, process-wide.
 type Agents interface {
 	// List returns the running children, oldest first.
 	List() []AgentInfo
@@ -161,14 +140,11 @@ type System interface {
 	GetToolRegistry() *tools.ToolRegistry
 	GetMemory() *memory.Memory
 	GetLLM() LLM
-	// GetAgents returns the running child agents, or nil when subagents are
-	// disabled.
+	// GetAgents returns nil when subagents are disabled.
 	GetAgents() Agents
 	UpdateLLM(config.APIConfig) error
-	// GetConfig returns the settings this turn runs with: a snapshot, so
-	// reading them is safe while another turn changes them.
+	// GetConfig returns a snapshot.
 	GetConfig() *config.Configuration
-	// UpdateConfig serializes changes and publishes them on success. Readers
-	// keep using the previous snapshot while an update is in progress.
+	// UpdateConfig applies and publishes a change if fn succeeds.
 	UpdateConfig(func(*config.Configuration) error) error
 }

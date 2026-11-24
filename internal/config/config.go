@@ -46,19 +46,14 @@ type BotConfig struct {
 	URLWatcher         bool
 	URLWatcherSilent   bool
 	Sandbox            bool
-	// Subagents offers the model a tool for delegating a task to a child
-	// agent. Children always run in the background: the turn that spawns one
-	// ends immediately, and the child's reply arrives in the channel later.
+	// Subagents enables the delegation tool. Children run in the background and reply later.
 	Subagents bool
-	// SubagentModel runs children on a model of their own. Empty inherits
-	// whatever the bot is answering with.
+	// SubagentModel is the children's model; empty inherits the bot's.
 	SubagentModel string
-	// SubagentTimeout is how long a child may run. It is not the API
-	// timeout: a child outlives the turn that spawned it.
+	// SubagentTimeout caps a child's run time, independent of the API timeout.
 	SubagentTimeout time.Duration
-	// SubagentMax and SubagentMaxPerChat bound how many children run at
-	// once, in total and for one conversation. They bound spending, not
-	// permission: anyone in the channel can cause a spawn.
+	// SubagentMax and SubagentMaxPerChat cap concurrent children, total and per chat.
+	// They limit cost, not access: anyone in the channel can trigger a spawn.
 	SubagentMax        int
 	SubagentMaxPerChat int
 }
@@ -76,8 +71,7 @@ type SessionConfig struct {
 	ChunkMax   int
 	MaxContext int
 	TTL        time.Duration
-	// Path is the SQLite database conversations are stored in; empty keeps
-	// them in memory.
+	// Path is the SQLite conversation database; empty keeps them in memory.
 	Path string
 }
 

@@ -136,8 +136,6 @@ func TestURLBehavior_Name(t *testing.T) {
 	}
 }
 
-// settled waits for a background observation, with a bound so a broken one
-// fails the test instead of hanging it.
 func settled(t *testing.T, done <-chan struct{}) {
 	t.Helper()
 	select {
@@ -181,10 +179,6 @@ func TestSilentURLUsesTemporaryConversation(t *testing.T) {
 	}, nil)
 }
 
-// Nobody asked the bot to read the link, so the turn that reads it cannot
-// decide to spend more on it. It is also the one turn that may be running on a
-// scratch transcript, where a child's report would have nowhere to go but the
-// channel it was supposed to stay out of.
 func TestURLObservationCannotDelegate(t *testing.T) {
 	for _, silent := range []bool{true, false} {
 		sys := mocktest.NewMockSystem(t)
@@ -208,8 +202,6 @@ func TestURLObservationCannotDelegate(t *testing.T) {
 	}
 }
 
-// The event handler must not wait on the reading. A link someone pasted is not
-// a reason for the bot to stop answering the channel.
 func TestURLObservationDoesNotHoldTheHandler(t *testing.T) {
 	sys := mocktest.NewMockSystem(t)
 	reading := make(chan struct{})
@@ -220,7 +212,6 @@ func TestURLObservationDoesNotHoldTheHandler(t *testing.T) {
 	behavior := &URLBehavior{}
 	done := behavior.execute(ctx, &girc.Event{Command: girc.PRIVMSG, Params: []string{"#test", "https://example.com"}})
 
-	// execute has already returned while the model is still reading.
 	<-reading
 	select {
 	case <-done:
@@ -231,7 +222,6 @@ func TestURLObservationDoesNotHoldTheHandler(t *testing.T) {
 	settled(t, done)
 }
 
-// blockingLLM holds a completion open until it is released.
 type blockingLLM struct {
 	mocktest.MockLLM
 	reading, release chan struct{}

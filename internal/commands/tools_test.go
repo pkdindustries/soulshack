@@ -112,7 +112,6 @@ func (t *mockTool) Execute(_ context.Context, _ map[string]any) (string, error) 
 
 var _ tools.Tool = (*mockTool)(nil)
 
-// Tools whose schemas would leave maxcontext too small are not added.
 func TestToolsCommand_AddRefusesToolsThatOutgrowMaxContext(t *testing.T) {
 	mockSys := mocktest.NewMockSystem(t)
 	mockSys.ToolRegistry = tools.NewToolRegistry([]tools.Tool{}, tools.WithUnsafeNoSandbox(), tools.WithNativeTools())
@@ -209,7 +208,7 @@ func TestToolsCommand_ReloadSeesChangesWhileLoading(t *testing.T) {
 				(&ToolsCommand{}).Execute(ctx.Turn())
 			}()
 			<-loading
-			// The old instance must remain available even during the load.
+			// The old instance stays visible mid-load.
 			visible, _ := registry.Get("example__lookup")
 			unrelated := &tools.Func{Name: "other__tool", Desc: strings.Repeat("An unrelated tool. ", 1000)}
 			if update == "tools" {

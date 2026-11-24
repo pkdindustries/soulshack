@@ -24,14 +24,11 @@ func (f completionFunc) ChatCompletionStream(ctx context.Context, req *polly.Com
 	return processor.ProcessMessagesToEvents(ctx, input)
 }
 
-// When a request carries a summary in place of older exchanges, the marker that
-// introduces it points the model at read_transcript, and a stored conversation's
-// agent offers exactly the tools it names.
+// The summary marker names read_transcript, which the agent must offer.
 func TestCompletionSummaryRecommendsOfferedTools(t *testing.T) {
 	sys := mocktest.NewMockSystem(t)
 	sys.Memory.SetBudget(3000)
-	// The system prompt and the old exchange together outgrow what the budget
-	// can hold, so polly compacts the conversation into a summary.
+	// Prompt plus old exchange exceed the budget, forcing a summary.
 	mocktest.SetConfig(t, sys, func(c *config.Configuration) { c.Bot.Prompt = strings.Repeat("a", 6000) })
 	ctx := mocktest.NewMockContext().WithSystem(sys)
 	modelCalls, summarized := 0, 0
@@ -93,14 +90,13 @@ func TestCompletionSummaryRecommendsOfferedTools(t *testing.T) {
 	if summarized == 0 {
 		t.Error("no request carried a summary pointing at read_transcript")
 	}
-	// Two turns, and the summary the first one needed.
+	// Two turns plus one summary.
 	if modelCalls != 3 {
 		t.Fatalf("model calls = %d, want 3", modelCalls)
 	}
 }
 
-// isSummaryRequest reports whether req asks the model to summarize the
-// conversation rather than to continue it, in either of polly's forms.
+// isSummaryRequest matches either of polly's summarize requests.
 func isSummaryRequest(req *polly.CompletionRequest) bool {
 	for _, msg := range req.Messages {
 		if strings.Contains(msg.Content, "Summarize the conversation above") {
@@ -110,9 +106,7 @@ func isSummaryRequest(req *polly.CompletionRequest) bool {
 	return false
 }
 
-// Without an artifact store, as for a child, the agent offers only the tools
-// soulshack registered. Polly's private built-ins are removed, and removing
-// them must not disturb the caller's own tools.
+// Dropping builtins must not disturb the caller's tools.
 func TestCreateAgentWithoutAStoreDropsPollyBuiltins(t *testing.T) {
 	registry := tools.NewToolRegistry([]tools.Tool{}, tools.WithUnsafeNoSandbox())
 	registry.Register(&tools.Func{
@@ -149,9 +143,6 @@ func TestCreateAgentWithoutAStoreDropsPollyBuiltins(t *testing.T) {
 	}
 }
 
-// A stored conversation's agent gets polly's built-ins, so the model can open
-// the receipts projection leaves for stored tool output and read back the
-// exchanges its budget left out.
 func TestCreateAgentWithAStoreOffersPollyBuiltins(t *testing.T) {
 	sys := mocktest.NewMockSystem(t)
 	var offered []tools.Tool
@@ -177,9 +168,6 @@ func TestCreateAgentWithAStoreOffersPollyBuiltins(t *testing.T) {
 	}
 }
 
-// A stored conversation keeps every exchange; the budget bounds only what a
-// request sends, so the oldest exchange stays in the transcript once polly has
-// compacted it into a summary.
 func TestPollyCompactsOldestExchangesButKeepsThemStored(t *testing.T) {
 	sys := mocktest.NewMockSystem(t)
 	ctx := mocktest.NewMockContext().WithSystem(sys)
@@ -216,16 +204,14 @@ func TestPollyCompactsOldestExchangesButKeepsThemStored(t *testing.T) {
 
 	conversation := sys.Conversation(t, ctx.GetConversationKey())
 	history := conversation.Messages()
-	// The 16 seeded messages, the question, the summary's usage record, the
-	// summary marker and the reply.
+	// 16 seeded, question, usage record, summary marker, reply.
 	if len(history) != 20 || history[len(history)-1].Content != "final reply" {
 		t.Fatalf("stored transcript = %d messages, want 20 ending in the final reply", len(history))
 	}
 	if !strings.Contains(history[0].Content, "OLDEST_PRIVATE_HISTORY") {
 		t.Fatal("the oldest exchange was dropped from the stored transcript")
 	}
-	// The question is written once: the turn appends the user message, then
-	// the messages the model generated.
+	// The question is stored once.
 	questions, summaries := 0, 0
 	for _, msg := range history {
 		if msg.Content == "new question" {
@@ -249,16 +235,13 @@ func TestPollyCompactsOldestExchangesButKeepsThemStored(t *testing.T) {
 	if !usage.Compacted {
 		t.Fatalf("request fit the budget without compacting: %+v", usage)
 	}
-	// The summary, and the answer it made room for.
+	// Summary, then answer.
 	if modelCalls != 2 {
 		t.Fatalf("model calls = %d, want 2", modelCalls)
 	}
 }
 
-// The running commentary announces the spawning tool like any other, so with
-// the setting on a delegation shows twice: the call, then what it delegated.
-// irc__action stays skipped, since announcing it would print the message it
-// is announcing.
+// irc__action stays unannounced: announcing it would echo its own message.
 func TestToolActionsAnnounceSpawningButNotActions(t *testing.T) {
 	sys := mocktest.NewMockSystem(t)
 	mocktest.SetConfig(t, sys, func(c *config.Configuration) { c.Bot.ShowToolActions = true })

@@ -15,21 +15,15 @@ import (
 	"pkdindustries/soulshack/internal/irc"
 )
 
-// childMaxIterations bounds a child's tool loop. It is shorter than the
-// parent's: a child has one brief to answer, and a child that has not
-// finished by then is looping rather than working.
+// childMaxIterations is below turnMaxIterations: a child past it is looping.
 const childMaxIterations = 8
 
-// childPrompt tells a child what it is. It replaces the bot's own prompt
-// rather than extending it: a child is not talking to the channel, it is
-// answering the coordinator that spawned it.
+// childPrompt replaces, not extends, the bot's prompt.
 const childPrompt = `You are a subagent of %s, an IRC bot. You were given one task and you have no other context; the conversation you were spawned from is not visible to you.
 
 Do the task and report the result. Your reply goes to the coordinating agent, not to the channel: write plain prose, no IRC formatting, no greeting, no sign-off. Lead with the answer. Say plainly what you could not determine rather than guessing.`
 
-// RunSubagent runs one child agent to completion over a narrowed view of the
-// parent's tools. It blocks for as long as the child runs, which is why its
-// caller gives it a context of its own rather than a turn's.
+// RunSubagent runs one child agent to completion on a narrowed registry. It blocks; pass a context not tied to the turn.
 func (p *PollyLLM) RunSubagent(ctx context.Context, spec core.SubagentSpec) (core.SubagentResult, error) {
 	cfg := spec.Config
 	if cfg == nil {
@@ -81,8 +75,7 @@ func (p *PollyLLM) RunSubagent(ctx context.Context, spec core.SubagentSpec) (cor
 	return result, nil
 }
 
-// childModel resolves which model a child runs on: what the brief asked for,
-// then the configured subagent model, then, by leaving it unset, the bot's own.
+// childModel picks the brief's model, then the configured subagent model; "" means the bot's.
 func childModel(spec core.SubagentSpec) string {
 	if spec.Model != "" {
 		return spec.Model
@@ -90,16 +83,11 @@ func childModel(spec core.SubagentSpec) string {
 	return spec.Config.Bot.SubagentModel
 }
 
-// childRegistry narrows the parent's tools to what a child may use. Polly
-// drops nested spawning and the coordination tools that carry the parent's
-// identity; soulshack drops the IRC tools that act on the channel. The
-// returned release closes both views, innermost first, and leaves the
-// parent's registry and its MCP connections open.
+// childRegistry derives a child's tools: polly drops spawn/coordination, we drop channel writes.
+// release leaves the parent and its MCP connections open.
 func childRegistry(parent *tools.ToolRegistry, allow []string) (*tools.ToolRegistry, func(), error) {
 	inherited := subagent.ChildRegistry(parent, allow)
-	// A child acts on a brief the parent model wrote, under the authority of
-	// an event that may be long past. It may look at the channel; it may not
-	// do anything to it.
+	// Children may read the channel, never write to it.
 	child := inherited.Derive(tools.DenyTools(irc.ChannelWriteTools()...))
 	release := func() {
 		child.Close()

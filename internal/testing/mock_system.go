@@ -20,8 +20,7 @@ type MockLLM struct {
 	Error       error                  // Error to return (sent as final chunk)
 	LastRequest *llm.CompletionRequest // Captured by ChatCompletionStream
 
-	// Subagent is what RunSubagent does. Nil returns a fixed reply at once,
-	// which is enough for a test that only cares that a child ran.
+	// Subagent backs RunSubagent; nil returns a fixed reply.
 	Subagent func(context.Context, core.SubagentSpec) (core.SubagentResult, error)
 }
 
@@ -77,8 +76,7 @@ type MockSystem struct {
 	Memory       *memory.Memory
 	Config       *config.Store
 	LLM          core.LLM
-	// Agents is nil unless a test enables subagents, matching a bot started
-	// without them.
+	// Agents is nil unless a test enables subagents.
 	Agents core.Agents
 }
 
@@ -141,7 +139,7 @@ func (m *MockSystem) UpdateLLM(cfg config.APIConfig) error {
 // Verify MockSystem implements core.System
 var _ core.System = (*MockSystem)(nil)
 
-// SetConfig changes the system's settings, the way /set does.
+// SetConfig updates sys's settings, as /set does.
 func SetConfig(t testing.TB, sys *MockSystem, fn func(*config.Configuration)) {
 	t.Helper()
 	if err := sys.UpdateConfig(func(c *config.Configuration) error {
@@ -152,17 +150,14 @@ func SetConfig(t testing.TB, sys *MockSystem, fn func(*config.Configuration)) {
 	}
 }
 
-// NewTurnContext builds a context ready for command execution: a turn over a
-// conversation in this system, which is what Execute needs.
+// NewTurnContext returns a context with a conversation for key, ready for Execute.
 func NewTurnContext(t testing.TB, sys *MockSystem, key string) *MockChatContext {
 	t.Helper()
 	return NewMockContext().WithSystem(sys).WithConversation(sys.Conversation(t, key))
 }
 
-// Conversation supplies a conversation for command-level tests, keyed like a
-// turn's would be. It holds that key's turn for the rest of the test, the way a
-// running turn holds its session, so a test that needs another turn on the
-// same key runs it through core.WithConversation instead.
+// Conversation opens key's conversation and holds it until test cleanup, so a
+// second turn on the same key must go through core.WithConversation.
 func (m *MockSystem) Conversation(t testing.TB, key string) *memory.Conversation {
 	t.Helper()
 	opened := make(chan *memory.Conversation, 1)

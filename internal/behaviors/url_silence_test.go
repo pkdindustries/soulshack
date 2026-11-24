@@ -24,7 +24,7 @@ func TestURLObservationContextWarningsRespectSilence(t *testing.T) {
 			defer server.Close()
 			sys := mocktest.NewMockSystem(t)
 			sys.Memory.SetBudget(10000)
-			// Schemas count toward usage even when no tools execute.
+			// Unused schemas still count toward usage.
 			sys.ToolRegistry.Register(&tools.Func{Name: "fixture", Desc: strings.Repeat("a", 22000)})
 			mocktest.SetConfig(t, sys, func(c *config.Configuration) {
 				c.Bot.URLWatcherSilent = silent

@@ -67,13 +67,8 @@ func validateContext(ctx context.Context) (ChatContextInterface, error) {
 	return chatCtx, nil
 }
 
-// ircTool is one native IRC tool: how to build it, and whether it acts on the
-// channel rather than only reading state the client already has. The
-// classification lives here, beside the definitions, so that adding a tool
-// forces the question at the point where the answer is obvious. Anything that
-// acts is withheld from child agents, and a list of names kept in another
-// package would drift the first time a tool was added, silently and in the
-// direction of granting authority.
+// ircTool flags tools that act on the channel; those are withheld from child
+// agents. Kept beside the definitions so new tools can't skip the flag.
 type ircTool struct {
 	new  func() tools.Tool
 	acts bool
@@ -92,8 +87,7 @@ var ircTools = map[string]ircTool{
 	"irc__whois":      {newIrcWhoisTool, false},
 }
 
-// ChannelWriteTools names the IRC tools that act on the channel, in a stable
-// order.
+// ChannelWriteTools returns the names of channel-acting IRC tools, sorted.
 func ChannelWriteTools() []string {
 	names := make([]string, 0, len(ircTools))
 	for name, tool := range ircTools {
@@ -108,9 +102,7 @@ func ChannelWriteTools() []string {
 // RegisterIRCTools registers IRC tools as native tools with polly's registry
 func RegisterIRCTools(registry *tools.ToolRegistry) {
 	for name, tool := range ircTools {
-		// The factory makes the tool loadable by name; registering the
-		// instance is what puts it in registry.All(), which is the list the
-		// model is offered.
+		// Only instances reach registry.All(), which the model is offered.
 		registry.RegisterNative(name, tool.new)
 		registry.Register(tool.new())
 	}
@@ -135,8 +127,7 @@ func newIrcOpTool() tools.Tool {
 				return "", fmt.Errorf("users must be a non-empty array of strings")
 			}
 			cfg := chatCtx.GetConfig()
-			// Empty admin lists historically make IsAdmin true. For this tool,
-			// changing other users requires an explicitly configured admin.
+			// IsAdmin is true for an empty admin list; this tool requires one.
 			if len(cfg.Bot.Admins) == 0 || !chatCtx.IsAdmin() {
 				caseMapping, _ := chatCtx.GetServerOption("CASEMAPPING")
 				requester := FoldNick(chatCtx.GetSource(), caseMapping)

@@ -8,8 +8,6 @@ import (
 )
 
 // AgentsCommand reports the child agents working for this conversation.
-// Children report back on their own schedule, so this answers the question the
-// channel will otherwise ask: is it still going?
 type AgentsCommand struct{}
 
 func (c *AgentsCommand) Name() string    { return "/agents" }

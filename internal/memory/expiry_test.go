@@ -49,8 +49,7 @@ func TestCleanupUsesCurrentTTL(t *testing.T) {
 	for _, restart := range []bool{false, true} {
 		for _, ttl := range []time.Duration{0, time.Hour} {
 			t.Run(fmt.Sprintf("restart=%t/ttl=%s", restart, ttl), func(t *testing.T) {
-				// A constant future clock lets cleanup observe inactivity without
-				// changing the store's clock or racing the background worker.
+				// Future clock fakes idleness without racing the background worker.
 				cfg := Config{TTL: time.Minute, Now: func() time.Time { return time.Now().Add(10 * time.Minute) }}
 				if restart {
 					cfg.Path = filepath.Join(t.TempDir(), "sessions.db")
@@ -131,8 +130,7 @@ func TestCleanupLoopAndScratchExpiry(t *testing.T) {
 		if err := orphan.Close(); err != nil {
 			t.Fatal(err)
 		}
-		// The real background loop deletes idle named sessions; their zero
-		// storage TTL must not leave cleanup disabled.
+		// Named sessions' zero storage TTL must not disable cleanup.
 		time.Sleep(cleanupInterval + time.Second)
 		synctest.Wait()
 		requireExists(t, m, "#chan", false)
@@ -142,7 +140,7 @@ func TestCleanupLoopAndScratchExpiry(t *testing.T) {
 		}
 		m.SetTTL(0)
 		storeHistory(t, m, "#forever")
-		// Disabling conversation expiry must not disable orphan cleanup.
+		// TTL 0 must not disable scratch cleanup.
 		if err := m.WithScratch(context.Background(), func(active *Conversation) {
 			time.Sleep(scratchTTL + cleanupInterval)
 			synctest.Wait()
@@ -170,6 +168,5 @@ func TestCleanupLoopAndScratchExpiry(t *testing.T) {
 		default:
 			t.Fatal("Close returned before cleanup stopped")
 		}
-		// No running background cleanup is left for synctest to drain.
 	})
 }

@@ -10,8 +10,7 @@ import (
 	mocktest "pkdindustries/soulshack/internal/testing"
 )
 
-// A native factory alone only makes a tool loadable by name; the model is
-// offered registry.All(), so the IRC tools must be registered as instances.
+// A native factory alone doesn't reach registry.All().
 func TestRegisterIRCToolsOffersThemToTheModel(t *testing.T) {
 	registry := tools.NewToolRegistry([]tools.Tool{}, tools.WithUnsafeNoSandbox())
 	RegisterIRCTools(registry)

@@ -26,10 +26,7 @@ type MockChatContext struct {
 	Source    string
 	Args      []string
 
-	// Recorded replies (for assertions). Background work replies from its
-	// own goroutine, so mu guards them and the accessors below read them
-	// safely; a test that reads the slices directly must be sure nothing
-	// else is still replying.
+	// Recorded replies, guarded by mu; read via AllReplies/AllActions while background work may still reply.
 	mu      sync.Mutex
 	Replies []string
 	Actions []string
@@ -41,8 +38,7 @@ type MockChatContext struct {
 	logger       *slog.Logger
 	client       *girc.Client
 
-	// Parent stands in for the bot's context, which background work derives
-	// from. Cancelling it is how a test shuts the bot down.
+	// Parent stands in for the bot's context; cancel it to simulate shutdown.
 	Parent context.Context
 
 	// Mock data for lookups
@@ -125,8 +121,7 @@ func (m *MockChatContext) WithSource(source string) *MockChatContext {
 	return m
 }
 
-// WithConfig pins the configuration this context reads, for tests that need
-// settings the system does not have (a different channel, say).
+// WithConfig pins this context's configuration, overriding the system's.
 func (m *MockChatContext) WithConfig(cfg *config.Configuration) *MockChatContext {
 	m.cfg = config.NewStore(cfg)
 	return m
@@ -138,7 +133,7 @@ func (m *MockChatContext) WithSystem(sys core.System) *MockChatContext {
 	return m
 }
 
-// WithConversation sets the conversation this context's turn works on
+// WithConversation sets the conversation Turn uses.
 func (m *MockChatContext) WithConversation(conversation *memory.Conversation) *MockChatContext {
 	m.conversation = conversation
 	return m
@@ -195,8 +190,7 @@ func (m *MockChatContext) ReplyAction(msg string) {
 
 func (m *MockChatContext) SendAction(string, string) {}
 
-// Controller methods. These are IRC side effects: the mock accepts them and
-// reports success, and a test that needs to see one records it itself.
+// Controller methods: no-ops that report success.
 func (m *MockChatContext) Join(string) bool                       { return true }
 func (m *MockChatContext) JoinWithKey(string, string) bool        { return true }
 func (m *MockChatContext) Nick(string) bool                       { return true }
@@ -232,9 +226,7 @@ func (m *MockChatContext) GetServerOption(key string) (string, bool) {
 
 // Runtime methods
 
-// Turn wraps this context as one chat turn over the conversation set by
-// WithConversation. Commands and completions take a turn rather than a bare
-// context, since that is where the transcript lives.
+// Turn wraps this context in a turn over the WithConversation conversation.
 func (m *MockChatContext) Turn() *core.Turn {
 	return &core.Turn{ChatContextInterface: m, Conversation: m.conversation}
 }
@@ -243,9 +235,7 @@ func (m *MockChatContext) GetConversationKey() string {
 	return m.GetConfig().Server.Channel
 }
 
-// Value answers the lookup tools use to find their chat context, the way the
-// IRC context does, so a tool under test can take this mock as its context
-// directly.
+// Value resolves core.ChatKey to this mock, as the IRC context does.
 func (m *MockChatContext) Value(key any) any {
 	if key == core.ChatKey() {
 		return core.ChatContextInterface(m)
@@ -253,13 +243,8 @@ func (m *MockChatContext) Value(key any) any {
 	return m.Context.Value(key)
 }
 
-// Background hands back a context with a deadline of its own that does not end
-// when this one is cancelled, matching what the IRC context does for work that
-// outlives an event. Replies still land on this mock, so a test asserts on the
-// context it built whichever one the background work replied through.
-//
-// It derives from Parent, which stands in for the bot's own context: a test
-// cancels that to shut the bot down under whatever is running.
+// Background returns a context derived from Parent, not this one, with its own
+// deadline. Replies still record on this mock.
 func (m *MockChatContext) Background(timeout time.Duration) (core.ChatContextInterface, context.CancelFunc) {
 	parent := m.Parent
 	if parent == nil {
@@ -269,9 +254,7 @@ func (m *MockChatContext) Background(timeout time.Duration) (core.ChatContextInt
 	return &backgroundMockContext{MockChatContext: m, ctx: ctx}, cancel
 }
 
-// backgroundMockContext is the mock with its deadline replaced. It keeps the
-// recorders of the context it came from, and overrides the four context
-// methods that the embedded mock would otherwise have supplied.
+// backgroundMockContext shares the mock's recorders but swaps its context.
 type backgroundMockContext struct {
 	*MockChatContext
 	ctx context.Context
@@ -288,8 +271,7 @@ func (b *backgroundMockContext) Value(key any) any {
 	return b.ctx.Value(key)
 }
 
-// NewChunkWriter hands model output straight through, so tests see the chunks
-// the LLM produced rather than IRC-framed ones.
+// NewChunkWriter passes chunks through unframed.
 func (m *MockChatContext) NewChunkWriter(output chan<- string) core.ChunkWriter {
 	return passthroughChunkWriter{output: output}
 }
@@ -304,8 +286,7 @@ func (w passthroughChunkWriter) Write(content string) {
 
 func (w passthroughChunkWriter) Flush() {}
 
-// GetConfig returns the settings this context reads: the system's, so settings
-// changed through the system are visible, unless a test pinned its own.
+// GetConfig returns the pinned config if set, else the system's.
 func (m *MockChatContext) GetConfig() *config.Configuration {
 	if m.cfg == nil {
 		if m.sys != nil {
@@ -316,7 +297,6 @@ func (m *MockChatContext) GetConfig() *config.Configuration {
 	return m.cfg.Snapshot()
 }
 
-// updateConfig changes the settings this context reads, wherever they live.
 func (m *MockChatContext) updateConfig(fn func(*config.Configuration) error) {
 	if m.cfg == nil && m.sys != nil {
 		if err := m.sys.UpdateConfig(fn); err != nil {
@@ -371,8 +351,7 @@ func (m *MockChatContext) ReplyCount() int {
 	return len(m.Replies)
 }
 
-// AllReplies and AllActions copy what has been recorded so far. They are what
-// a test reads while background work may still be replying.
+// AllReplies returns a copy of the replies so far; safe during background work.
 func (m *MockChatContext) AllReplies() []string {
 	m.mu.Lock()
 	defer m.mu.Unlock()

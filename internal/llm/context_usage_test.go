@@ -15,8 +15,7 @@ import (
 
 func TestCompletionWarnsWhenContextUsageIncreases(t *testing.T) {
 	sys := mocktest.NewMockSystem(t)
-	// Large enough that polly's built-in tool schemas, about 600 tokens, stay
-	// well inside each step the prompt sizes below aim for.
+	// Dwarfs polly's ~600-token builtin schemas.
 	sys.Memory.SetBudget(10000)
 	ctx := mocktest.NewMockContext().WithSystem(sys)
 	sys.LLM = &PollyLLM{client: completionFunc(func(context.Context, *polly.CompletionRequest) messages.ChatMessage {
