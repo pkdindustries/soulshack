@@ -3,28 +3,20 @@ package irc
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/alexschlessinger/pollytool/schema"
 	"github.com/alexschlessinger/pollytool/tools"
+
+	"pkdindustries/soulshack/internal/core"
 )
 
-type contextKey string
-
-const kContextKey contextKey = "irc_context"
-
 func GetIRCContext(ctx context.Context) (ChatContextInterface, error) {
-	if chatCtx, ok := ctx.Value(kContextKey).(ChatContextInterface); ok {
+	if chatCtx, ok := core.ChatFromContext(ctx); ok {
 		return chatCtx, nil
 	}
 	return nil, fmt.Errorf("no IRC context available")
-}
-
-// InjectContext stores the IRC context for tools to retrieve.
-// This must be used (rather than direct context.WithValue) to ensure
-// the correct key type is used.
-func InjectContext(ctx context.Context, chatCtx ChatContextInterface) context.Context {
-	return context.WithValue(ctx, kContextKey, chatCtx)
 }
 
 func isBotOpped(ctx ChatContextInterface) bool {
@@ -55,7 +47,7 @@ func validateAdminOp(ctx context.Context) (ChatContextInterface, string, error) 
 	if err := ctx.Err(); err != nil {
 		return nil, "", err
 	}
-	if !chatCtx.IsAdmin() {
+	if len(chatCtx.GetConfig().Bot.Admins) == 0 || !chatCtx.IsAdmin() {
 		return nil, "You are not authorized to use this tool", nil
 	}
 	if !isBotOpped(chatCtx) {
@@ -75,22 +67,42 @@ func validateContext(ctx context.Context) (ChatContextInterface, error) {
 	return chatCtx, nil
 }
 
-// RegisterIRCTools registers IRC tools as native tools with polly's registry
-func RegisterIRCTools(registry *tools.ToolRegistry) {
-	factories := map[string]func() tools.Tool{
-		"irc__op":         newIrcOpTool,
-		"irc__kick":       newIrcKickTool,
-		"irc__ban":        newIrcBanTool,
-		"irc__topic":      newIrcTopicTool,
-		"irc__action":     newIrcActionTool,
-		"irc__mode_set":   newIrcModeSetTool,
-		"irc__mode_query": newIrcModeQueryTool,
-		"irc__invite":     newIrcInviteTool,
-		"irc__names":      newIrcNamesTool,
-		"irc__whois":      newIrcWhoisTool,
+// ircTool flags tools that act on the channel; those are withheld from child
+// agents. Kept beside the definitions so new tools can't skip the flag.
+type ircTool struct {
+	new  func() tools.Tool
+	acts bool
+}
+
+var ircTools = map[string]ircTool{
+	"irc__op":         {newIrcOpTool, true},
+	"irc__kick":       {newIrcKickTool, true},
+	"irc__ban":        {newIrcBanTool, true},
+	"irc__topic":      {newIrcTopicTool, true},
+	"irc__action":     {newIrcActionTool, true},
+	"irc__mode_set":   {newIrcModeSetTool, true},
+	"irc__invite":     {newIrcInviteTool, true},
+	"irc__mode_query": {newIrcModeQueryTool, false},
+	"irc__names":      {newIrcNamesTool, false},
+	"irc__whois":      {newIrcWhoisTool, false},
+}
+
+// ChannelWriteTools returns the names of channel-acting IRC tools, sorted.
+func ChannelWriteTools() []string {
+	names := make([]string, 0, len(ircTools))
+	for name, tool := range ircTools {
+		if tool.acts {
+			names = append(names, name)
+		}
 	}
-	for name, f := range factories {
-		registry.RegisterNative(name, f)
+	slices.Sort(names)
+	return names
+}
+
+// RegisterIRCTools registers IRC tool factories with polly's registry (opt-in via --tool).
+func RegisterIRCTools(registry *tools.ToolRegistry) {
+	for name, tool := range ircTools {
+		registry.RegisterNative(name, tool.new)
 	}
 }
 
@@ -108,7 +120,6 @@ func newIrcOpTool() tools.Tool {
 			if err != nil || msg != "" {
 				return msg, err
 			}
-
 			users := args.StringSlice("users")
 			if len(users) == 0 {
 				return "", fmt.Errorf("users must be a non-empty array of strings")

@@ -1,14 +1,18 @@
 package commands
 
 import (
-	"pkdindustries/soulshack/internal/irc"
+	"pkdindustries/soulshack/internal/core"
 )
 
 // Command defines the interface for bot commands
 type Command interface {
 	Name() string
-	Execute(ctx irc.ChatContextInterface)
+	Execute(turn *core.Turn)
 	AdminOnly() bool
+}
+
+type conversationCommand interface {
+	NeedsConversation() bool
 }
 
 // Registry manages command registration and dispatch
@@ -41,28 +45,38 @@ func (r *Registry) Get(name string) (Command, bool) {
 	return cmd, ok
 }
 
+// NeedsConversation reports whether cmdName requires leasing a conversation turn.
+func (r *Registry) NeedsConversation(cmdName string) bool {
+	cmd, ok := r.commands[cmdName]
+	if !ok {
+		return r.defaultCommand != nil
+	}
+	cc, ok := cmd.(conversationCommand)
+	return ok && cc.NeedsConversation()
+}
+
 // Dispatch executes the appropriate command based on context
 // Returns true if a command was executed, false otherwise
-func (r *Registry) Dispatch(ctx irc.ChatContextInterface) bool {
-	cmdName := ctx.GetCommand()
+func (r *Registry) Dispatch(turn *core.Turn) bool {
+	cmdName := turn.GetCommand()
 
 	cmd, ok := r.commands[cmdName]
 	if !ok {
 		// Use default command if no match
 		if r.defaultCommand != nil {
-			r.defaultCommand.Execute(ctx)
+			r.defaultCommand.Execute(turn)
 			return true
 		}
 		return false
 	}
 
 	// Check admin permission
-	if cmd.AdminOnly() && !ctx.IsAdmin() {
-		ctx.Reply("You don't have permission to perform this action.")
+	if cmd.AdminOnly() && !turn.IsAdmin() {
+		turn.Reply("You don't have permission to perform this action.")
 		return true
 	}
 
-	cmd.Execute(ctx)
+	cmd.Execute(turn)
 	return true
 }
 

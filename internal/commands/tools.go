@@ -5,7 +5,9 @@ import (
 	"path"
 	"strings"
 
-	"pkdindustries/soulshack/internal/irc"
+	"pkdindustries/soulshack/internal/config"
+	"pkdindustries/soulshack/internal/core"
+	"pkdindustries/soulshack/internal/llm"
 
 	"github.com/alexschlessinger/pollytool/tools"
 )
@@ -16,12 +18,12 @@ type ToolsCommand struct{}
 func (c *ToolsCommand) Name() string    { return "/tools" }
 func (c *ToolsCommand) AdminOnly() bool { return false } // We handle permissions internally
 
-func (c *ToolsCommand) Execute(ctx irc.ChatContextInterface) {
-	args := ctx.GetArgs()
+func (c *ToolsCommand) Execute(turn *core.Turn) {
+	args := turn.GetArgs()
 
 	// If no arguments, list tools (equivalent to old /get tools)
 	if len(args) < 2 {
-		ctx.Reply("Usage: /tools [list|load|rm] <args>")
+		c.listTools(turn)
 		return
 	}
 
@@ -33,36 +35,32 @@ func (c *ToolsCommand) Execute(ctx irc.ChatContextInterface) {
 
 	// Handle non-admin subcommands first
 	if subcommand == "list" {
-		c.listNamespace(ctx, rest)
+		c.listNamespace(turn, rest)
 		return
 	}
 
 	// Other subcommands require admin privileges
-	if !ctx.IsAdmin() {
-		ctx.Reply("You don't have permission to perform this action.")
+	if !turn.IsAdmin() {
+		turn.Reply("You don't have permission to perform this action.")
 		return
 	}
 
 	switch subcommand {
-	case "load":
-		fallthrough
-	case "add":
-		c.addTool(ctx, rest)
-	case "rm":
-		fallthrough
-	case "remove":
-		c.removeTool(ctx, rest)
+	case "load", "add":
+		c.addTool(turn, rest)
+	case "rm", "remove":
+		c.removeTool(turn, rest)
 	default:
-		ctx.Reply("Usage: /tools [list|load|rm] <args>")
+		turn.Reply("Usage: /tools [list|load|rm] <args>")
 	}
 }
 
-func (c *ToolsCommand) listTools(ctx irc.ChatContextInterface) {
-	registry := ctx.GetSystem().GetToolRegistry()
+func (c *ToolsCommand) listTools(turn *core.Turn) {
+	registry := turn.GetSystem().GetToolRegistry()
 	allTools := registry.All()
 
 	if len(allTools) == 0 {
-		ctx.Reply("No tools loaded")
+		turn.Reply("No tools loaded")
 		return
 	}
 
@@ -72,36 +70,33 @@ func (c *ToolsCommand) listTools(ctx irc.ChatContextInterface) {
 	}
 
 	message := formatToolList(toolNames)
-	ctx.Reply(truncateMessage(message, ctx.GetConfig().Session.ChunkMax))
+	turn.Reply(truncateMessage(message, turn.GetConfig().Session.ChunkMax))
 }
 
-func (c *ToolsCommand) listNamespace(ctx irc.ChatContextInterface, namespace string) {
+func (c *ToolsCommand) listNamespace(turn *core.Turn, namespace string) {
 	if namespace == "" {
-		c.listTools(ctx)
+		c.listTools(turn)
 		return
 	}
 
-	registry := ctx.GetSystem().GetToolRegistry()
+	registry := turn.GetSystem().GetToolRegistry()
 	allTools := registry.All()
-
-	prefix := namespace + "__"
 
 	var toolNames []string
 	for _, tool := range allTools {
 		name := tool.GetName()
-		if strings.HasPrefix(name, prefix) {
-			_, bareName := parseToolName(name)
-			toolNames = append(toolNames, namespace+"__"+bareName)
+		if ns, _ := parseToolName(name); ns == namespace {
+			toolNames = append(toolNames, name)
 		}
 	}
 
 	if len(toolNames) == 0 {
-		ctx.Reply(fmt.Sprintf("No tools in namespace: %s", namespace))
+		turn.Reply(fmt.Sprintf("No tools in namespace: %s", namespace))
 		return
 	}
 
 	message := strings.Join(toolNames, ", ")
-	ctx.Reply(truncateMessage(message, ctx.GetConfig().Session.ChunkMax))
+	turn.Reply(truncateMessage(message, turn.GetConfig().Session.ChunkMax))
 }
 
 // parseToolName extracts namespace and bare name from a tool name
@@ -114,20 +109,44 @@ func parseToolName(name string) (namespace, bareName string) {
 	return "other", name
 }
 
-func (c *ToolsCommand) addTool(ctx irc.ChatContextInterface, toolPath string) {
+func (c *ToolsCommand) addTool(turn *core.Turn, toolPath string) {
 	if toolPath == "" {
-		ctx.Reply("Usage: /tools add <path>")
+		turn.Reply("Usage: /tools add <path>")
 		return
 	}
 
-	registry := ctx.GetSystem().GetToolRegistry()
-	result, err := registry.LoadToolAuto(toolPath)
-	if err != nil {
-		ctx.Reply(fmt.Sprintf("Failed: %v", err))
+	system := turn.GetSystem()
+	registry := system.GetToolRegistry()
+	// Trial-load in a derived registry so a misfit can't close live MCP clients.
+	candidate := registry.Derive()
+	defer candidate.Close()
+	if _, err := candidate.LoadToolAuto(toolPath); err != nil {
+		turn.Reply(fmt.Sprintf("Failed: %v", err))
 		return
 	}
 
-	ctx.Reply(formatLoadResult(result))
+	var result tools.LoadResult
+	failure := "Not added"
+	// Under the config lock, serialized with /set and other adds.
+	if err := system.UpdateConfig(func(live *config.Configuration) error {
+		if err := llm.CheckContextBudget(live, candidate); err != nil {
+			return err
+		}
+		// Polly can't adopt the trial's tools, so load again for real; close the
+		// trial first to free shared resources (lock files, ports).
+		failure = "Failed"
+		if err := candidate.Close(); err != nil {
+			return err
+		}
+		var err error
+		result, err = registry.LoadToolAuto(toolPath)
+		return err
+	}); err != nil {
+		turn.Reply(fmt.Sprintf("%s: %v", failure, err))
+		return
+	}
+
+	turn.Reply(formatLoadResult(result))
 }
 
 // formatLoadResult creates a compact message for all loaded tools
@@ -145,59 +164,51 @@ func formatLoadResult(result tools.LoadResult) string {
 	return fmt.Sprintf("Added: %s", formatGroupedSummary(groups, order))
 }
 
-func (c *ToolsCommand) removeTool(ctx irc.ChatContextInterface, pattern string) {
+func (c *ToolsCommand) removeTool(turn *core.Turn, pattern string) {
 	if pattern == "" {
-		ctx.Reply("Usage: /tools remove <name or pattern>")
+		turn.Reply("Usage: /tools remove <name or pattern>")
 		return
 	}
 
-	registry := ctx.GetSystem().GetToolRegistry()
+	registry := turn.GetSystem().GetToolRegistry()
+	original := pattern
 
-	// Check if this is a namespace removal (plain name or name__*)
-	isNamespaceRemoval := false
-	namespace := pattern
-	if !strings.Contains(pattern, "*") && !strings.Contains(pattern, "__") {
-		isNamespaceRemoval = true
-	} else if strings.HasSuffix(pattern, "__*") {
-		isNamespaceRemoval = true
-		namespace = strings.TrimSuffix(pattern, "__*")
-	}
-
-	// If no wildcards and no __, treat as namespace prefix
-	if !strings.Contains(pattern, "*") && !strings.Contains(pattern, "__") {
-		pattern = pattern + "__*"
-	}
-
-	// Use wildcard matching
-	if strings.Contains(pattern, "*") {
-		var removed []string
-		for _, tool := range registry.All() {
-			name := tool.GetName()
-			matched, _ := path.Match(pattern, name)
-			if matched {
-				registry.Remove(name)
-				removed = append(removed, name)
-			}
-		}
-
-		if len(removed) > 0 {
-			if isNamespaceRemoval {
-				ctx.Reply(fmt.Sprintf("Removed: %s", namespace))
-			} else {
-				ctx.Reply(fmt.Sprintf("Removed: %s", formatToolList(removed)))
-			}
-		} else {
-			ctx.Reply(fmt.Sprintf("No tools matched: %s", pattern))
-		}
-	} else {
-		// Exact match
-		if _, exists := registry.Get(pattern); !exists {
-			ctx.Reply(fmt.Sprintf("Not found: %s", pattern))
-		} else {
+	// Exact match takes precedence so non-namespaced tools (bash, view_image, etc.)
+	// can be removed by name; otherwise a bare name removes that namespace (name__*).
+	if !strings.Contains(pattern, "*") {
+		if _, exists := registry.Get(pattern); exists {
 			registry.Remove(pattern)
 			_, bareName := parseToolName(pattern)
-			ctx.Reply(fmt.Sprintf("Removed: %s", bareName))
+			turn.Reply(fmt.Sprintf("Removed: %s", bareName))
+			return
 		}
+		if strings.Contains(pattern, "__") {
+			turn.Reply(fmt.Sprintf("Not found: %s", pattern))
+			return
+		}
+		pattern += "__*"
+	}
+	isNamespaceRemoval := strings.HasSuffix(pattern, "__*")
+	namespace := strings.TrimSuffix(pattern, "__*")
+
+	var removed []string
+	for _, tool := range registry.All() {
+		name := tool.GetName()
+		matched, _ := path.Match(pattern, name)
+		if matched {
+			registry.Remove(name)
+			removed = append(removed, name)
+		}
+	}
+
+	if len(removed) > 0 {
+		if isNamespaceRemoval {
+			turn.Reply(fmt.Sprintf("Removed: %s", namespace))
+		} else {
+			turn.Reply(fmt.Sprintf("Removed: %s", formatToolList(removed)))
+		}
+	} else {
+		turn.Reply(fmt.Sprintf("No tools matched: %s", original))
 	}
 }
 

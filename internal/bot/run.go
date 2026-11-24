@@ -24,18 +24,14 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 	}
 	core.InitLogger(level, cfg.Bot.LogFormat)
 
-	sys := NewSystem(cfg)
+	sys, err := NewSystem(cfg)
+	if err != nil {
+		return err
+	}
+	defer sys.GetMemory().Close()
 
 	// Initialize command registry
-	cmdRegistry := commands.NewRegistry()
-	cmdRegistry.Register(&commands.SetCommand{})
-	cmdRegistry.Register(&commands.GetCommand{})
-	cmdRegistry.Register(commands.NewHelpCommand(cmdRegistry))
-	cmdRegistry.Register(&commands.VersionCommand{Version: "v" + Version})
-	cmdRegistry.Register(&commands.CompletionCommand{})
-	cmdRegistry.Register(&commands.ToolsCommand{})
-	cmdRegistry.Register(&commands.AdminCommand{})
-	cmdRegistry.Register(&commands.StatsCommand{})
+	cmdRegistry := newCommandRegistry(sys)
 
 	// Initialize behavior registry (order matters: passive watchers first, addressed last as fallback)
 	behaviorRegistry := behaviors.NewRegistry()
@@ -45,7 +41,7 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 	behaviorRegistry.Register(&behaviors.ChannelErrorBehavior{})
 	// Reactive behaviors
 	behaviorRegistry.Register(&behaviors.URLBehavior{})
-	behaviorRegistry.Register(&behaviors.OpBehavior{BotNick: cfg.Server.Nick})
+	behaviorRegistry.Register(&behaviors.OpBehavior{})
 	behaviorRegistry.Register(&behaviors.JoinBehavior{BotNick: cfg.Server.Nick})
 	behaviorRegistry.Register(&behaviors.AddressedBehavior{CmdRegistry: cmdRegistry})
 	behaviorRegistry.Register(&behaviors.NonAddressedBehavior{CmdRegistry: cmdRegistry})
@@ -84,7 +80,7 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 		if !behaviorRegistry.Handles(e.Command) {
 			return
 		}
-		chatCtx, cancel := irc.NewChatContext(ctx, cfg, sys, client, &e, fatalErr)
+		chatCtx, cancel := irc.NewChatContext(ctx, sys, client, &e, fatalErr)
 		defer cancel()
 		behaviorRegistry.Process(chatCtx, &e)
 	})
@@ -137,4 +133,21 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 	}
 
 	return fmt.Errorf("failed to connect after %d attempts", maxRetries)
+}
+
+func newCommandRegistry(sys core.System) *commands.Registry {
+	reg := commands.NewRegistry()
+	reg.Register(&commands.SetCommand{})
+	reg.Register(&commands.GetCommand{})
+	reg.Register(commands.NewHelpCommand(reg))
+	reg.Register(&commands.VersionCommand{Version: "v" + Version})
+	reg.Register(&commands.CompletionCommand{})
+	reg.Register(&commands.ToolsCommand{})
+	reg.Register(&commands.AdminCommand{})
+	reg.Register(&commands.StatsCommand{})
+	reg.Register(&commands.ClearCommand{})
+	if sys.GetAgents() != nil {
+		reg.Register(&commands.AgentsCommand{})
+	}
+	return reg
 }

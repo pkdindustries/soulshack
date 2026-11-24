@@ -22,7 +22,7 @@ buildGoModule {
     ];
   };
 
-  vendorHash = "sha256-Dm14V8CtI0c2dJFj1FjuUVtGAyrjcsOLX7s0zuY6gI8=";
+  vendorHash = "sha256-E26SvH0y/jaA3908xcmtkJOtMps19J3SNmwanNEV3Vk=";
 
   subPackages = [ "cmd/soulshack" ];
 

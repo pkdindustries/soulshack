@@ -24,10 +24,11 @@ This guide provides an overview of the codebase and instructions for common modi
 
     func (c *MyCommand) Name() string { return "/mycommand" }
     func (c *MyCommand) AdminOnly() bool { return false }
-    func (c *MyCommand) Execute(ctx irc.ChatContextInterface) {
-        ctx.Reply("Hello from MyCommand!")
+    func (c *MyCommand) Execute(turn *core.Turn) {
+        turn.Reply("Hello from MyCommand!")
     }
     ```
+    `*core.Turn` is the IRC context plus `turn.Conversation`.
 3.  **Register the command** in `internal/bot/run.go`:
     ```go
     cmdRegistry.Register(&commands.MyCommand{})

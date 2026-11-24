@@ -3,7 +3,10 @@ package behaviors
 import (
 	"github.com/lrstanley/girc"
 
+	"pkdindustries/soulshack/internal/commands"
+	"pkdindustries/soulshack/internal/core"
 	"pkdindustries/soulshack/internal/irc"
+	"pkdindustries/soulshack/internal/llm"
 )
 
 // Behavior defines the interface for event-based behaviors
@@ -55,4 +58,28 @@ func (r *Registry) Process(ctx irc.ChatContextInterface, event *girc.Event) bool
 		}
 	}
 	return false
+}
+
+func complete(turn *core.Turn, prompt string, silent bool) {
+	turn.Silent = silent
+	llm.Drain(llm.Complete(turn, prompt), turn.Reply)
+}
+
+// observe is complete for unrequested turns; it cannot delegate.
+func observe(turn *core.Turn, prompt string, silent bool) {
+	turn.Silent = silent
+	llm.Drain(llm.CompleteWithoutDelegating(turn, prompt), turn.Reply)
+}
+
+// dispatch runs stateless commands immediately and queues conversation turns.
+func dispatch(ctx irc.ChatContextInterface, operation string, registry *commands.Registry) {
+	if !registry.NeedsConversation(ctx.GetCommand()) {
+		registry.Dispatch(&core.Turn{ChatContextInterface: ctx})
+		return
+	}
+	core.WithConversation(ctx, operation, func(turn *core.Turn) {
+		registry.Dispatch(turn)
+	}, func() {
+		ctx.Reply("Request timed out waiting for previous operation to complete")
+	})
 }

@@ -4,12 +4,14 @@ import (
 	"context"
 	"log/slog"
 	"strings"
+	"sync"
+	"time"
 
-	"github.com/alexschlessinger/pollytool/sessions"
 	"github.com/lrstanley/girc"
 
 	"pkdindustries/soulshack/internal/config"
 	"pkdindustries/soulshack/internal/core"
+	"pkdindustries/soulshack/internal/memory"
 )
 
 // MockChatContext implements core.ChatContextInterface for testing
@@ -20,53 +22,31 @@ type MockChatContext struct {
 	Addressed bool
 	Admin     bool
 	Private   bool
-Command   string
+	Command   string
 	Source    string
 	Args      []string
 
-	// Recorded calls (for assertions)
-	Replies          []string
-	Actions          []string
-	JoinCalls        []string
-	JoinWithKeyCalls []JoinWithKeyCall
-	NickCalls        []string
-	FatalErrors      []error
-	KickCalls       []KickCall
-	SetModeCalls    []ModeCall
-	TopicCalls      []TopicCall
-	OperCalls       []OperCall
-	BanCalls        []string
-	UnbanCalls      []string
-	InviteCalls     []InviteCall
-	SendActionCalls []ActionCall
+	// Recorded replies, guarded by mu; read via AllReplies/AllActions while background work may still reply.
+	mu      sync.Mutex
+	Replies []string
+	Actions []string
 
 	// Injected dependencies
-	session sessions.Session
-	cfg     *config.Configuration
-	sys     core.System
-	logger  *slog.Logger
-	client  *girc.Client
+	conversation *memory.Conversation
+	cfg          *config.Store
+	sys          core.System
+	logger       *slog.Logger
+	client       *girc.Client
+
+	// Parent stands in for the bot's context; cancel it to simulate shutdown.
+	Parent context.Context
 
 	// Mock data for lookups
-	Users        map[string]*core.UserInfo
-	Channels     map[string]*core.ChannelInfo
-	ChannelUsers map[string][]core.ChannelUser
-	BotNick      string
-}
-
-type InviteCall struct {
-	Channel string
-	Nick    string
-}
-
-type JoinWithKeyCall struct {
-	Channel string
-	Key     string
-}
-
-type ActionCall struct {
-	Target  string
-	Message string
+	Users         map[string]*core.UserInfo
+	Channels      map[string]*core.ChannelInfo
+	ChannelUsers  map[string][]core.ChannelUser
+	BotNick       string
+	ServerOptions map[string]string
 }
 
 // Verify MockChatContext implements core.ChatContextInterface
@@ -76,14 +56,13 @@ var _ core.ChatContextInterface = (*MockChatContext)(nil)
 func NewMockContext() *MockChatContext {
 	return &MockChatContext{
 		Context:      context.Background(),
-Addressed:    true,
+		Addressed:    true,
 		Admin:        false,
 		Private:      false,
 		Source:       "testuser",
 		Args:         []string{},
 		Replies:      []string{},
 		Actions:      []string{},
-		cfg:          DefaultTestConfig(),
 		logger:       slog.New(discardHandler{}),
 		client:       NewMockIRCClient(),
 		Users:        make(map[string]*core.UserInfo),
@@ -142,9 +121,9 @@ func (m *MockChatContext) WithSource(source string) *MockChatContext {
 	return m
 }
 
-// WithConfig sets the configuration
+// WithConfig pins this context's configuration, overriding the system's.
 func (m *MockChatContext) WithConfig(cfg *config.Configuration) *MockChatContext {
-	m.cfg = cfg
+	m.cfg = config.NewStore(cfg)
 	return m
 }
 
@@ -154,27 +133,18 @@ func (m *MockChatContext) WithSystem(sys core.System) *MockChatContext {
 	return m
 }
 
-// WithSession sets the session
-func (m *MockChatContext) WithSession(session sessions.Session) *MockChatContext {
-	m.session = session
-	return m
-}
-
-// WithLogger sets the logger
-func (m *MockChatContext) WithLogger(logger *slog.Logger) *MockChatContext {
-	m.logger = logger
+// WithConversation sets the conversation Turn uses.
+func (m *MockChatContext) WithConversation(conversation *memory.Conversation) *MockChatContext {
+	m.conversation = conversation
 	return m
 }
 
 // WithURLWatcher sets the URLWatcher config flag
 func (m *MockChatContext) WithURLWatcher(enabled bool) *MockChatContext {
-	m.cfg.Bot.URLWatcher = enabled
-	return m
-}
-
-// WithUser adds a mock user for LookupUser
-func (m *MockChatContext) WithUser(nick, ident, host string) *MockChatContext {
-	m.Users[nick] = &core.UserInfo{Nick: nick, Ident: ident, Host: host}
+	m.updateConfig(func(c *config.Configuration) error {
+		c.Bot.URLWatcher = enabled
+		return nil
+	})
 	return m
 }
 
@@ -207,72 +177,31 @@ func (m *MockChatContext) GetArgs() []string {
 // Responder methods
 
 func (m *MockChatContext) Reply(msg string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.Replies = append(m.Replies, msg)
 }
 
 func (m *MockChatContext) ReplyAction(msg string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.Actions = append(m.Actions, msg)
 }
 
-func (m *MockChatContext) SendAction(target, msg string) {
-	m.SendActionCalls = append(m.SendActionCalls, ActionCall{Target: target, Message: msg})
-}
+func (m *MockChatContext) SendAction(string, string) {}
 
-// Controller methods
-
-func (m *MockChatContext) Join(channel string) bool {
-	m.JoinCalls = append(m.JoinCalls, channel)
-	return true
-}
-
-func (m *MockChatContext) JoinWithKey(channel, key string) bool {
-	m.JoinWithKeyCalls = append(m.JoinWithKeyCalls, JoinWithKeyCall{Channel: channel, Key: key})
-	return true
-}
-
-func (m *MockChatContext) FatalError(err error) {
-	m.FatalErrors = append(m.FatalErrors, err)
-}
-
-func (m *MockChatContext) Nick(nickname string) bool {
-	m.NickCalls = append(m.NickCalls, nickname)
-	return true
-}
-
-func (m *MockChatContext) SetMode(target, flags string, args ...string) bool {
-	m.SetModeCalls = append(m.SetModeCalls, ModeCall{Channel: target, Mode: flags, Target: strings.Join(args, " ")})
-	return true
-}
-
-func (m *MockChatContext) Kick(channel, nick, reason string) bool {
-	m.KickCalls = append(m.KickCalls, KickCall{Channel: channel, Nick: nick, Reason: reason})
-	return true
-}
-
-func (m *MockChatContext) Topic(channel, topic string) bool {
-	m.TopicCalls = append(m.TopicCalls, TopicCall{Channel: channel, Topic: topic})
-	return true
-}
-
-func (m *MockChatContext) Oper(channel, nick string) bool {
-	m.OperCalls = append(m.OperCalls, OperCall{Channel: channel, Nick: nick})
-	return true
-}
-
-func (m *MockChatContext) Ban(channel, target string) bool {
-	m.BanCalls = append(m.BanCalls, target)
-	return true
-}
-
-func (m *MockChatContext) Unban(channel, target string) bool {
-	m.UnbanCalls = append(m.UnbanCalls, target)
-	return true
-}
-
-func (m *MockChatContext) Invite(channel, nick string) bool {
-	m.InviteCalls = append(m.InviteCalls, InviteCall{Channel: channel, Nick: nick})
-	return true
-}
+// Controller methods: no-ops that report success.
+func (m *MockChatContext) Join(string) bool                       { return true }
+func (m *MockChatContext) JoinWithKey(string, string) bool        { return true }
+func (m *MockChatContext) Nick(string) bool                       { return true }
+func (m *MockChatContext) SetMode(string, string, ...string) bool { return true }
+func (m *MockChatContext) Kick(string, string, string) bool       { return true }
+func (m *MockChatContext) Topic(string, string) bool              { return true }
+func (m *MockChatContext) Oper(string, string) bool               { return true }
+func (m *MockChatContext) Ban(string, string) bool                { return true }
+func (m *MockChatContext) Unban(string, string) bool              { return true }
+func (m *MockChatContext) Invite(string, string) bool             { return true }
+func (m *MockChatContext) FatalError(error)                       {}
 
 func (m *MockChatContext) GetUser(nick string) *core.UserInfo {
 	return m.Users[nick]
@@ -290,33 +219,97 @@ func (m *MockChatContext) GetBotNick() string {
 	return m.BotNick
 }
 
-func (m *MockChatContext) GetLockKey() string {
-	if m.cfg != nil {
-		return m.cfg.Server.Channel
-	}
-	return "#test"
-}
-
-func (m *MockChatContext) IsOp(channel, nick string) bool {
-	return false // override in tests as needed
+func (m *MockChatContext) GetServerOption(key string) (string, bool) {
+	value, ok := m.ServerOptions[key]
+	return value, ok
 }
 
 // Runtime methods
 
-func (m *MockChatContext) GetSession() sessions.Session {
-	if m.session != nil {
-		return m.session
-	}
-	// Create a default session if none set
-	if m.sys != nil {
-		sess, _ := m.sys.GetSessionStore().Get("test")
-		return sess
-	}
-	return nil
+// Turn wraps this context in a turn over the WithConversation conversation.
+func (m *MockChatContext) Turn() *core.Turn {
+	return &core.Turn{ChatContextInterface: m, Conversation: m.conversation}
 }
 
+func (m *MockChatContext) GetConversationKey() string {
+	return m.GetConfig().Server.Channel
+}
+
+// Value resolves core.ChatKey to this mock, as the IRC context does.
+func (m *MockChatContext) Value(key any) any {
+	if key == core.ChatKey() {
+		return core.ChatContextInterface(m)
+	}
+	return m.Context.Value(key)
+}
+
+// Background returns a context derived from Parent, not this one, with its own
+// deadline. Replies still record on this mock.
+func (m *MockChatContext) Background(timeout time.Duration) (core.ChatContextInterface, context.CancelFunc) {
+	parent := m.Parent
+	if parent == nil {
+		parent = context.Background()
+	}
+	ctx, cancel := context.WithTimeout(parent, timeout)
+	return &backgroundMockContext{MockChatContext: m, ctx: ctx}, cancel
+}
+
+// backgroundMockContext shares the mock's recorders but swaps its context.
+type backgroundMockContext struct {
+	*MockChatContext
+	ctx context.Context
+}
+
+func (b *backgroundMockContext) Deadline() (time.Time, bool) { return b.ctx.Deadline() }
+func (b *backgroundMockContext) Done() <-chan struct{}       { return b.ctx.Done() }
+func (b *backgroundMockContext) Err() error                  { return b.ctx.Err() }
+
+func (b *backgroundMockContext) Value(key any) any {
+	if key == core.ChatKey() {
+		return core.ChatContextInterface(b)
+	}
+	return b.ctx.Value(key)
+}
+
+// NewChunkWriter passes chunks through unframed.
+func (m *MockChatContext) NewChunkWriter(output chan<- string) core.ChunkWriter {
+	return passthroughChunkWriter{output: output}
+}
+
+type passthroughChunkWriter struct{ output chan<- string }
+
+func (w passthroughChunkWriter) Write(content string) {
+	if content != "" {
+		w.output <- content
+	}
+}
+
+func (w passthroughChunkWriter) Flush() {}
+
+// GetConfig returns the pinned config if set, else the system's.
 func (m *MockChatContext) GetConfig() *config.Configuration {
-	return m.cfg
+	if m.cfg == nil {
+		if m.sys != nil {
+			return m.sys.GetConfig()
+		}
+		m.cfg = config.NewStore(DefaultTestConfig())
+	}
+	return m.cfg.Snapshot()
+}
+
+func (m *MockChatContext) updateConfig(fn func(*config.Configuration) error) {
+	if m.cfg == nil && m.sys != nil {
+		if err := m.sys.UpdateConfig(fn); err != nil {
+			panic(err)
+		}
+		return
+	}
+	if m.cfg == nil {
+		m.cfg = config.NewStore(DefaultTestConfig())
+	}
+	if err := m.cfg.Update(fn); err != nil {
+		panic(err)
+	}
 }
 
 func (m *MockChatContext) GetSystem() core.System {
@@ -331,6 +324,8 @@ func (m *MockChatContext) GetLogger() *slog.Logger {
 
 // HasReply checks if any reply contains the given substring
 func (m *MockChatContext) HasReply(substring string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	for _, r := range m.Replies {
 		if strings.Contains(r, substring) {
 			return true
@@ -341,6 +336,8 @@ func (m *MockChatContext) HasReply(substring string) bool {
 
 // LastReply returns the last reply, or empty string if none
 func (m *MockChatContext) LastReply() string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if len(m.Replies) == 0 {
 		return ""
 	}
@@ -349,5 +346,20 @@ func (m *MockChatContext) LastReply() string {
 
 // ReplyCount returns the number of replies
 func (m *MockChatContext) ReplyCount() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	return len(m.Replies)
+}
+
+// AllReplies returns a copy of the replies so far; safe during background work.
+func (m *MockChatContext) AllReplies() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return append([]string(nil), m.Replies...)
+}
+
+func (m *MockChatContext) AllActions() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return append([]string(nil), m.Actions...)
 }

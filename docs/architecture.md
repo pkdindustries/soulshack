@@ -2,7 +2,7 @@
 
 ## System Overview
 
-Soulshack is an IRC bot designed to bridge traditional IRC chat with modern LLM capabilities. It uses a modular architecture to handle IRC events, manage sessions, and invoke LLM agents.
+Soulshack is an IRC bot designed to bridge traditional IRC chat with modern LLM capabilities. It uses a modular architecture to handle IRC events, manage conversations, and invoke LLM agents.
 
 A key feature is its **Unified Tool System**, which abstracts differences between native Go tools, shell scripts, and MCP servers, allowing the LLM to use them interchangeably.
 
@@ -14,7 +14,7 @@ A key feature is its **Unified Tool System**, which abstracts differences betwee
 
 1.  **Event Reception**: A single `ALL_EVENTS` handler receives every IRC event from `girc`.
 2.  **Early Exit**: The handler checks `Registry.Handles()` and drops events with no registered behaviors.
-3.  **Context Creation**: A `ChatContext` is created, wrapping the event, configuration, and session.
+3.  **Context Creation**: A `ChatContext` is created, wrapping the event and configuration.
 4.  **Behavior Dispatch**: The `Registry.Process()` method iterates registered behaviors for the event type. The first behavior whose `Check()` returns true wins — its `Execute()` runs and no further behaviors are evaluated.
 5.  **Execution**:
     -   **Commands** (via `AddressedBehavior` / `NonAddressedBehavior`) are dispatched to the `CommandRegistry` or sent to the LLM.
@@ -34,18 +34,39 @@ For example, a non-addressed message containing a URL is handled by the URL beha
 ## Key Interfaces
 
 ### `ChatContextInterface`
-The primary interface passed to commands and LLM. It provides access to:
+The primary interface passed to behaviors. It provides access to:
 -   IRC operations (Reply, Join, Kick)
 -   Configuration
--   Session data
 -   User/Channel info
+-   The conversation key: the channel or sender for private messages, case-folded per `CASEMAPPING`
+
+### `Turn`
+A `ChatContextInterface` plus its `Conversation`; what conversation commands and completions get (stateless commands run without leasing a conversation).
+-   `core.WithConversation`: queues behind the key's running turn.
+-   `core.WithDetachedConversation`: unqueued scratch conversation, discarded after.
 
 ### `System`
 Holds the singleton components:
 -   `ToolRegistry`: Manages available tools.
--   `SessionStore`: Manages user/channel sessions.
+-   `Memory` (`internal/memory`): conversations, their artifacts, budget and expiry.
+-   `Config` (`config.Store`): turns read a snapshot; `/set` doesn't block them.
 -   `LLM`: The configured LLM client.
+
+### Conversations
+-   One pollytool session per key, leased to one turn at a time. Polly's agent is stateless across turns.
+-   Stored in `--sessiondb` (SQLite, default TTL 0) or in memory (default TTL 10m).
+-   Idle past `--sessionduration`: restarts on next turn; sweeps use the current TTL and prune idle keys from memory. Named sessions have no storage TTL; scratch sessions do.
+-   Transcripts are never trimmed. `maxcontext` is polly's `MaxContextTokens`: it clears read tool results, then summarizes, then fails. `read_transcript` still reaches summarized history.
+
+Budget (`internal/llm/budget.go`):
+-   Polly's floor (system prompt + tool schemas) is sent whole.
+-   The incoming message gets up to half the remaining room (`messageShare`); the excess goes to an artifact.
+-   `llm.MinContext` = floor + message floor + one page; smaller `maxcontext` is refused.
+-   `contextFloor` mirrors polly's private estimate; a test keeps them in sync.
+-   Detached turns and child agents get a scratch session (`Memory.WithScratch`) for artifacts.
+-   A failed turn keeps its output and replies `Stopped:`.
 
 ### `LLM`
 Abstracts the AI provider.
--   `ChatCompletionStream`: Takes a context and request, returns a stream of strings.
+-   `ChatCompletionStream`: returns a `CompletionStream`. Drain `Chunks` before
+    reading `Done`; error notices in `Chunks` don't mean success.

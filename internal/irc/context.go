@@ -5,10 +5,9 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"log/slog"
-	"os"
 	"strings"
+	"time"
 
-	"github.com/alexschlessinger/pollytool/sessions"
 	"github.com/lrstanley/girc"
 
 	"pkdindustries/soulshack/internal/config"
@@ -20,21 +19,24 @@ type ChatContextInterface = core.ChatContextInterface
 
 type ChatContext struct {
 	context.Context
-	Sys       core.System
-	Session   sessions.Session
-	Config    *config.Configuration
-	client    *girc.Client
-	event     *girc.Event
-	args      []string
-	logger    *slog.Logger
-	requestID string
-	fatalCh   chan<- error
+	Sys core.System
+	// conversationKey is the channel, or the source nick outside channels.
+	conversationKey string
+	client          *girc.Client
+	event           *girc.Event
+	args            []string
+	logger          *slog.Logger
+	fatalCh         chan<- error
+	// parent is the bot's context; background work derives from it.
+	parent context.Context
 }
 
 var _ ChatContextInterface = (*ChatContext)(nil)
 
-func NewChatContext(parentctx context.Context, config *config.Configuration, system core.System, ircclient *girc.Client, e *girc.Event, fatalCh chan<- error) (ChatContextInterface, context.CancelFunc) {
-	timedctx, cancel := context.WithTimeout(parentctx, config.API.Timeout)
+func NewChatContext(parentctx context.Context, system core.System, ircclient *girc.Client, e *girc.Event, fatalCh chan<- error) (ChatContextInterface, context.CancelFunc) {
+	// One config snapshot per request.
+	settings := system.GetConfig()
+	timedctx, cancel := context.WithTimeout(parentctx, settings.API.Timeout)
 
 	// Generate a unique request ID for correlation
 	requestID := generateRequestID()
@@ -42,25 +44,24 @@ func NewChatContext(parentctx context.Context, config *config.Configuration, sys
 	// Ensure Source is not nil for events like CONNECTED
 	if e.Source == nil {
 		e.Source = &girc.Source{
-			Name: config.Server.Channel,
+			Name: settings.Server.Channel,
 		}
 	}
 
 	// Get channel safely
-	channel := config.Server.Channel
+	channel := settings.Server.Channel
 	if len(e.Params) > 0 {
 		channel = e.Params[0]
 	}
 
 	ctx := ChatContext{
-		Context:   timedctx,
-		Config:    config,
-		Sys:       system,
-		client:    ircclient,
-		event:     e,
-		args:      strings.Fields(e.Last()),
-		requestID: requestID,
-		fatalCh:   fatalCh,
+		Context: timedctx,
+		Sys:     system,
+		client:  ircclient,
+		event:   e,
+		args:    strings.Fields(e.Last()),
+		fatalCh: fatalCh,
+		parent:  parentctx,
 		logger: slog.Default().With(
 			"request_id", requestID,
 			"channel", channel,
@@ -76,14 +77,40 @@ func NewChatContext(parentctx context.Context, config *config.Configuration, sys
 	if !girc.IsValidChannel(key) {
 		key = e.Source.Name
 	}
-
-	session, err := ctx.Sys.GetSessionStore().Get(key)
-	if err != nil {
-		slog.Error("failed to get session for key", "key", key, "error", err)
-		os.Exit(1)
+	caseMapping := ""
+	if ircclient != nil {
+		caseMapping, _ = ircclient.GetServerOption("CASEMAPPING")
 	}
-	ctx.Session = session
+
+	ctx.conversationKey = FoldNick(key, caseMapping)
 	return &ctx, cancel
+}
+
+// Background returns a copy whose deadline derives from the bot's context, not
+// the event's, so it can outlive the handler.
+func (c ChatContext) Background(timeout time.Duration) (ChatContextInterface, context.CancelFunc) {
+	parent := c.parent
+	if parent == nil {
+		// Built without a parent, as in tests.
+		parent = context.Background()
+	}
+	background, cancel := context.WithTimeout(parent, timeout)
+
+	// The handler owns c.event; copy it.
+	event := *c.event
+	c.Context = background
+	c.event = &event
+	c.logger = c.logger.With("background", true)
+	return &c, cancel
+}
+
+// Value resolves core.ChatKey to this context, so IRC tools find it without
+// injection.
+func (c *ChatContext) Value(key any) any {
+	if key == core.ChatKey() {
+		return ChatContextInterface(c)
+	}
+	return c.Context.Value(key)
 }
 
 func (c ChatContext) GetSystem() core.System {
@@ -91,7 +118,7 @@ func (c ChatContext) GetSystem() core.System {
 }
 
 func (c ChatContext) GetConfig() *config.Configuration {
-	return c.Config
+	return c.Sys.GetConfig()
 }
 
 func (c ChatContext) GetLogger() *slog.Logger {
@@ -144,12 +171,12 @@ func (c ChatContext) GetArgs() []string {
 	return c.args
 }
 
-func (c ChatContext) GetSession() sessions.Session {
-	return c.Session
-}
-
 func (c ChatContext) GetBotNick() string {
 	return c.client.GetNick()
+}
+
+func (c ChatContext) GetServerOption(key string) (string, bool) {
+	return c.client.GetServerOption(key)
 }
 
 func (c ChatContext) GetSource() string {
@@ -159,8 +186,9 @@ func (c ChatContext) GetSource() string {
 func (c ChatContext) IsAdmin() bool {
 	hostmask := c.event.Source.String()
 	c.logger.Debug("admin_check", "hostmask", hostmask)
-	isAdmin := CheckAdmin(hostmask, c.Config.Bot.Admins)
-	if isAdmin && len(c.Config.Bot.Admins) == 0 {
+	admins := c.GetConfig().Bot.Admins
+	isAdmin := CheckAdmin(hostmask, admins)
+	if isAdmin && len(admins) == 0 {
 		c.logger.Debug("admin_check_warning")
 	} else if isAdmin {
 		c.logger.Debug("admin_verified", "hostmask", hostmask)
@@ -171,6 +199,23 @@ func (c ChatContext) IsAdmin() bool {
 func (c ChatContext) Reply(message string) {
 	c.client.Cmd.Reply(*c.event, message)
 
+}
+
+// NewChunkWriter splits model output into IRC-sized messages.
+func (c ChatContext) NewChunkWriter(output chan<- string) core.ChunkWriter {
+	return NewChunker(output, c.chunkSize())
+}
+
+var _ core.ChunkWriter = (*Chunker)(nil)
+
+// defaultChunkSize applies when chunkmax is disabled.
+const defaultChunkSize = 400
+
+func (c ChatContext) chunkSize() int {
+	if size := c.GetConfig().Session.ChunkMax; size > 0 {
+		return size
+	}
+	return defaultChunkSize
 }
 
 func (c ChatContext) SendAction(target, message string) {
@@ -266,23 +311,8 @@ func (c ChatContext) GetChannelUsers(channel string) []core.ChannelUser {
 	return result
 }
 
-func (c ChatContext) GetLockKey() string {
-	if len(c.event.Params) > 0 && girc.IsValidChannel(c.event.Params[0]) {
-		return c.Config.Server.Channel
-	}
-	if c.event.Source != nil {
-		return c.event.Source.Name
-	}
-	return c.Config.Server.Channel
-}
-
-func (c ChatContext) IsOp(channel, nick string) bool {
-	user := c.client.LookupUser(nick)
-	if user == nil {
-		return false
-	}
-	perms, ok := user.Perms.Lookup(channel)
-	return ok && perms.IsAdmin()
+func (c ChatContext) GetConversationKey() string {
+	return c.conversationKey
 }
 
 func (c ChatContext) IsPrivate() bool {
