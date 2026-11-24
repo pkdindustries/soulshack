@@ -38,10 +38,10 @@ The primary interface passed to behaviors. It provides access to:
 -   IRC operations (Reply, Join, Kick)
 -   Configuration
 -   User/Channel info
--   The conversation key: the channel, or the sender for private messages
+-   The conversation key: the channel or sender for private messages, case-folded per `CASEMAPPING`
 
 ### `Turn`
-A `ChatContextInterface` plus its `Conversation`; what commands and completions get.
+A `ChatContextInterface` plus its `Conversation`; what conversation commands and completions get (stateless commands run without leasing a conversation).
 -   `core.WithConversation`: queues behind the key's running turn.
 -   `core.WithDetachedConversation`: unqueued scratch conversation, discarded after.
 
@@ -54,8 +54,8 @@ Holds the singleton components:
 
 ### Conversations
 -   One pollytool session per key, leased to one turn at a time. Polly's agent is stateless across turns.
--   Stored in `--sessiondb` (SQLite) or in memory.
--   Idle past `--sessionduration`: restarts on next turn; sweeps use the current TTL. Named sessions have no storage TTL; scratch sessions do.
+-   Stored in `--sessiondb` (SQLite, default TTL 0) or in memory (default TTL 10m).
+-   Idle past `--sessionduration`: restarts on next turn; sweeps use the current TTL and prune idle keys from memory. Named sessions have no storage TTL; scratch sessions do.
 -   Transcripts are never trimmed. `maxcontext` is polly's `MaxContextTokens`: it clears read tool results, then summarizes, then fails. `read_transcript` still reaches summarized history.
 
 Budget (`internal/llm/budget.go`):

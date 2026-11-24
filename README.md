@@ -156,7 +156,7 @@ docker build . -t soulshack:dev
 | `--model` | ollama/llama3.2 | LLM model (`provider/name`) |
 | `--maxtokens` | 16384 | Max tokens per response |
 | `--maxcontext` | 0 | Per-request token budget; history is compacted to fit (0 = unlimited) |
-| `-S, --sessionduration` | 10m | Idle time before a conversation is forgotten (0 = never) |
+| `-S, --sessionduration` | 10m (0 with `--sessiondb`) | Idle time before a conversation is forgotten (0 = never) |
 | `--sessiondb` | | SQLite file for conversations (empty: in memory) |
 | `--temperature` | 0.7 | Sampling temperature |
 | `-t, --apitimeout` | 5m | API request timeout |
@@ -184,13 +184,13 @@ docker build . -t soulshack:dev
 
 ### Conversations
 
-- One per channel, or per nick in private messages; forgotten after `--sessionduration` idle.
-- In memory, or in `--sessiondb` to survive restarts.
+- One per channel, or per nick in private messages (case-folded per server `CASEMAPPING`); forgotten after `--sessionduration` idle.
+- In memory (10m default expiry), or in `--sessiondb` to survive restarts (no expiry unless `--sessionduration` is set). Rejoining a persisted conversation skips the join greeting.
 - The transcript is kept whole. Over 90% of `--maxcontext`, polly clears read tool results, then summarizes older exchanges. The model can reread it with `read_transcript`.
 - Large tool output and long incoming messages are stored as artifacts (`read_artifact`); the model sees head, tail and a receipt.
 - `--maxcontext` below the minimum (about 2,100 tokens plus tool schemas) is refused at startup, `/set` and `/tools add`; the error names it.
 - A turn that can't fit even after summarizing ends with `Stopped:`.
-- Any `/set` resets the conversation.
+- `/clear` resets the current conversation; `/set` updates settings without clearing history.
 - `/stats` shows last model input, stored messages and total token usage.
 
 ### YAML Configuration
@@ -227,6 +227,8 @@ Run with: `./soulshack --config config.yml`
 | `/admins add <hostmask>` | Yes | Add an admin |
 | `/set <key> <value>` | Yes | Set config parameter |
 | `/get <key>` | No | Get config parameter |
+| `/stats` | No | Show conversation statistics |
+| `/clear` | Yes | Clear the current conversation |
 | `/agents` | No | List child agents still working for this conversation (when `--subagents` is enabled) |
 
 Admin masks are full `nick!user@host`, case-insensitive; `*` and `?` are wildcards, everything else is literal. Runtime additions last until restart.
