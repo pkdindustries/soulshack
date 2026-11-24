@@ -42,7 +42,6 @@ func newSpawnTool(tracker *Tracker) tools.Tool {
 			"task":  schema.S("The complete brief for the agent. It starts with no other context."),
 			"label": schema.S("Two to five words naming the job, shown in the channel while it runs."),
 			"tools": schema.Strings("Names or globs of the tools the agent may use. Omitted: whatever it can inherit."),
-			"model": schema.S("Model to run the agent on, as provider/model. Default: the configured agent model."),
 		},
 		Required: []string{"task", "label"},
 		Run: func(ctx context.Context, args tools.Args) (string, error) {
@@ -54,7 +53,6 @@ func newSpawnTool(tracker *Tracker) tools.Tool {
 				Task:  task,
 				Label: args.String("label"),
 				Tools: args.StringSlice("tools"),
-				Model: strings.TrimSpace(args.String("model")),
 			})
 			if err != nil {
 				return "", tools.NewToolError(err.Error(), "SPAWN_REFUSED")
@@ -97,7 +95,6 @@ func spawn(ctx context.Context, tracker *Tracker, req subagent.Request) (subagen
 	spec := core.SubagentSpec{
 		Task:     req.Task,
 		Label:    label,
-		Model:    req.Model,
 		Tools:    req.Tools,
 		Registry: chat.GetSystem().GetToolRegistry(),
 		Config:   cfg,
@@ -105,7 +102,7 @@ func spawn(ctx context.Context, tracker *Tracker, req subagent.Request) (subagen
 
 	// Announced regardless of showtoolactions: the turn ends with work outstanding.
 	chat.ReplyAction("delegating: " + label)
-	chat.GetLogger().Info("agent_started", "agent", label, "model", spec.Model)
+	chat.GetLogger().Info("agent_started", "agent", label, "model", cfg.Bot.SubagentModel)
 
 	done := make(chan struct{})
 	go func() {
@@ -177,20 +174,33 @@ func deliver(chat core.ChatContextInterface, spec core.SubagentSpec, text string
 	core.WithConversation(chat, "subagent", func(turn *core.Turn) {
 		// Conversation forgotten: relay verbatim rather than answer out of context.
 		if turn.Conversation.Len() == 0 {
-			turn.Reply(verbatim(label, text))
+			replyVerbatim(turn, turn.Reply, label, text)
 			return
 		}
 		answered := llm.Drain(llm.CompleteWithoutDelegating(turn, fmt.Sprintf("(agent:%s) %s", label, text)), turn.Reply)
 		// A failed or silent relay still owes the channel the report.
 		if !answered {
 			chat.GetLogger().Warn("agent_relay_incomplete", "agent", label)
-			turn.Reply(verbatim(label, text))
+			replyVerbatim(turn, turn.Reply, label, text)
 		}
 	}, func() {
 		// Conversation stayed busy past the budget.
 		chat.GetLogger().Warn("agent_delivery_queued_out", "agent", label)
-		chat.Reply(verbatim(label, text))
+		replyVerbatim(chat, chat.Reply, label, text)
 	})
+}
+
+func replyVerbatim(chat core.ChatContextInterface, reply func(string), label, text string) {
+	chunks := make(chan string, 10)
+	framer := chat.NewChunkWriter(chunks)
+	go func() {
+		framer.Write(verbatim(label, text))
+		framer.Flush()
+		close(chunks)
+	}()
+	for chunk := range chunks {
+		reply(chunk)
+	}
 }
 
 func verbatim(label, text string) string {

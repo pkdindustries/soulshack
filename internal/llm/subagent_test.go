@@ -22,6 +22,14 @@ func parentRegistry(t *testing.T) *tools.ToolRegistry {
 	registry := tools.NewToolRegistry([]tools.Tool{}, tools.WithUnsafeNoSandbox())
 	t.Cleanup(func() { registry.Close() })
 	irc.RegisterIRCTools(registry)
+	for _, name := range []string{
+		"irc__op", "irc__kick", "irc__ban", "irc__topic", "irc__action",
+		"irc__mode_set", "irc__mode_query", "irc__invite", "irc__names", "irc__whois",
+	} {
+		if _, err := registry.LoadToolAuto(name); err != nil {
+			t.Fatalf("LoadToolAuto(%s): %v", name, err)
+		}
+	}
 	registry.Register(&tools.Func{Name: "search", Desc: "search the web"})
 	registry.Register(&subagent.Tool{})
 	return registry
@@ -119,7 +127,7 @@ func TestChildSeesOnlyItsBrief(t *testing.T) {
 	}
 }
 
-// Brief's model, then configured subagent model, then the bot's.
+// Configured subagent model, or "" to inherit the bot's own model.
 func TestChildModelResolution(t *testing.T) {
 	cfg := mocktest.DefaultTestConfig()
 	cfg.Model.Model = "anthropic/big"
@@ -132,10 +140,6 @@ func TestChildModelResolution(t *testing.T) {
 	cfg.Bot.SubagentModel = "ollama/small"
 	if model := childModel(spec); model != "ollama/small" {
 		t.Fatalf("expected the configured agent model, got %q", model)
-	}
-	spec.Model = "openai/asked-for"
-	if model := childModel(spec); model != "openai/asked-for" {
-		t.Fatalf("expected the brief's model, got %q", model)
 	}
 }
 

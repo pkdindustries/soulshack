@@ -300,14 +300,14 @@ func TestOfferedSchemaIsTheBotsOwn(t *testing.T) {
 	}
 
 	params := spawner.GetSchema().Properties()
-	for _, name := range []string{"task", "label", "tools", "model"} {
+	for _, name := range []string{"task", "label", "tools"} {
 		if _, ok := params[name]; !ok {
 			t.Errorf("the schema is missing %s", name)
 		}
 	}
-	for _, name := range []string{"background", "source", "read_only", "review", "session", "task_id"} {
+	for _, name := range []string{"model", "background", "source", "read_only", "review", "session", "task_id"} {
 		if _, ok := params[name]; ok {
-			t.Errorf("the schema still offers %s, which this host does not have", name)
+			t.Errorf("the schema still offers %s, which this host does not allow", name)
 		}
 	}
 }

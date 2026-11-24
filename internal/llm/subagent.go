@@ -75,11 +75,8 @@ func (p *PollyLLM) RunSubagent(ctx context.Context, spec core.SubagentSpec) (cor
 	return result, nil
 }
 
-// childModel picks the brief's model, then the configured subagent model; "" means the bot's.
+// childModel returns the configured subagent model; "" inherits the bot's model.
 func childModel(spec core.SubagentSpec) string {
-	if spec.Model != "" {
-		return spec.Model
-	}
 	return spec.Config.Bot.SubagentModel
 }
 

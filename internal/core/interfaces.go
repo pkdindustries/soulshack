@@ -105,7 +105,6 @@ type SubagentSpec struct {
 	Task string
 	// Label is a short display name.
 	Label string
-	Model string
 	// Tools are allowed names or globs; nil inherits the parent's, minus child-forbidden ones.
 	Tools []string
 	// Registry is the parent's registry the child's tools derive from.

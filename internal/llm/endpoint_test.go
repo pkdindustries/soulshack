@@ -24,6 +24,7 @@ func TestProviderEndpointOverridesIgnoreProviderCase(t *testing.T) {
 			sys := mocktest.NewMockSystem(t)
 			mocktest.SetConfig(t, sys, func(c *config.Configuration) {
 				c.Model.Model = tc.model
+				c.Bot.SubagentModel = tc.model
 				c.API.OpenAIURL = "http://127.0.0.1:8080/v1"
 				c.API.OllamaURL = "http://127.0.0.1:11434"
 			})
@@ -46,7 +47,7 @@ func TestProviderEndpointOverridesIgnoreProviderCase(t *testing.T) {
 				}
 			}, func() { t.Fatal("turn did not start") })
 			_, err := model.RunSubagent(context.Background(), core.SubagentSpec{
-				Task: "hello", Model: tc.model, Registry: sys.ToolRegistry, Config: sys.GetConfig(),
+				Task: "hello", Registry: sys.ToolRegistry, Config: sys.GetConfig(),
 			})
 			if err != nil {
 				t.Fatal(err)
