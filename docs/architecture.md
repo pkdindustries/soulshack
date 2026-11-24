@@ -43,7 +43,7 @@ The primary interface passed to behaviors. It provides access to:
 ### `Turn`
 A `ChatContextInterface` plus its `Conversation`; what commands and completions get.
 -   `core.WithConversation`: queues behind the key's running turn.
--   `core.WithDetachedConversation`: scratch conversation, discarded after.
+-   `core.WithDetachedConversation`: unqueued scratch conversation, discarded after.
 
 ### `System`
 Holds the singleton components:

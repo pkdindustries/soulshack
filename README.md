@@ -24,7 +24,7 @@ docker build . -t soulshack:dev
 
 ### Option 2: Build from Source
 
-**Prerequisites**: Go 1.23+
+**Prerequisites**: Go 1.27+
 
 1.  **Clone and Build**:
     ```bash
@@ -154,7 +154,7 @@ docker build . -t soulshack:dev
 | `-A, --admins` | | Comma-separated admin hostmasks |
 | `-V, --verbose` | false | Enable debug logging |
 | `--model` | ollama/llama3.2 | LLM model (`provider/name`) |
-| `--maxtokens` | 4096 | Max tokens per response |
+| `--maxtokens` | 16384 | Max tokens per response |
 | `--maxcontext` | 0 | Per-request token budget; history is compacted to fit (0 = unlimited) |
 | `-S, --sessionduration` | 10m | Idle time before a conversation is forgotten (0 = never) |
 | `--sessiondb` | | SQLite file for conversations (empty: in memory) |
@@ -168,7 +168,7 @@ docker build . -t soulshack:dev
 | `--huggingfacekey` | | Hugging Face API key |
 | `--ollamaurl` | http://localhost:11434 | Ollama API endpoint |
 | `--tool` | | Path to tool definition (repeatable) |
-| `--thinkingeffort` | off | Reasoning effort level: off, low, medium, high |
+| `--thinkingeffort` | off | Reasoning effort: off, dynamic, minimal, low, medium, high, xhigh, max, or a token budget |
 | `--urlwatcher` | false | Enable passive URL watching |
 | `--opwatcher` | false | Respond when the bot is opped or deopped |
 | `--sandbox` | false | Sandbox shell, bash, and MCP tools (see below) |
@@ -178,7 +178,7 @@ docker build . -t soulshack:dev
 | `--subagentmax` | 4 | Max concurrent child agents |
 | `--subagentmaxperchat` | 2 | Max concurrent child agents per conversation |
 
-`--urlwatcher` runs in the background and cannot spawn child agents. `--urlwatchersilent` discards the result.
+`--urlwatcher` runs in the channel's conversation and cannot spawn child agents. `--urlwatchersilent` runs unqueued on a scratch conversation, withholds channel-acting IRC tools, and discards the result.
 
 `--opwatcher` sends the MODE event to the model as `(nick:alice) MODE #channel +o soulshack`, in the channel's conversation.
 
@@ -227,7 +227,7 @@ Run with: `./soulshack --config config.yml`
 | `/admins add <hostmask>` | Yes | Add an admin |
 | `/set <key> <value>` | Yes | Set config parameter |
 | `/get <key>` | No | Get config parameter |
-| `/agents` | No | List child agents still working for this conversation |
+| `/agents` | No | List child agents still working for this conversation (when `--subagents` is enabled) |
 
 Admin masks are full `nick!user@host`, case-insensitive; `*` and `?` are wildcards, everything else is literal. Runtime additions last until restart.
 
@@ -236,28 +236,30 @@ Admin masks are full `nick!user@host`, case-insensitive; `*` and `?` are wildcar
 `--subagents` offers the model `spawn_agent`, which runs a task in a background child agent.
 
 - The spawning turn ends at once; the child's report returns as a new turn and the bot answers it. If the conversation has expired, the report is posted as is.
-- A child sees only its brief. It gets the bot's tools and read-only IRC tools (`irc__names`, `irc__whois`, `irc__mode_query`), and cannot spawn. Report turns cannot spawn either.
+- A child sees only its brief. It inherits the bot's loaded tools except channel-acting IRC tools, and cannot spawn. Report turns cannot spawn either.
 - `list_agents` (for the model) and `/agents` list running children for the current conversation; other conversations' children are counted, not named.
 - Anyone can trigger a spawn. Over `--subagentmax`/`--subagentmaxperchat`, the model is told to wait.
-- `--subagentmodel` runs children on a cheaper model.
+- Children always run on `--subagentmodel` (or the bot's model when unset).
 
 ## Built-in Tools
 
-Soulshack comes with native IRC management tools (permissions apply):
+Built-in tools are opt-in via `--tool <name>` or `/tools add <name>` (including polly's native `bash`, `read_file`, `list_dir`, `write_file`, `edit_file`, and `view_image`).
 
--   `irc__op`: Op/deop. Admins may target anyone, others only themselves. Needs the bot opped.
--   `irc__kick`, `irc__ban` (also unbans): User management.
--   `irc__topic`: Set channel topic.
+Native IRC tools (channel-moderation tools require configured `--admins` and the bot opped):
+
+-   `irc__op`: Grant/revoke operator status (admin-only).
+-   `irc__kick`, `irc__ban` (also unbans): User management (admin-only).
+-   `irc__topic`: Set channel topic (admin-only).
 -   `irc__action`: Send a channel action.
--   `irc__invite`: Invite users to channel.
--   `irc__mode_set`, `irc__mode_query`: Manage channel modes.
+-   `irc__invite`: Invite users to channel (admin-only).
+-   `irc__mode_set`, `irc__mode_query`: Manage or query channel modes (`irc__mode_set` is admin-only).
 -   `irc__names`, `irc__whois`: User information.
 
 ## Sandboxing
 
 With `--sandbox` (or `sandbox: true` in YAML, env `SOULSHACK_SANDBOX`), all shell scripts, the built-in `bash` tool, and MCP servers launched via `--tool` run inside a platform sandbox. Disabled by default.
 
-**Requirements**: `sandbox-exec` on macOS, `bwrap` (bubblewrap) on Linux. If the backend isn't available the flag is ignored with a `sandbox_unavailable` warning and tools run as before.
+**Requirements**: `sandbox-exec` on macOS, `bwrap` (bubblewrap) on Linux. If `--sandbox` is enabled and the backend isn't available, startup fails.
 
 **Default policy** (applied to every sandboxed tool):
 
